@@ -4,7 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CHADPDG Core 4.1 Test</title>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+    <script>
+        window.chadTurnstileApiReady = false;
+        window.onChadTurnstileLoad = function () {
+            window.chadTurnstileApiReady = true;
+            window.dispatchEvent(new Event('chad-turnstile-ready'));
+        };
+    </script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onChadTurnstileLoad&render=explicit" async defer></script>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -223,23 +230,73 @@
     }
 
     function renderTurnstile() {
-        if (!window.turnstile || turnstileWidgetId !== null) return;
+        if (!window.turnstile) return false;
+        if (turnstileWidgetId !== null) return true;
 
-        turnstileWidgetId = window.turnstile.render('#turnstile', {
-            sitekey: TURNSTILE_SITE_KEY,
-            execution: 'execute',
-            appearance: 'interaction-only',
-            theme: 'auto'
+        try {
+            turnstileWidgetId = window.turnstile.render('#turnstile', {
+                sitekey: TURNSTILE_SITE_KEY,
+                execution: 'execute',
+                appearance: 'interaction-only',
+                theme: 'auto'
+            });
+            return turnstileWidgetId !== null;
+        } catch (error) {
+            console.error('Turnstile render failed:', error);
+            return false;
+        }
+    }
+
+    function ensureTurnstileReady() {
+        return new Promise(function (resolve, reject) {
+            if (renderTurnstile()) {
+                resolve();
+                return;
+            }
+
+            let finished = false;
+
+            const readyHandler = function () {
+                if (finished) return;
+                if (renderTurnstile()) {
+                    finished = true;
+                    clearTimeout(timeout);
+                    window.removeEventListener('chad-turnstile-ready', readyHandler);
+                    resolve();
+                }
+            };
+
+            window.addEventListener('chad-turnstile-ready', readyHandler);
+
+            const poll = setInterval(function () {
+                if (finished) {
+                    clearInterval(poll);
+                    return;
+                }
+
+                if (renderTurnstile()) {
+                    finished = true;
+                    clearInterval(poll);
+                    clearTimeout(timeout);
+                    window.removeEventListener('chad-turnstile-ready', readyHandler);
+                    resolve();
+                }
+            }, 100);
+
+            const timeout = setTimeout(function () {
+                if (finished) return;
+                finished = true;
+                clearInterval(poll);
+                window.removeEventListener('chad-turnstile-ready', readyHandler);
+                reject(new Error('Human verification could not load. Refresh the page and try again.'));
+            }, 15000);
         });
     }
 
-    function getTurnstileTokenForAsk() {
-        return new Promise(function (resolve, reject) {
+    async function getTurnstileTokenForAsk() {
+        await ensureTurnstileReady();
 
-            if (!window.turnstile || turnstileWidgetId === null) {
-                reject(new Error('Human verification is still loading. Try again in a second.'));
-                return;
-            }
+        return new Promise(function (resolve, reject) {
 
             const existing =
                 window.turnstile.getResponse(turnstileWidgetId) || '';
@@ -441,12 +498,9 @@
     });
 
     window.addEventListener('load', function () {
-        const wait = setInterval(function () {
-            if (window.turnstile) {
-                clearInterval(wait);
-                renderTurnstile();
-            }
-        }, 100);
+        ensureTurnstileReady().catch(function (error) {
+            console.error(error);
+        });
 
         refreshStatus();
     });
