@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>ChadPDChee Analytics</title>
+<style>
+:root{--blue:#1677B8;--dark:#0b1720;--muted:#667985;--line:#dbe5ec;--bg:#f5f8fa;--card:#fff;--yellow:#f4cc1d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:#111}.wrap{max-width:1180px;margin:auto;padding:20px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}.logo{width:min(520px,100%);height:auto}.auth{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.auth input{min-width:260px;padding:10px 12px;border:1px solid #b8c9d4;border-radius:8px}.btn{border:0;border-radius:8px;padding:11px 14px;font-weight:800;cursor:pointer;background:var(--blue);color:#fff}.btn.secondary{background:#dfe8ee;color:#173545}.status{font-size:13px;font-weight:700;margin:12px 0}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0}.toolbar select{padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff}.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.card .k{font-size:12px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.5px}.card .v{font-size:30px;font-weight:900;margin-top:7px;color:var(--dark)}.card .s{font-size:12px;color:var(--muted);margin-top:4px}.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}.section h2{font-size:18px;margin:0 0 14px}.chart{display:grid;grid-template-columns:repeat(30,minmax(8px,1fr));gap:4px;height:210px;align-items:end;border-bottom:1px solid #ccd8df;padding:0 0 6px}.barwrap{height:100%;display:flex;align-items:end;gap:1px;justify-content:center}.bar{width:42%;min-height:2px;border-radius:3px 3px 0 0;background:var(--blue)}.bar.q{background:var(--yellow)}.legend{display:flex;gap:16px;font-size:12px;margin-top:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--blue);margin-right:5px}.dot.q{background:var(--yellow)}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #edf1f4}th{font-size:11px;text-transform:uppercase;color:var(--muted)}.empty{color:var(--muted);font-style:italic}.today{background:#0d5f91;color:#fff;border-radius:14px;padding:16px;margin-top:16px}.today strong{font-size:20px}.today-grid{display:flex;gap:24px;flex-wrap:wrap;margin-top:10px}.today-grid div{font-size:13px}.today-grid b{font-size:22px;display:block}.privacy{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.45}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.chart{overflow:hidden}.top{align-items:flex-start}}@media(max-width:520px){.wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}.card .v{font-size:24px}.auth input{min-width:100%;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <img class="logo" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/New-Chad-Logo.png" alt="ChadPDChee">
+    <div class="auth">
+      <input id="key" type="password" placeholder="Developer analytics key" autocomplete="off">
+      <button class="btn" id="login">OPEN DASHBOARD</button>
+      <button class="btn secondary" id="logout">CLEAR KEY</button>
+    </div>
+  </div>
+  <div id="status" class="status">Enter your existing CHAD_ADMIN_TEST_KEY to view private analytics.</div>
+
+  <div class="toolbar">
+    <strong>Analytics window:</strong>
+    <select id="days">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
+    <button class="btn" id="refresh">REFRESH</button>
+  </div>
+
+  <div id="content" hidden>
+    <div class="today">
+      <strong>Today</strong>
+      <div class="today-grid">
+        <div><b id="todayVisitors">0</b>unique visitors</div>
+        <div><b id="todayViews">0</b>page views</div>
+        <div><b id="todayQuestions">0</b>questions</div>
+        <div><b id="todayClicks">0</b>Amazon clicks</div>
+        <div><b id="todayLimits">0</b>limit hits</div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="k">Unique Visitors</div><div class="v" id="visitors">0</div><div class="s">people who loaded Chad</div></div>
+      <div class="card"><div class="k">Questions</div><div class="v" id="questions">0</div><div class="s" id="avgQuestions">0 avg per questioner</div></div>
+      <div class="card"><div class="k">Shopping Lists</div><div class="v" id="shopping">0</div><div class="s">successfully generated</div></div>
+      <div class="card"><div class="k">Amazon Clicks</div><div class="v" id="clicks">0</div><div class="s" id="ctr">0% product CTR</div></div>
+      <div class="card"><div class="k">Returning Visitors</div><div class="v" id="returning">0</div><div class="s" id="returnRate">0% returned on 2+ days</div></div>
+      <div class="card"><div class="k">Page Views</div><div class="v" id="views">0</div><div class="s">public page loads</div></div>
+      <div class="card"><div class="k">Product Impressions</div><div class="v" id="impressions">0</div><div class="s">Chad's Picks shown</div></div>
+      <div class="card"><div class="k">Video Clicks</div><div class="v" id="videos">0</div><div class="s">YouTube how-to clicks</div></div>
+      <div class="card"><div class="k">New Conversations</div><div class="v" id="conversations">0</div><div class="s">manual resets</div></div>
+      <div class="card"><div class="k">5-Question Limit Hits</div><div class="v" id="limits">0</div><div class="s">potential Pro demand</div></div>
+    </div>
+
+    <div class="section">
+      <h2>Daily Traffic & Questions</h2>
+      <div class="chart" id="chart"></div>
+      <div class="legend"><span><i class="dot"></i>Page views</span><span><i class="dot q"></i>Questions</span></div>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Top Chad's Picks</h2>
+        <table><thead><tr><th>Product</th><th>Impressions</th><th>Clicks</th></tr></thead><tbody id="products"></tbody></table>
+      </div>
+      <div class="section">
+        <h2>Traffic Sources</h2>
+        <table><thead><tr><th>Source</th><th>Views</th><th>Visitors</th></tr></thead><tbody id="sources"></tbody></table>
+      </div>
+    </div>
+
+    <div class="privacy">Privacy note: Analytics 2.0 stores anonymous visitor hashes and event metadata such as traffic source, product ASIN and click type. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
+  </div>
+</div>
+<script>
+(function(){
+'use strict';
+const STORAGE='chadpdchee_analytics_admin_key';
+const keyInput=document.getElementById('key');
+const status=document.getElementById('status');
+const content=document.getElementById('content');
+const days=document.getElementById('days');
+const saved=sessionStorage.getItem(STORAGE)||'';
+if(saved) keyInput.value=saved;
+const n=v=>Number(v||0).toLocaleString();
+function setText(id,value){document.getElementById(id).textContent=value;}
+function esc(v){const d=document.createElement('div');d.textContent=String(v||'');return d.innerHTML;}
+async function load(){
+ const key=keyInput.value.trim()||sessionStorage.getItem(STORAGE)||'';
+ if(!key){status.textContent='Enter your developer analytics key first.';content.hidden=true;return;}
+ sessionStorage.setItem(STORAGE,key);
+ status.textContent='Loading Chad analytics...';
+ try{
+  const r=await fetch('/wp-json/chadpgt/v1/analytics/dashboard?days='+encodeURIComponent(days.value),{headers:{'X-Chad-Admin-Key':key}});
+  const data=await r.json();
+  if(!r.ok||!data.success) throw new Error(data.error||'Analytics access failed.');
+  const s=data.summary||{},t=data.today||{};
+  setText('todayVisitors',n(t.unique_visitors));setText('todayViews',n(t.page_views));setText('todayQuestions',n(t.questions));setText('todayClicks',n(t.product_clicks));setText('todayLimits',n(t.limit_hits));
+  setText('visitors',n(s.unique_visitors));setText('questions',n(s.questions));setText('shopping',n(s.shopping_lists));setText('clicks',n(s.product_clicks));setText('returning',n(s.returning_visitors));setText('views',n(s.page_views));setText('impressions',n(s.product_impressions));setText('videos',n(s.video_clicks));setText('conversations',n(s.new_conversations));setText('limits',n(s.limit_hits));
+  setText('avgQuestions',(s.avg_questions_per_questioner||0)+' avg per questioner');setText('ctr',(s.product_ctr_percent||0)+'% product CTR');setText('returnRate',(s.returning_visitor_percent||0)+'% returned on 2+ days');
+  const daily=data.daily||[];const max=Math.max(1,...daily.map(x=>Math.max(Number(x.page_views||0),Number(x.questions||0))));
+  const chart=document.getElementById('chart');chart.style.gridTemplateColumns='repeat('+Math.max(1,daily.length)+',minmax(4px,1fr))';
+  chart.innerHTML=daily.map(x=>'<div class="barwrap" title="'+esc(x.day)+' — '+n(x.page_views)+' views, '+n(x.questions)+' questions"><div class="bar" style="height:'+Math.max(2,(Number(x.page_views||0)/max)*100)+'%"></div><div class="bar q" style="height:'+Math.max(2,(Number(x.questions||0)/max)*100)+'%"></div></div>').join('');
+  const products=data.top_products||[];document.getElementById('products').innerHTML=products.length?products.map(x=>'<tr><td>'+esc(x.product)+(x.asin?'<br><small>'+esc(x.asin)+'</small>':'')+'</td><td>'+n(x.impressions)+'</td><td><b>'+n(x.clicks)+'</b></td></tr>').join(''):'<tr><td colspan="3" class="empty">No product activity yet.</td></tr>';
+  const sources=data.traffic_sources||[];document.getElementById('sources').innerHTML=sources.length?sources.map(x=>'<tr><td>'+esc(x.source)+'</td><td>'+n(x.page_views)+'</td><td>'+n(x.visitors)+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">No traffic data yet.</td></tr>';
+  content.hidden=false;status.textContent='Private analytics loaded • '+new Date(data.generated_at).toLocaleString();
+ }catch(e){content.hidden=true;status.textContent=e.message||'Could not load analytics.';}
+}
+document.getElementById('login').addEventListener('click',load);document.getElementById('refresh').addEventListener('click',load);days.addEventListener('change',load);document.getElementById('logout').addEventListener('click',()=>{sessionStorage.removeItem(STORAGE);keyInput.value='';content.hidden=true;status.textContent='Developer analytics key cleared.';});keyInput.addEventListener('keydown',e=>{if(e.key==='Enter')load();});if(saved)load();
+})();
+</script>
+</body>
+</html>
