@@ -21,7 +21,90 @@ body {
 </style>
 </head>
 <body>
-<div id="chad-app">
+
+<div id="chad-shell">
+
+    <aside id="chad-sidebar" aria-label="ChadPDChee navigation">
+        <div class="chad-sidebar-top">
+            <div class="chad-sidebar-brand">
+                <img
+                    src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png"
+                    alt="ChadPDChee"
+                    class="chad-sidebar-avatar"
+                >
+                <div>
+                    <div class="chad-sidebar-name">ChadPDChee</div>
+                    <div class="chad-sidebar-sub">DIY Expert</div>
+                </div>
+            </div>
+
+            <button type="button" id="chad-sidebar-new" class="chad-sidebar-new">
+                <span class="chad-sidebar-plus">＋</span>
+                New Project
+            </button>
+        </div>
+
+        <div class="chad-sidebar-scroll">
+            <div class="chad-sidebar-section-label">RECENT</div>
+
+            <div class="chad-sidebar-empty">
+                <div class="chad-sidebar-empty-title">Your projects will live here.</div>
+                <div class="chad-sidebar-empty-copy">
+                    Saved conversation history is the next upgrade. For now, Chad remembers this browser's current project.
+                </div>
+            </div>
+        </div>
+
+        <div class="chad-sidebar-bottom">
+            <button type="button" class="chad-sidebar-row chad-placeholder-control">
+                <span class="chad-sidebar-icon">♙</span>
+                <span>
+                    <strong>Account</strong>
+                    <small>Coming next</small>
+                </span>
+            </button>
+
+            <button type="button" class="chad-sidebar-row chad-placeholder-control">
+                <span class="chad-sidebar-icon">★</span>
+                <span>
+                    <strong>Upgrade</strong>
+                    <small>Plans coming soon</small>
+                </span>
+            </button>
+
+            <button type="button" class="chad-sidebar-row chad-placeholder-control">
+                <span class="chad-sidebar-icon">▣</span>
+                <span>
+                    <strong>Billing</strong>
+                    <small>Coming soon</small>
+                </span>
+            </button>
+        </div>
+    </aside>
+
+    <div id="chad-sidebar-backdrop"></div>
+
+    <main id="chad-main">
+        <header id="chad-mobile-bar">
+            <button
+                type="button"
+                id="chad-menu-button"
+                aria-label="Open menu"
+                aria-expanded="false"
+            >☰</button>
+
+            <div class="chad-mobile-title">
+                <img
+                    src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png"
+                    alt=""
+                >
+                <span>ChadPDChee</span>
+            </div>
+
+            <button type="button" id="chad-mobile-new" aria-label="New project">＋</button>
+        </header>
+
+        <div id="chad-app">
 
     <div id="chad-header">
         <img
@@ -78,6 +161,8 @@ body {
 
     </div>
 
+</div>
+    </main>
 </div>
 
 
@@ -1107,6 +1192,460 @@ body {
         max-width: calc(100% - 46px) !important;
     }
 }
+
+/* =========================================================
+   CHADPDCHEE APP SHELL — RESPONSIVE SIDEBAR + FULL-PAGE CHAT
+   ========================================================= */
+
+:root {
+    --chad-sidebar-width: 276px;
+    --chad-sidebar-bg: #17191c;
+    --chad-sidebar-panel: #22252a;
+    --chad-sidebar-border: rgba(255,255,255,.08);
+    --chad-blue: #1677B8;
+    --chad-yellow: #f1bd29;
+    --chad-page: #ffffff;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: var(--chad-page) !important;
+    overflow-x: hidden;
+}
+
+#chad-shell {
+    min-height: 100vh;
+    display: flex;
+    width: 100%;
+    background: #fff;
+}
+
+/* ---------- DESKTOP SIDEBAR ---------- */
+
+#chad-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--chad-sidebar-width);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(22,119,184,.22), transparent 34%),
+        var(--chad-sidebar-bg);
+    color: #fff;
+    border-right: 1px solid var(--chad-sidebar-border);
+    z-index: 1000;
+}
+
+.chad-sidebar-top {
+    padding: 18px 14px 12px;
+}
+
+.chad-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 2px 6px 16px;
+}
+
+.chad-sidebar-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,.15);
+    box-shadow: 0 3px 12px rgba(0,0,0,.3);
+}
+
+.chad-sidebar-name {
+    font: 800 17px/1.05 Arial, Helvetica, sans-serif;
+    letter-spacing: .1px;
+}
+
+.chad-sidebar-sub {
+    margin-top: 3px;
+    color: #9da5ad;
+    font: 600 11px/1 Arial, Helvetica, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+}
+
+.chad-sidebar-new {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 13px;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 11px;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    font: 700 14px Arial, Helvetica, sans-serif;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.chad-sidebar-new:hover {
+    background: rgba(255,255,255,.11);
+    border-color: rgba(255,255,255,.24);
+}
+
+.chad-sidebar-plus {
+    color: var(--chad-yellow);
+    font-size: 20px;
+    line-height: 1;
+}
+
+.chad-sidebar-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 14px 18px;
+}
+
+.chad-sidebar-section-label {
+    padding: 7px 8px 9px;
+    color: #747d86;
+    font: 800 10px/1 Arial, Helvetica, sans-serif;
+    letter-spacing: 1.2px;
+}
+
+.chad-sidebar-empty {
+    margin: 0 4px;
+    padding: 13px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.055);
+}
+
+.chad-sidebar-empty-title {
+    color: #e8eaed;
+    font: 700 13px/1.3 Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-empty-copy {
+    margin-top: 6px;
+    color: #8f979f;
+    font: 400 11px/1.45 Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-bottom {
+    padding: 10px;
+    border-top: 1px solid var(--chad-sidebar-border);
+}
+
+.chad-sidebar-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #e5e7ea;
+    text-align: left;
+    cursor: default;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-row:hover {
+    background: rgba(255,255,255,.055);
+}
+
+.chad-sidebar-row span:last-child {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.chad-sidebar-row strong {
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.chad-sidebar-row small {
+    margin-top: 2px;
+    color: #7f8891;
+    font-size: 10px;
+}
+
+.chad-sidebar-icon {
+    width: 25px;
+    height: 25px;
+    display: grid;
+    place-items: center;
+    border-radius: 7px;
+    background: rgba(255,255,255,.07);
+    color: var(--chad-yellow);
+    font-size: 14px;
+}
+
+/* ---------- MAIN APP ---------- */
+
+#chad-main {
+    width: calc(100% - var(--chad-sidebar-width));
+    min-height: 100vh;
+    margin-left: var(--chad-sidebar-width);
+    background: #fff;
+}
+
+#chad-mobile-bar {
+    display: none;
+}
+
+#chad-app {
+    width: min(100%, 960px) !important;
+    max-width: 960px !important;
+    min-height: 100vh;
+    margin: 0 auto !important;
+    padding: 16px 24px 130px !important;
+}
+
+#chad-header {
+    padding-top: 4px !important;
+}
+
+.chad-site-banner {
+    max-width: 760px !important;
+}
+
+#chad-disclaimer {
+    border: 0 !important;
+    border-left: 4px solid var(--chad-blue) !important;
+    border-radius: 9px !important;
+    background: #f4f6f8 !important;
+    box-shadow: none !important;
+    margin-bottom: 18px !important;
+}
+
+#chad-chat {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 14px 0 22px !important;
+    background: transparent !important;
+}
+
+/* Give every exchange comfortable ChatGPT-like breathing room. */
+#chad-chat .chad-message {
+    margin-bottom: 26px !important;
+}
+
+#chad-input-area {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 90 !important;
+    margin: 0 auto !important;
+    padding: 14px 0 18px !important;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(255,255,255,0),
+            rgba(255,255,255,.96) 18%,
+            #fff 42%
+        ) !important;
+    box-shadow: none !important;
+}
+
+#chad-question {
+    min-height: 58px !important;
+    max-height: 180px !important;
+    border: 1px solid #d8dde3 !important;
+    border-radius: 18px !important;
+    padding: 15px 16px !important;
+    box-shadow:
+        0 8px 24px rgba(0,0,0,.08),
+        0 1px 3px rgba(0,0,0,.05) !important;
+    background: #fff !important;
+}
+
+#chad-buttons {
+    margin-top: 8px !important;
+}
+
+#chad-reset {
+    display: none !important;
+}
+
+#chad-turnstile {
+    margin-top: 6px;
+}
+
+#chad-question-limit {
+    margin-top: 7px !important;
+}
+
+/* ---------- MOBILE DRAWER ---------- */
+
+#chad-sidebar-backdrop {
+    display: none;
+}
+
+@media (max-width: 820px) {
+
+    #chad-main {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    #chad-mobile-bar {
+        position: sticky;
+        top: 0;
+        z-index: 950;
+        height: 56px;
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        padding: 0 8px;
+        border-bottom: 1px solid #e6e8eb;
+        background: rgba(255,255,255,.96);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    #chad-menu-button,
+    #chad-mobile-new {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: #222;
+        font-size: 23px;
+        cursor: pointer;
+    }
+
+    #chad-menu-button:active,
+    #chad-mobile-new:active {
+        background: #f0f2f4;
+    }
+
+    .chad-mobile-title {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font: 800 15px Arial, Helvetica, sans-serif;
+        color: #191b1e;
+    }
+
+    .chad-mobile-title img {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    #chad-sidebar {
+        width: min(86vw, 310px);
+        transform: translateX(-102%);
+        transition: transform .2s ease;
+        box-shadow: 18px 0 45px rgba(0,0,0,.26);
+    }
+
+    body.chad-menu-open #chad-sidebar {
+        transform: translateX(0);
+    }
+
+    #chad-sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 990;
+        background: rgba(0,0,0,.42);
+    }
+
+    body.chad-menu-open #chad-sidebar-backdrop {
+        display: block;
+    }
+
+    #chad-app {
+        width: 100% !important;
+        max-width: none !important;
+        min-height: calc(100vh - 56px);
+        padding: 10px 14px 112px !important;
+    }
+
+    #chad-header {
+        padding: 4px 0 8px !important;
+    }
+
+    .chad-site-banner {
+        max-width: 620px !important;
+    }
+
+    .chad-tagline {
+        font-size: 13px !important;
+    }
+
+    #chad-disclaimer {
+        padding: 11px 12px !important;
+        font-size: 12px !important;
+    }
+
+    #chad-chat {
+        padding: 10px 0 18px !important;
+    }
+
+    #chad-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    }
+
+    #chad-question {
+        min-height: 54px !important;
+        font-size: 16px !important; /* prevents iPhone zoom */
+    }
+}
+
+@media (max-width: 520px) {
+
+    #chad-app {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    #chad-header {
+        margin-top: 0 !important;
+    }
+
+    .chad-site-banner {
+        max-width: 100% !important;
+    }
+
+    #chad-chat .chad-message {
+        margin-bottom: 22px !important;
+    }
+
+    #chad-app .chad-user-avatar,
+    #chad-app .chad-avatar {
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+    }
+
+    #chad-app .chad-user-content {
+        max-width: calc(100% - 44px) !important;
+    }
+
+    #chad-app .chad-answer-wrapper {
+        padding-left: 44px !important;
+    }
+
+    .chad-product-card,
+    .chad-video-card {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
 </style>
 
 
@@ -3996,5 +4535,72 @@ body {
 })();
 
 </script>
+
+<script>
+(function () {
+    'use strict';
+
+    const menuButton = document.getElementById('chad-menu-button');
+    const backdrop = document.getElementById('chad-sidebar-backdrop');
+    const sidebarNew = document.getElementById('chad-sidebar-new');
+    const mobileNew = document.getElementById('chad-mobile-new');
+    const realReset = document.getElementById('chad-reset');
+
+    function setMenu(open) {
+        document.body.classList.toggle('chad-menu-open', !!open);
+        if (menuButton) {
+            menuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+    }
+
+    function startNewProject() {
+        setMenu(false);
+        if (realReset) {
+            realReset.click();
+        }
+    }
+
+    if (menuButton) {
+        menuButton.addEventListener('click', function () {
+            setMenu(!document.body.classList.contains('chad-menu-open'));
+        });
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', function () {
+            setMenu(false);
+        });
+    }
+
+    if (sidebarNew) {
+        sidebarNew.addEventListener('click', startNewProject);
+    }
+
+    if (mobileNew) {
+        mobileNew.addEventListener('click', startNewProject);
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            setMenu(false);
+        }
+    });
+
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 820) {
+            setMenu(false);
+        }
+    });
+
+    document.querySelectorAll('.chad-placeholder-control').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const title = button.querySelector('strong');
+            const name = title ? title.textContent.trim() : 'That feature';
+            window.alert(name + ' is the next build. Chad is already acting like it exists.');
+        });
+    });
+})();
+</script>
+
 </body>
 </html>
