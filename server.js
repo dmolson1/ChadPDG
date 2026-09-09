@@ -5,6 +5,9 @@ const { Pool } = require("pg");
 const TURNSTILE_SECRET_KEY =
     process.env.TURNSTILE_SECRET_KEY || "";
 
+const CHAD_ADMIN_TEST_KEY =
+    process.env.CHAD_ADMIN_TEST_KEY || "";
+
 const app = express();
 
 app.use(express.json({ limit: "12kb" }));
@@ -34,7 +37,7 @@ app.use((req, res, next) => {
 
         res.setHeader(
             "Access-Control-Allow-Headers",
-            "Content-Type"
+            "Content-Type, X-Chad-Admin-Key"
         );
 
         res.setHeader(
@@ -401,6 +404,77 @@ async function saveConversationTurn(
 
         client.release();
     }
+}
+
+
+// ============================================================
+// PRIVATE ADMIN TEST MODE
+// ============================================================
+
+function safeSecretMatch(
+    supplied,
+    expected
+) {
+
+    if (
+        typeof supplied !== "string" ||
+        typeof expected !== "string" ||
+        !supplied ||
+        !expected
+    ) {
+
+        return false;
+    }
+
+
+    const suppliedBuffer =
+        Buffer.from(
+            supplied,
+            "utf8"
+        );
+
+    const expectedBuffer =
+        Buffer.from(
+            expected,
+            "utf8"
+        );
+
+
+    if (
+        suppliedBuffer.length !==
+        expectedBuffer.length
+    ) {
+
+        return false;
+    }
+
+
+    return crypto.timingSafeEqual(
+        suppliedBuffer,
+        expectedBuffer
+    );
+}
+
+
+function isAdminTestRequest(
+    req
+) {
+
+    if (!CHAD_ADMIN_TEST_KEY) {
+        return false;
+    }
+
+
+    const supplied =
+        typeof req.headers["x-chad-admin-key"] === "string"
+            ? req.headers["x-chad-admin-key"].trim()
+            : "";
+
+
+    return safeSecretMatch(
+        supplied,
+        CHAD_ADMIN_TEST_KEY
+    );
 }
 
 
@@ -1847,7 +1921,7 @@ app.get(
                 "online",
 
             version:
-                "chad-core-4-og-parity",
+                "chad-core-4.1-admin-test",
 
             message:
                 "Chad is alive. Unfortunately."
@@ -1909,7 +1983,7 @@ app.get(
                     : "degraded",
 
             version:
-                "chad-core-4-og-parity",
+                "chad-core-4.1-admin-test",
 
             openaiConfigured:
                 Boolean(
@@ -1919,6 +1993,11 @@ app.get(
             turnstileConfigured:
                 Boolean(
                     process.env.TURNSTILE_SECRET_KEY
+                ),
+
+            adminTestConfigured:
+                Boolean(
+                    process.env.CHAD_ADMIN_TEST_KEY
                 ),
 
             databaseConfigured:
@@ -1944,6 +2023,12 @@ app.get(
     async (req, res) => {
 
         try {
+
+            const adminTestMode =
+                isAdminTestRequest(
+                    req
+                );
+
 
             const visitorId =
                 getVisitorIdFromRequest(
@@ -1983,9 +2068,11 @@ app.get(
 
 
             const remaining =
-                await getRemainingQuestions(
-                    visitorHash
-                );
+                adminTestMode
+                    ? DAILY_LIMIT
+                    : await getRemainingQuestions(
+                        visitorHash
+                    );
 
 
             return res.json({
@@ -1999,10 +2086,15 @@ app.get(
                 remaining,
 
                 used:
-                    DAILY_LIMIT - remaining,
+                    adminTestMode
+                        ? 0
+                        : DAILY_LIMIT - remaining,
+
+                admin_test_mode:
+                    adminTestMode,
 
                 version:
-                    "chad-core-4-og-parity"
+                    "chad-core-4.1-admin-test"
             });
 
 
@@ -2170,6 +2262,9 @@ app.post(
         let visitorHash =
             "";
 
+        let adminTestMode =
+            false;
+
 
         try {
 
@@ -2286,6 +2381,12 @@ app.post(
                 );
 
 
+            adminTestMode =
+                isAdminTestRequest(
+                    req
+                );
+
+
             // ====================================================
             // CLOUDFLARE TURNSTILE
             // ====================================================
@@ -2351,40 +2452,59 @@ app.post(
             // CLAIM ONE OF TODAY'S QUESTIONS
             // ====================================================
 
-            const quota =
-                await claimDailyQuestion(
-                    visitorHash
-                );
+            let quota = {
+
+                allowed:
+                    true,
+
+                used:
+                    0,
+
+                remaining:
+                    DAILY_LIMIT
+            };
 
 
-            if (
-                !quota.allowed
-            ) {
+            if (!adminTestMode) {
 
-                return res
-                    .status(429)
-                    .json({
+                quota =
+                    await claimDailyQuestion(
+                        visitorHash
+                    );
 
-                        success:
-                            false,
 
-                        error:
-                            "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
+                if (
+                    !quota.allowed
+                ) {
 
-                        daily_limit:
-                            DAILY_LIMIT,
+                    return res
+                        .status(429)
+                        .json({
 
-                        remaining:
-                            0,
+                            success:
+                                false,
 
-                        limit_reached:
-                            true
-                    });
+                            error:
+                                "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
+
+                            daily_limit:
+                                DAILY_LIMIT,
+
+                            remaining:
+                                0,
+
+                            limit_reached:
+                                true,
+
+                            admin_test_mode:
+                                false
+                        });
+                }
+
+
+                quotaClaimed =
+                    true;
             }
-
-
-            quotaClaimed =
-                true;
 
 
             // ====================================================
@@ -2781,9 +2901,11 @@ app.post(
 
 
             const remaining =
-                await getRemainingQuestions(
-                    visitorHash
-                );
+                adminTestMode
+                    ? DAILY_LIMIT
+                    : await getRemainingQuestions(
+                        visitorHash
+                    );
 
 
             // ====================================================
@@ -2824,10 +2946,15 @@ app.post(
                 remaining,
 
                 limit_reached:
-                    remaining <= 0,
+                    adminTestMode
+                        ? false
+                        : remaining <= 0,
+
+                admin_test_mode:
+                    adminTestMode,
 
                 version:
-                    "chad-core-4-og-parity"
+                    "chad-core-4.1-admin-test"
             });
 
 
@@ -3019,7 +3146,7 @@ Rules:
                     conversationId,
 
                 version:
-                    "chad-core-4-og-parity"
+                    "chad-core-4.1-admin-test"
             });
 
 
@@ -3084,7 +3211,7 @@ app.post(
                     newId,
 
                 version:
-                    "chad-core-4-og-parity"
+                    "chad-core-4.1-admin-test"
             });
 
 
@@ -3142,7 +3269,7 @@ async function startServer() {
         () => {
 
             console.log(
-                `CHADPDG Core 4 OG Parity running on port ${PORT}`
+                `CHADPDG Core 4.1 Admin Test running on port ${PORT}`
             );
         }
     );
