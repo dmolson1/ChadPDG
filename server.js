@@ -1,5 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
+const { Pool } = require("pg");
 
 const app = express();
 
@@ -9,18 +10,256 @@ app.use(express.static("public"));
 const PORT = process.env.PORT || 8080;
 const MODEL = "gpt-5.6-luna";
 
-// ============================================================
-// TEMPORARY MEMORY
-// ============================================================
-// This proves multi-turn Chad now.
-// We will replace this Map with persistent database storage.
-// A deployment/restart can clear this temporary memory.
 
-const conversations = new Map();
+// ============================================================
+// POSTGRESQL DATABASE
+// ============================================================
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL
+});
+
+
+// ============================================================
+// DATABASE INITIALIZATION
+// ============================================================
+
+async function initializeDatabase() {
+
+    if (!process.env.DATABASE_URL) {
+
+        console.error(
+            "DATABASE_URL is not configured."
+        );
+
+        return;
+    }
+
+    try {
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS chad_conversations (
+                id UUID PRIMARY KEY,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS chad_messages (
+                id BIGSERIAL PRIMARY KEY,
+                conversation_id UUID NOT NULL
+                    REFERENCES chad_conversations(id)
+                    ON DELETE CASCADE,
+                role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS
+            idx_chad_messages_conversation
+            ON chad_messages(conversation_id, id)
+        `);
+
+        console.log(
+            "CHADPDG database connected and ready."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "CHADPDG database initialization failed:",
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// CONVERSATION HELPERS
+// ============================================================
 
 function newConversationId() {
     return crypto.randomUUID();
 }
+
+
+async function ensureConversation(conversationId) {
+
+    await pool.query(
+        `
+        INSERT INTO chad_conversations (id)
+        VALUES ($1)
+        ON CONFLICT (id) DO NOTHING
+        `,
+        [conversationId]
+    );
+}
+
+
+async function conversationExists(conversationId) {
+
+    const result = await pool.query(
+        `
+        SELECT id
+        FROM chad_conversations
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [conversationId]
+    );
+
+    return result.rowCount > 0;
+}
+
+
+async function loadConversationMemory(
+    conversationId,
+    limit = 10
+) {
+
+    const result = await pool.query(
+        `
+        SELECT role, content
+        FROM (
+            SELECT
+                id,
+                role,
+                content
+            FROM chad_messages
+            WHERE conversation_id = $1
+            ORDER BY id DESC
+            LIMIT $2
+        ) recent_messages
+        ORDER BY id ASC
+        `,
+        [
+            conversationId,
+            limit
+        ]
+    );
+
+    return result.rows.map(row => ({
+        role: row.role,
+        content: row.content
+    }));
+}
+
+
+async function saveMessage(
+    conversationId,
+    role,
+    content
+) {
+
+    await ensureConversation(
+        conversationId
+    );
+
+    await pool.query(
+        `
+        INSERT INTO chad_messages (
+            conversation_id,
+            role,
+            content
+        )
+        VALUES ($1, $2, $3)
+        `,
+        [
+            conversationId,
+            role,
+            content
+        ]
+    );
+
+    await pool.query(
+        `
+        UPDATE chad_conversations
+        SET updated_at = NOW()
+        WHERE id = $1
+        `,
+        [conversationId]
+    );
+}
+
+
+async function saveConversationTurn(
+    conversationId,
+    userMessage,
+    assistantMessage
+) {
+
+    const client =
+        await pool.connect();
+
+    try {
+
+        await client.query("BEGIN");
+
+        await client.query(
+            `
+            INSERT INTO chad_conversations (id)
+            VALUES ($1)
+            ON CONFLICT (id) DO NOTHING
+            `,
+            [conversationId]
+        );
+
+        await client.query(
+            `
+            INSERT INTO chad_messages (
+                conversation_id,
+                role,
+                content
+            )
+            VALUES ($1, 'user', $2)
+            `,
+            [
+                conversationId,
+                userMessage
+            ]
+        );
+
+        await client.query(
+            `
+            INSERT INTO chad_messages (
+                conversation_id,
+                role,
+                content
+            )
+            VALUES ($1, 'assistant', $2)
+            `,
+            [
+                conversationId,
+                assistantMessage
+            ]
+        );
+
+        await client.query(
+            `
+            UPDATE chad_conversations
+            SET updated_at = NOW()
+            WHERE id = $1
+            `,
+            [conversationId]
+        );
+
+        await client.query("COMMIT");
+
+    } catch (error) {
+
+        await client.query("ROLLBACK");
+
+        throw error;
+
+    } finally {
+
+        client.release();
+    }
+}
+
 
 // ============================================================
 // CHAD PERSONALITY
@@ -203,12 +442,15 @@ You are not a salesman pretending to be a handyman.
 You are a handyman who happens to know where to get the stuff.
 `;
 
+
 // ============================================================
 // STRUCTURED RESPONSE SCHEMA
 // ============================================================
 
 const CHAD_SCHEMA = {
+
     type: "object",
+
     additionalProperties: false,
 
     properties: {
@@ -222,10 +464,13 @@ const CHAD_SCHEMA = {
         },
 
         products: {
+
             type: "array",
 
             items: {
+
                 type: "object",
+
                 additionalProperties: false,
 
                 properties: {
@@ -257,10 +502,13 @@ const CHAD_SCHEMA = {
         },
 
         videos: {
+
             type: "array",
 
             items: {
+
                 type: "object",
+
                 additionalProperties: false,
 
                 properties: {
@@ -295,13 +543,16 @@ const CHAD_SCHEMA = {
     ]
 };
 
+
 // ============================================================
-// HELPERS
+// OPENAI RESPONSE HELPERS
 // ============================================================
 
 function getResponseText(data) {
 
-    if (typeof data.output_text === "string") {
+    if (
+        typeof data.output_text === "string"
+    ) {
         return data.output_text;
     }
 
@@ -319,7 +570,9 @@ function getResponseText(data) {
 
         for (const content of item.content) {
 
-            if (typeof content.text === "string") {
+            if (
+                typeof content.text === "string"
+            ) {
                 text += content.text;
             }
         }
@@ -352,9 +605,15 @@ function cleanAnswer(answer) {
 }
 
 
-function collectSources(value, sources = new Map()) {
+function collectSources(
+    value,
+    sources = new Map()
+) {
 
-    if (!value || typeof value !== "object") {
+    if (
+        !value ||
+        typeof value !== "object"
+    ) {
         return sources;
     }
 
@@ -379,13 +638,24 @@ function collectSources(value, sources = new Map()) {
     if (Array.isArray(value)) {
 
         for (const child of value) {
-            collectSources(child, sources);
+
+            collectSources(
+                child,
+                sources
+            );
         }
 
     } else {
 
-        for (const child of Object.values(value)) {
-            collectSources(child, sources);
+        for (
+            const child
+            of Object.values(value)
+        ) {
+
+            collectSources(
+                child,
+                sources
+            );
         }
     }
 
@@ -404,7 +674,10 @@ function cleanVideos(videos) {
 
     for (const video of videos) {
 
-        if (!video || typeof video.url !== "string") {
+        if (
+            !video ||
+            typeof video.url !== "string"
+        ) {
             continue;
         }
 
@@ -412,7 +685,8 @@ function cleanVideos(videos) {
 
         try {
 
-            const url = new URL(video.url);
+            const url =
+                new URL(video.url);
 
             if (
                 url.hostname === "youtu.be" ||
@@ -434,16 +708,21 @@ function cleanVideos(videos) {
             }
 
         } catch {
+
             valid = false;
         }
 
-        if (!valid || seen.has(video.url)) {
+        if (
+            !valid ||
+            seen.has(video.url)
+        ) {
             continue;
         }
 
         seen.add(video.url);
 
         clean.push({
+
             title:
                 typeof video.title === "string"
                     ? video.title
@@ -454,7 +733,8 @@ function cleanVideos(videos) {
                     ? video.channel
                     : "",
 
-            url: video.url
+            url:
+                video.url
         });
 
         if (clean.length >= 3) {
@@ -467,348 +747,712 @@ function cleanVideos(videos) {
 
 
 // ============================================================
-// HOME / HEALTH
+// HOME
 // ============================================================
 
 app.get("/", (req, res) => {
 
     res.json({
+
         success: true,
+
         app: "CHADPDG",
+
         status: "online",
+
+        version:
+            "chad-core-2-db",
+
         message:
             "Chad is alive. Unfortunately."
     });
 });
 
 
-app.get("/health", (req, res) => {
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+app.get("/health", async (req, res) => {
 
     res.set(
         "Cache-Control",
         "no-store, no-cache, must-revalidate"
     );
 
+    let databaseConnected = false;
+
+    if (process.env.DATABASE_URL) {
+
+        try {
+
+            await pool.query(
+                "SELECT 1"
+            );
+
+            databaseConnected = true;
+
+        } catch (error) {
+
+            console.error(
+                "Database health check failed:",
+                error.message
+            );
+        }
+    }
+
     res.json({
+
         success: true,
-        status: "healthy",
-        version: "chad-core-1",
+
+        status:
+            databaseConnected
+                ? "healthy"
+                : "degraded",
+
+        version:
+            "chad-core-2-db",
+
         openaiConfigured:
-            Boolean(process.env.OPENAI_API_KEY),
+            Boolean(
+                process.env.OPENAI_API_KEY
+            ),
+
         turnstileConfigured:
-            Boolean(process.env.TURNSTILE_SECRET_KEY)
+            Boolean(
+                process.env.TURNSTILE_SECRET_KEY
+            ),
+
+        databaseConfigured:
+            Boolean(
+                process.env.DATABASE_URL
+            ),
+
+        databaseConnected
     });
 });
+
+
+// ============================================================
+// OPENAI CONNECTION TEST
+// ============================================================
+
+app.get(
+    "/openai-test",
+    async (req, res) => {
+
+        try {
+
+            if (
+                !process.env.OPENAI_API_KEY
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "OPENAI_API_KEY is not configured."
+                    });
+            }
+
+            const response =
+                await fetch(
+                    "https://api.openai.com/v1/responses",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+
+                            Authorization:
+                                `Bearer ${process.env.OPENAI_API_KEY}`,
+
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            model: MODEL,
+
+                            input:
+                                "Reply with one short sentence confirming that the CHADPDG server successfully connected to OpenAI. Use Chad's mildly sarcastic tone."
+                        })
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                console.error(
+                    "OpenAI test error:",
+                    response.status,
+                    data?.error?.message
+                );
+
+                return res
+                    .status(502)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            data?.error?.message ||
+                            "OpenAI connection test failed."
+                    });
+            }
+
+            const message =
+                getResponseText(data);
+
+            return res.json({
+
+                success: true,
+
+                model: MODEL,
+
+                message
+            });
+
+        } catch (error) {
+
+            console.error(
+                "OpenAI connection test failed:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+
+                    success: false,
+
+                    error:
+                        "OpenAI connection test failed."
+                });
+        }
+    }
+);
 
 
 // ============================================================
 // ASK CHAD
 // ============================================================
 
-app.post("/ask", async (req, res) => {
-
-    try {
-
-        if (!process.env.OPENAI_API_KEY) {
-
-            return res.status(500).json({
-                success: false,
-                error:
-                    "OPENAI_API_KEY is not configured."
-            });
-        }
-
-        const message =
-            typeof req.body.message === "string"
-                ? req.body.message.trim()
-                : "";
-
-        if (!message) {
-
-            return res.status(400).json({
-                success: false,
-                error:
-                    "Chad needs a question. Preferably one involving a tool."
-            });
-        }
-
-        if (message.length > 3000) {
-
-            return res.status(413).json({
-                success: false,
-                error:
-                    "That question is too long. Keep it under 3000 characters, Bro."
-            });
-        }
-
-        let conversationId =
-            typeof req.body.conversation_id === "string"
-                ? req.body.conversation_id.trim()
-                : "";
-
-        if (
-            !conversationId ||
-            !/^[a-f0-9-]{36}$/i.test(conversationId)
-        ) {
-            conversationId = newConversationId();
-        }
-
-        let memory =
-            conversations.get(conversationId) || [];
-
-        const input = [
-            {
-                role: "system",
-                content: CHAD_SYSTEM_PROMPT
-            },
-
-            ...memory,
-
-            {
-                role: "user",
-                content: message
-            }
-        ];
-
-        const openaiResponse = await fetch(
-            "https://api.openai.com/v1/responses",
-            {
-                method: "POST",
-
-                headers: {
-                    Authorization:
-                        `Bearer ${process.env.OPENAI_API_KEY}`,
-
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body: JSON.stringify({
-
-                    model: MODEL,
-
-                    tools: [
-                        {
-                            type: "web_search"
-                        }
-                    ],
-
-                    input,
-
-                    text: {
-
-                        format: {
-
-                            type: "json_schema",
-
-                            name: "chad_response",
-
-                            strict: true,
-
-                            schema: CHAD_SCHEMA
-                        }
-                    }
-                })
-            }
-        );
-
-        const data = await openaiResponse.json();
-
-        if (!openaiResponse.ok) {
-
-            console.error(
-                "OpenAI error:",
-                openaiResponse.status,
-                data?.error?.message
-            );
-
-            return res.status(502).json({
-                success: false,
-                error:
-                    data?.error?.message ||
-                    "Chad's brain failed to start."
-            });
-        }
-
-        const responseText =
-            getResponseText(data);
-
-        if (!responseText) {
-
-            return res.status(502).json({
-                success: false,
-                error:
-                    "Chad apparently forgot how words work."
-            });
-        }
-
-        let decoded;
+app.post(
+    "/ask",
+    async (req, res) => {
 
         try {
-            decoded = JSON.parse(responseText);
-        } catch {
 
-            console.error(
-                "Invalid structured response:",
-                responseText
+            if (
+                !process.env.OPENAI_API_KEY
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "OPENAI_API_KEY is not configured."
+                    });
+            }
+
+
+            if (
+                !process.env.DATABASE_URL
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Chad's memory isn't connected. DATABASE_URL is missing."
+                    });
+            }
+
+
+            const message =
+                typeof req.body.message === "string"
+                    ? req.body.message.trim()
+                    : "";
+
+
+            if (!message) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Chad needs a question. Preferably one involving a tool."
+                    });
+            }
+
+
+            if (message.length > 3000) {
+
+                return res
+                    .status(413)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "That question is too long. Keep it under 3000 characters, Bro."
+                    });
+            }
+
+
+            // ====================================================
+            // CONVERSATION ID
+            // ====================================================
+
+            let conversationId =
+                typeof req.body.conversation_id === "string"
+                    ? req.body.conversation_id.trim()
+                    : "";
+
+
+            if (
+                !conversationId ||
+                !/^[a-f0-9-]{36}$/i.test(
+                    conversationId
+                )
+            ) {
+
+                conversationId =
+                    newConversationId();
+
+                await ensureConversation(
+                    conversationId
+                );
+
+            } else {
+
+                const exists =
+                    await conversationExists(
+                        conversationId
+                    );
+
+                if (!exists) {
+
+                    await ensureConversation(
+                        conversationId
+                    );
+                }
+            }
+
+
+            // ====================================================
+            // LOAD PERSISTENT MEMORY
+            // ====================================================
+
+            const memory =
+                await loadConversationMemory(
+                    conversationId,
+                    10
+                );
+
+
+            const input = [
+
+                {
+                    role: "system",
+                    content:
+                        CHAD_SYSTEM_PROMPT
+                },
+
+                ...memory,
+
+                {
+                    role: "user",
+                    content: message
+                }
+            ];
+
+
+            // ====================================================
+            // OPENAI REQUEST
+            // ====================================================
+
+            const openaiResponse =
+                await fetch(
+                    "https://api.openai.com/v1/responses",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+
+                            Authorization:
+                                `Bearer ${process.env.OPENAI_API_KEY}`,
+
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            model: MODEL,
+
+                            tools: [
+                                {
+                                    type:
+                                        "web_search"
+                                }
+                            ],
+
+                            input,
+
+                            text: {
+
+                                format: {
+
+                                    type:
+                                        "json_schema",
+
+                                    name:
+                                        "chad_response",
+
+                                    strict:
+                                        true,
+
+                                    schema:
+                                        CHAD_SCHEMA
+                                }
+                            }
+                        })
+                    }
+                );
+
+
+            const data =
+                await openaiResponse.json();
+
+
+            if (!openaiResponse.ok) {
+
+                console.error(
+                    "OpenAI error:",
+                    openaiResponse.status,
+                    data?.error?.message
+                );
+
+                return res
+                    .status(502)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            data?.error?.message ||
+                            "Chad's brain failed to start."
+                    });
+            }
+
+
+            const responseText =
+                getResponseText(data);
+
+
+            if (!responseText) {
+
+                return res
+                    .status(502)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Chad apparently forgot how words work."
+                    });
+            }
+
+
+            // ====================================================
+            // DECODE STRUCTURED RESPONSE
+            // ====================================================
+
+            let decoded;
+
+            try {
+
+                decoded =
+                    JSON.parse(
+                        responseText
+                    );
+
+            } catch {
+
+                console.error(
+                    "Invalid structured response:",
+                    responseText
+                );
+
+                return res
+                    .status(502)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Chad returned something weird. Impressive, even for Chad."
+                    });
+            }
+
+
+            const answer =
+                cleanAnswer(
+                    decoded.answer
+                );
+
+
+            if (!answer) {
+
+                return res
+                    .status(502)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Chad produced an answer with no answer. Outstanding."
+                    });
+            }
+
+
+            // ====================================================
+            // SAVE PERSISTENT CONVERSATION
+            // ====================================================
+
+            await saveConversationTurn(
+                conversationId,
+                message,
+                answer
             );
 
-            return res.status(502).json({
-                success: false,
-                error:
-                    "Chad returned something weird. Impressive, even for Chad."
-            });
-        }
 
-        const answer =
-            cleanAnswer(decoded.answer);
+            // ====================================================
+            // SOURCES
+            // ====================================================
 
-        if (!answer) {
+            const citationMap =
+                collectSources(data);
 
-            return res.status(502).json({
-                success: false,
-                error:
-                    "Chad produced an answer with no answer. Outstanding."
-            });
-        }
 
-        // --------------------------------------------
-        // Save temporary multi-turn conversation
-        // --------------------------------------------
-
-        memory.push(
-            {
-                role: "user",
-                content: message
-            },
-            {
-                role: "assistant",
-                content: answer
-            }
-        );
-
-        if (memory.length > 10) {
-            memory = memory.slice(-10);
-        }
-
-        conversations.set(
-            conversationId,
-            memory
-        );
-
-        // --------------------------------------------
-        // Sources
-        // --------------------------------------------
-
-        const citationMap =
-            collectSources(data);
-
-        let citations =
-            Array.from(citationMap.values());
-
-        citations = citations.filter(
-            citation => {
-
-                const url =
-                    citation.url.toLowerCase();
-
-                return !(
-                    url.includes("homedepot") ||
-                    url.includes("lowes") ||
-                    url.includes("canadiantire") ||
-                    url.includes("rona") ||
-                    url.includes("walmart")
+            let citations =
+                Array.from(
+                    citationMap.values()
                 );
-            }
-        );
 
-        // --------------------------------------------
-        // Return Chad
-        // --------------------------------------------
 
-        return res.json({
+            citations =
+                citations.filter(
+                    citation => {
 
-            success: true,
+                        const url =
+                            citation.url
+                                .toLowerCase();
 
-            answer,
+                        return !(
+                            url.includes(
+                                "homedepot"
+                            ) ||
+                            url.includes(
+                                "lowes"
+                            ) ||
+                            url.includes(
+                                "canadiantire"
+                            ) ||
+                            url.includes(
+                                "rona"
+                            ) ||
+                            url.includes(
+                                "walmart"
+                            )
+                        );
+                    }
+                );
 
-            shopping_list_recommended:
-                Boolean(
-                    decoded.shopping_list_recommended
-                ),
 
-            products:
-                Array.isArray(decoded.products)
-                    ? decoded.products.slice(0, 5)
-                    : [],
+            // ====================================================
+            // RETURN CHAD
+            // ====================================================
 
-            videos:
-                cleanVideos(decoded.videos),
+            return res.json({
 
-            citations,
+                success: true,
 
-            affiliate_disclosure:
-                "As an Amazon Associate I earn from qualifying purchases.",
+                answer,
 
-            conversation_id:
-                conversationId,
+                shopping_list_recommended:
+                    Boolean(
+                        decoded
+                            .shopping_list_recommended
+                    ),
 
-            version:
-                "chad-core-1"
-        });
+                products:
+                    Array.isArray(
+                        decoded.products
+                    )
+                        ? decoded.products.slice(
+                            0,
+                            5
+                        )
+                        : [],
 
-    } catch (error) {
+                videos:
+                    cleanVideos(
+                        decoded.videos
+                    ),
 
-        console.error(
-            "CHADPDG /ask error:",
-            error
-        );
+                citations,
 
-        return res.status(500).json({
-            success: false,
-            error:
-                "Something went sideways. Chad is blaming the server."
-        });
+                affiliate_disclosure:
+                    "As an Amazon Associate I earn from qualifying purchases.",
+
+                conversation_id:
+                    conversationId,
+
+                version:
+                    "chad-core-2-db"
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "CHADPDG /ask error:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+
+                    success: false,
+
+                    error:
+                        "Something went sideways. Chad is blaming the server."
+                });
+        }
     }
-});
+);
 
 
 // ============================================================
 // RESET CONVERSATION
 // ============================================================
 
-app.post("/reset", (req, res) => {
+app.post(
+    "/reset",
+    async (req, res) => {
 
-    const conversationId =
-        typeof req.body.conversation_id === "string"
-            ? req.body.conversation_id
-            : "";
+        try {
 
-    if (conversationId) {
-        conversations.delete(conversationId);
+            const oldConversationId =
+                typeof req.body.conversation_id === "string"
+                    ? req.body.conversation_id.trim()
+                    : "";
+
+
+            // We deliberately do NOT delete the old conversation.
+            // It stays safely stored in PostgreSQL.
+            // Reset simply starts a new conversation.
+
+            const newId =
+                newConversationId();
+
+
+            await ensureConversation(
+                newId
+            );
+
+
+            return res.json({
+
+                success: true,
+
+                previous_conversation_id:
+                    oldConversationId || null,
+
+                conversation_id:
+                    newId,
+
+                version:
+                    "chad-core-2-db"
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "CHADPDG /reset error:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+
+                    success: false,
+
+                    error:
+                        "Chad tried to forget everything and somehow screwed that up too."
+                });
+        }
     }
-
-    const newId =
-        newConversationId();
-
-    res.json({
-        success: true,
-        conversation_id: newId
-    });
-});
+);
 
 
 // ============================================================
-// SERVER
+// DATABASE ERROR HANDLER
 // ============================================================
 
-app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
+pool.on(
+    "error",
+    error => {
 
-        console.log(
-            `CHADPDG Core running on port ${PORT}`
+        console.error(
+            "Unexpected PostgreSQL pool error:",
+            error
         );
     }
 );
+
+
+// ============================================================
+// START SERVER
+// ============================================================
+
+async function startServer() {
+
+    await initializeDatabase();
+
+    app.listen(
+        PORT,
+        "0.0.0.0",
+        () => {
+
+            console.log(
+                `CHADPDG Core 2 DB running on port ${PORT}`
+            );
+        }
+    );
+}
+
+
+startServer();
