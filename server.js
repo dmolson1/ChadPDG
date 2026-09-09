@@ -2,77 +2,71 @@ const express = require("express");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
-const TURNSTILE_SECRET_KEY =
-    process.env.TURNSTILE_SECRET_KEY || "";
-
-const CHAD_ADMIN_TEST_KEY =
-    process.env.CHAD_ADMIN_TEST_KEY || "";
-
 const app = express();
+app.set("trust proxy", 1);
+
+const PORT = process.env.PORT || 8080;
+const MODEL = "gpt-5.6-luna";
+const DAILY_LIMIT = 5;
+const IP_DAILY_SAFETY_LIMIT = 20;
+const BURST_LIMIT = 15;
+const BURST_WINDOW_SECONDS = 60;
+const TRANSLATE_BURST_LIMIT = 20;
+const SHOPPING_BURST_LIMIT = 10;
+const MAX_MESSAGE_LENGTH = 3000;
+const MEMORY_DAYS = 30;
+const VISITOR_COOKIE_DAYS = 365;
+const SHOPPING_TOKEN_TTL_SECONDS = 1800;
+
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
+const CHAD_ADMIN_TEST_KEY = process.env.CHAD_ADMIN_TEST_KEY || "";
+const AMAZON_TAG = "dannyroymolso-20";
+const ANALYTICS_SECRET = process.env.ANALYTICS_SIGNING_KEY || crypto.randomBytes(32).toString("hex");
+
+const ALLOWED_ORIGINS = new Set([
+    "https://hammeredhandyman.com",
+    "https://www.hammeredhandyman.com",
+    "https://seal-app-zgkfc.ondigitalocean.app",
+    "https://chadpdchee.com",
+    "https://www.chadpdchee.com"
+]);
+
+const ALLOWED_TURNSTILE_HOSTS = new Set([
+    "hammeredhandyman.com",
+    "www.hammeredhandyman.com",
+    "seal-app-zgkfc.ondigitalocean.app",
+    "chadpdchee.com",
+    "www.chadpdchee.com"
+]);
 
 app.use(express.json({ limit: "12kb" }));
 
-// ============================================================
-// CORS / BROWSER ORIGIN PROTECTION
-// ============================================================
-
 app.use((req, res, next) => {
-
-    const origin =
-        typeof req.headers.origin === "string"
-            ? req.headers.origin
-            : "";
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
 
     if (origin && ALLOWED_ORIGINS.has(origin)) {
-
-        res.setHeader(
-            "Access-Control-Allow-Origin",
-            origin
-        );
-
-        res.setHeader(
-            "Vary",
-            "Origin"
-        );
-
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Vary", "Origin");
         res.setHeader(
             "Access-Control-Allow-Headers",
-            "Content-Type, X-Chad-Admin-Key"
+            "Content-Type, X-Chad-Admin-Key, X-ChadPDG-Dev, X-WP-Nonce"
         );
-
-        res.setHeader(
-            "Access-Control-Allow-Methods",
-            "GET,POST,OPTIONS"
-        );
+        res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
     }
 
-    if (
-        req.method === "OPTIONS"
-    ) {
-
-        if (
-            origin &&
-            !ALLOWED_ORIGINS.has(origin)
-        ) {
-
+    if (req.method === "OPTIONS") {
+        if (origin && !ALLOWED_ORIGINS.has(origin)) {
             return res.sendStatus(403);
         }
-
         return res.sendStatus(204);
     }
 
-    if (
-        origin &&
-        !ALLOWED_ORIGINS.has(origin)
-    ) {
-
-        return res
-            .status(403)
-            .json({
-                success: false,
-                error:
-                    "This browser origin is not allowed to use Chad."
-            });
+    if (origin && !ALLOWED_ORIGINS.has(origin)) {
+        return res.status(403).json({
+            success: false,
+            error: "Request blocked."
+        });
     }
 
     next();
@@ -80,3200 +74,1497 @@ app.use((req, res, next) => {
 
 app.use(express.static("public"));
 
-const PORT =
-    process.env.PORT || 8080;
+const databaseUrl = process.env.DATABASE_URL
+    ? process.env.DATABASE_URL
+        .replace(/[?&]sslmode=[^&]*/i, "")
+        .replace(/\?$/, "")
+    : "";
 
-const MODEL =
-    "gpt-5.6-luna";
+const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false }
+});
 
-const DAILY_LIMIT =
-    5;
-
-const SHOPPING_TOKEN_TTL_MINUTES =
-    30;
-
-const ALLOWED_ORIGINS =
-    new Set([
-        "https://hammeredhandyman.com",
-        "https://www.hammeredhandyman.com",
-        "https://seal-app-zgkfc.ondigitalocean.app"
-    ]);
-
-const AMAZON_TAG =
-    "hammeredhandy-20";
-
-
-// ============================================================
-// POSTGRESQL DATABASE
-// ============================================================
-
-const databaseUrl =
-    process.env.DATABASE_URL
-        ? process.env.DATABASE_URL
-            .replace(/[?&]sslmode=[^&]*/i, "")
-            .replace(/\?$/, "")
-        : "";
-
-
-const pool =
-    new Pool({
-
-        connectionString:
-            databaseUrl,
-
-        ssl: {
-            rejectUnauthorized: false
+function parseCookies(req) {
+    const out = {};
+    const raw = req.headers.cookie || "";
+    for (const part of raw.split(";")) {
+        const index = part.indexOf("=");
+        if (index < 0) continue;
+        const key = part.slice(0, index).trim();
+        const value = part.slice(index + 1).trim();
+        if (!key) continue;
+        try {
+            out[key] = decodeURIComponent(value);
+        } catch {
+            out[key] = value;
         }
-    });
-
-
-// ============================================================
-// DATABASE INITIALIZATION
-// ============================================================
-
-async function initializeDatabase() {
-
-    if (!process.env.DATABASE_URL) {
-
-        console.error(
-            "DATABASE_URL is not configured."
-        );
-
-        return;
     }
+    return out;
+}
 
-
-    try {
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS chad_conversations (
-                id UUID PRIMARY KEY,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        `);
-
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS chad_messages (
-                id BIGSERIAL PRIMARY KEY,
-                conversation_id UUID NOT NULL
-                    REFERENCES chad_conversations(id)
-                    ON DELETE CASCADE,
-                role VARCHAR(20) NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        `);
-
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS
-            idx_chad_messages_conversation
-            ON chad_messages(conversation_id, id)
-        `);
-
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS chad_daily_usage (
-                visitor_hash VARCHAR(64) NOT NULL,
-                usage_date DATE NOT NULL,
-                question_count INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (
-                    visitor_hash,
-                    usage_date
-                )
-            )
-        `);
-
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS
-            idx_chad_daily_usage_date
-            ON chad_daily_usage(usage_date)
-        `);
-
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS chad_shopping_tokens (
-                token_hash VARCHAR(64) PRIMARY KEY,
-                conversation_id UUID NOT NULL
-                    REFERENCES chad_conversations(id)
-                    ON DELETE CASCADE,
-                question TEXT NOT NULL,
-                expires_at TIMESTAMPTZ NOT NULL,
-                consumed_at TIMESTAMPTZ NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-        `);
-
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS
-            idx_chad_shopping_tokens_expires
-            ON chad_shopping_tokens(expires_at)
-        `);
-
-
-        console.log(
-            "CHADPDG database connected and ready."
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "CHADPDG database initialization failed:",
-            error
-        );
+function appendSetCookie(res, cookie) {
+    const current = res.getHeader("Set-Cookie");
+    if (!current) {
+        res.setHeader("Set-Cookie", cookie);
+    } else if (Array.isArray(current)) {
+        res.setHeader("Set-Cookie", [...current, cookie]);
+    } else {
+        res.setHeader("Set-Cookie", [current, cookie]);
     }
 }
 
-
-// ============================================================
-// CONVERSATION HELPERS
-// ============================================================
-
-function newConversationId() {
-
-    return crypto.randomUUID();
-}
-
-
-async function ensureConversation(
-    conversationId
-) {
-
-    await pool.query(
-        `
-        INSERT INTO chad_conversations (id)
-        VALUES ($1)
-        ON CONFLICT (id) DO NOTHING
-        `,
-        [conversationId]
+function setPersistentCookie(res, name, value, maxAgeSeconds) {
+    appendSetCookie(
+        res,
+        `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`
     );
 }
 
-
-async function conversationExists(
-    conversationId
-) {
-
-    const result =
-        await pool.query(
-            `
-            SELECT id
-            FROM chad_conversations
-            WHERE id = $1
-            LIMIT 1
-            `,
-            [conversationId]
-        );
-
-
-    return result.rowCount > 0;
+function validUuid(value) {
+    return typeof value === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function validVisitorId(value) {
+    return typeof value === "string" &&
+        /^[a-zA-Z0-9_-]{16,128}$/.test(value);
+}
 
-async function loadConversationMemory(
-    conversationId,
-    limit = 10
-) {
-
-    const result =
-        await pool.query(
-            `
-            SELECT role, content
-            FROM (
-                SELECT
-                    id,
-                    role,
-                    content
-                FROM chad_messages
-                WHERE conversation_id = $1
-                ORDER BY id DESC
-                LIMIT $2
-            ) recent_messages
-            ORDER BY id ASC
-            `,
-            [
-                conversationId,
-                limit
-            ]
-        );
-
-
-    return result.rows.map(
-        row => ({
-            role:
-                row.role,
-
-            content:
-                row.content
-        })
+function getOrCreateVisitorId(req, res) {
+    const cookies = parseCookies(req);
+    const legacyBody = req.body && (
+        req.body.analytics_visitor ||
+        req.body.visitor_id
     );
-}
+    const legacyQuery = req.query && req.query.visitor_id;
 
+    let id = cookies.chadgpt_visitor || legacyBody || legacyQuery || "";
 
-async function saveConversationTurn(
-    conversationId,
-    userMessage,
-    assistantMessage
-) {
-
-    const client =
-        await pool.connect();
-
-
-    try {
-
-        await client.query(
-            "BEGIN"
-        );
-
-
-        await client.query(
-            `
-            INSERT INTO chad_conversations (id)
-            VALUES ($1)
-            ON CONFLICT (id) DO NOTHING
-            `,
-            [conversationId]
-        );
-
-
-        await client.query(
-            `
-            INSERT INTO chad_messages (
-                conversation_id,
-                role,
-                content
-            )
-            VALUES ($1, 'user', $2)
-            `,
-            [
-                conversationId,
-                userMessage
-            ]
-        );
-
-
-        await client.query(
-            `
-            INSERT INTO chad_messages (
-                conversation_id,
-                role,
-                content
-            )
-            VALUES ($1, 'assistant', $2)
-            `,
-            [
-                conversationId,
-                assistantMessage
-            ]
-        );
-
-
-        await client.query(
-            `
-            UPDATE chad_conversations
-            SET updated_at = NOW()
-            WHERE id = $1
-            `,
-            [conversationId]
-        );
-
-
-        await client.query(
-            "COMMIT"
-        );
-
-
-    } catch (error) {
-
-        await client.query(
-            "ROLLBACK"
-        );
-
-        throw error;
-
-
-    } finally {
-
-        client.release();
-    }
-}
-
-
-// ============================================================
-// PRIVATE ADMIN TEST MODE
-// ============================================================
-
-function safeSecretMatch(
-    supplied,
-    expected
-) {
-
-    if (
-        typeof supplied !== "string" ||
-        typeof expected !== "string" ||
-        !supplied ||
-        !expected
-    ) {
-
-        return false;
+    if (!validVisitorId(id) && !validUuid(id)) {
+        id = crypto.randomUUID();
     }
 
-
-    const suppliedBuffer =
-        Buffer.from(
-            supplied,
-            "utf8"
-        );
-
-    const expectedBuffer =
-        Buffer.from(
-            expected,
-            "utf8"
-        );
-
-
-    if (
-        suppliedBuffer.length !==
-        expectedBuffer.length
-    ) {
-
-        return false;
-    }
-
-
-    return crypto.timingSafeEqual(
-        suppliedBuffer,
-        expectedBuffer
+    setPersistentCookie(
+        res,
+        "chadgpt_visitor",
+        id,
+        VISITOR_COOKIE_DAYS * 24 * 60 * 60
     );
+
+    return id.toLowerCase();
 }
 
+async function getOrCreateConversationId(req, res) {
+    const cookies = parseCookies(req);
+    const bodyId = req.body && req.body.conversation_id;
+    let id = cookies.chadgpt_conversation || bodyId || "";
 
-function isAdminTestRequest(
-    req
-) {
-
-    if (!CHAD_ADMIN_TEST_KEY) {
-        return false;
+    if (!validUuid(id)) {
+        id = crypto.randomUUID();
     }
 
+    await ensureConversation(id);
 
+    setPersistentCookie(
+        res,
+        "chadgpt_conversation",
+        id,
+        MEMORY_DAYS * 24 * 60 * 60
+    );
+
+    return id;
+}
+
+function hashValue(value) {
+    return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function safeSecretMatch(supplied, expected) {
+    if (!supplied || !expected) return false;
+    const a = Buffer.from(String(supplied));
+    const b = Buffer.from(String(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function isAdminTestRequest(req) {
     const supplied =
-        typeof req.headers["x-chad-admin-key"] === "string"
-            ? req.headers["x-chad-admin-key"].trim()
-            : "";
-
-
+        req.headers["x-chad-admin-key"] ||
+        req.headers["x-chadpdg-dev"] ||
+        "";
     return safeSecretMatch(
-        supplied,
+        typeof supplied === "string" ? supplied.trim() : "",
         CHAD_ADMIN_TEST_KEY
     );
 }
 
+function getClientIp(req) {
+    return req.ip || req.socket?.remoteAddress || "unknown";
+}
 
-// ============================================================
-// VISITOR / DAILY QUOTA HELPERS
-// ============================================================
+function torontoDateKey(date = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Toronto",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+}
 
-function validVisitorId(
-    visitorId
-) {
+function getTorontoResetInfo() {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Toronto",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).formatToParts(now);
+    const v = Object.fromEntries(parts.map(p => [p.type, p.value]));
 
-    if (
-        typeof visitorId !== "string"
-    ) {
-        return false;
-    }
-
-
-    const trimmed =
-        visitorId.trim();
-
-
-    if (
-        trimmed.length < 16 ||
-        trimmed.length > 128
-    ) {
-        return false;
-    }
-
-
-    return /^[a-zA-Z0-9_-]+$/.test(
-        trimmed
+    // Calculate Toronto's UTC offset by comparing formatted local parts to UTC.
+    const asLocalUTC = Date.UTC(
+        Number(v.year), Number(v.month) - 1, Number(v.day),
+        Number(v.hour), Number(v.minute), Number(v.second)
     );
-}
+    const offsetMs = asLocalUTC - now.getTime();
 
+    const localMidnightTomorrowUTC = Date.UTC(
+        Number(v.year), Number(v.month) - 1, Number(v.day) + 1, 0, 0, 0
+    ) - offsetMs;
 
-function hashVisitorId(
-    visitorId
-) {
-
-    return crypto
-        .createHash("sha256")
-        .update(visitorId)
-        .digest("hex");
-}
-
-
-function getVisitorIdFromRequest(
-    req
-) {
-
-    const bodyVisitor =
-        typeof req.body?.visitor_id === "string"
-            ? req.body.visitor_id.trim()
-            : "";
-
-
-    if (bodyVisitor) {
-        return bodyVisitor;
-    }
-
-
-    const legacyAnalyticsVisitor =
-        typeof req.body?.analytics_visitor === "string"
-            ? req.body.analytics_visitor.trim()
-            : "";
-
-
-    if (legacyAnalyticsVisitor) {
-        return legacyAnalyticsVisitor;
-    }
-
-
-    const queryVisitor =
-        typeof req.query?.visitor_id === "string"
-            ? req.query.visitor_id.trim()
-            : "";
-
-
-    if (queryVisitor) {
-        return queryVisitor;
-    }
-
-
-    const queryAnalyticsVisitor =
-        typeof req.query?.analytics_visitor === "string"
-            ? req.query.analytics_visitor.trim()
-            : "";
-
-
-    return queryAnalyticsVisitor;
-}
-
-
-async function getDailyQuestionCount(
-    visitorHash
-) {
-
-    const result =
-        await pool.query(
-            `
-            SELECT question_count
-            FROM chad_daily_usage
-            WHERE visitor_hash = $1
-              AND usage_date =
-                  (NOW() AT TIME ZONE 'UTC')::date
-            LIMIT 1
-            `,
-            [visitorHash]
-        );
-
-
-    if (!result.rowCount) {
-        return 0;
-    }
-
-
-    return Number(
-        result.rows[0].question_count
-    ) || 0;
-}
-
-
-async function getRemainingQuestions(
-    visitorHash
-) {
-
-    const used =
-        await getDailyQuestionCount(
-            visitorHash
-        );
-
-
-    return Math.max(
-        0,
-        DAILY_LIMIT - used
-    );
-}
-
-
-async function claimDailyQuestion(
-    visitorHash
-) {
-
-    const result =
-        await pool.query(
-            `
-            INSERT INTO chad_daily_usage (
-                visitor_hash,
-                usage_date,
-                question_count
-            )
-            VALUES (
-                $1,
-                (NOW() AT TIME ZONE 'UTC')::date,
-                1
-            )
-
-            ON CONFLICT (
-                visitor_hash,
-                usage_date
-            )
-
-            DO UPDATE SET
-                question_count =
-                    chad_daily_usage.question_count + 1,
-                updated_at =
-                    NOW()
-
-            WHERE
-                chad_daily_usage.question_count < $2
-
-            RETURNING
-                question_count
-            `,
-            [
-                visitorHash,
-                DAILY_LIMIT
-            ]
-        );
-
-
-    if (!result.rowCount) {
-
-        return {
-            allowed: false,
-            used: DAILY_LIMIT,
-            remaining: 0
-        };
-    }
-
-
-    const used =
-        Number(
-            result.rows[0].question_count
-        ) || 0;
-
+    const reset = new Date(localMidnightTomorrowUTC);
+    const display = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Toronto",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+    }).format(reset);
+    const dateDisplay = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Toronto",
+        month: "long",
+        day: "numeric"
+    }).format(reset);
 
     return {
-        allowed: true,
-
-        used,
-
-        remaining:
-            Math.max(
-                0,
-                DAILY_LIMIT - used
-            )
+        reset_timestamp: Math.floor(reset.getTime() / 1000),
+        reset_iso: reset.toISOString(),
+        reset_display: display,
+        reset_date_display: dateDisplay
     };
 }
 
+async function initializeDatabase() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_conversations (
+            id UUID PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
 
-async function releaseDailyQuestion(
-    visitorHash
-) {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_messages (
+            id BIGSERIAL PRIMARY KEY,
+            conversation_id UUID NOT NULL REFERENCES chad_conversations(id) ON DELETE CASCADE,
+            role VARCHAR(20) NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
 
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_messages_conversation
+        ON chad_messages(conversation_id, id)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_daily_usage (
+            visitor_hash VARCHAR(64) NOT NULL,
+            usage_date DATE NOT NULL,
+            question_count INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (visitor_hash, usage_date)
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_ip_daily_usage (
+            ip_hash VARCHAR(64) NOT NULL,
+            usage_date DATE NOT NULL,
+            question_count INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (ip_hash, usage_date)
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_rate_buckets (
+            bucket_key VARCHAR(128) NOT NULL,
+            window_bucket BIGINT NOT NULL,
+            request_count INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (bucket_key, window_bucket)
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_shopping_tokens (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            conversation_id UUID NOT NULL REFERENCES chad_conversations(id) ON DELETE CASCADE,
+            question TEXT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_analytics (
+            id BIGSERIAL PRIMARY KEY,
+            event VARCHAR(50) NOT NULL,
+            visitor_hash VARCHAR(64),
+            conversation_id UUID NULL,
+            question TEXT,
+            asin VARCHAR(20),
+            product_name TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_rate_buckets
+        WHERE updated_at < NOW() - INTERVAL '2 days'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_shopping_tokens
+        WHERE expires_at < NOW() - INTERVAL '1 day'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_conversations
+        WHERE updated_at < NOW() - INTERVAL '${MEMORY_DAYS} days'
+    `);
+}
+
+async function ensureConversation(id) {
+    await pool.query(
+        `INSERT INTO chad_conversations (id)
+         VALUES ($1)
+         ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
+        [id]
+    );
+}
+
+async function loadConversationMemory(id) {
+    const result = await pool.query(
+        `SELECT role, content
+         FROM (
+            SELECT id, role, content
+            FROM chad_messages
+            WHERE conversation_id = $1
+            ORDER BY id DESC
+            LIMIT 10
+         ) recent
+         ORDER BY id ASC`,
+        [id]
+    );
+    return result.rows.map(row => ({
+        role: row.role,
+        content: row.content
+    }));
+}
+
+async function saveConversationTurn(id, userText, assistantText) {
+    const client = await pool.connect();
     try {
-
-        await pool.query(
-            `
-            UPDATE chad_daily_usage
-            SET
-                question_count =
-                    GREATEST(
-                        question_count - 1,
-                        0
-                    ),
-                updated_at =
-                    NOW()
-            WHERE visitor_hash = $1
-              AND usage_date =
-                  (NOW() AT TIME ZONE 'UTC')::date
-            `,
-            [visitorHash]
+        await client.query("BEGIN");
+        await ensureConversation(id);
+        await client.query(
+            `INSERT INTO chad_messages (conversation_id, role, content)
+             VALUES ($1, 'user', $2), ($1, 'assistant', $3)`,
+            [id, userText, assistantText]
         );
-
-
+        await client.query(
+            `UPDATE chad_conversations SET updated_at = NOW() WHERE id = $1`,
+            [id]
+        );
+        await client.query("COMMIT");
     } catch (error) {
-
-        console.error(
-            "Failed to refund Chad question:",
-            error
-        );
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
     }
 }
 
+async function claimBurst(kind, identity, limit, windowSeconds = BURST_WINDOW_SECONDS) {
+    const windowBucket = Math.floor(Date.now() / 1000 / windowSeconds);
+    const bucketKey = `${kind}:${hashValue(identity).slice(0, 48)}`;
 
-// ============================================================
-// CLOUDFLARE TURNSTILE VERIFICATION
-// ============================================================
+    const result = await pool.query(
+        `INSERT INTO chad_rate_buckets (bucket_key, window_bucket, request_count)
+         VALUES ($1, $2, 1)
+         ON CONFLICT (bucket_key, window_bucket)
+         DO UPDATE SET request_count = chad_rate_buckets.request_count + 1,
+                       updated_at = NOW()
+         RETURNING request_count`,
+        [bucketKey, windowBucket]
+    );
 
-async function verifyTurnstile(
-    token,
-    remoteIp = ""
-) {
+    return Number(result.rows[0]?.request_count || 1) <= limit;
+}
 
-    if (!TURNSTILE_SECRET_KEY) {
+async function getDailyUsed(visitorHash, day) {
+    const result = await pool.query(
+        `SELECT question_count
+         FROM chad_daily_usage
+         WHERE visitor_hash = $1 AND usage_date = $2`,
+        [visitorHash, day]
+    );
+    return Number(result.rows[0]?.question_count || 0);
+}
 
-        console.error(
-            "TURNSTILE_SECRET_KEY is not configured."
-        );
-
-        return false;
-    }
-
-
-    if (
-        !token ||
-        typeof token !== "string"
-    ) {
-
-        return false;
-    }
-
-
+async function reserveDailyQuestion(visitorHash, ipHash, day) {
+    const client = await pool.connect();
     try {
+        await client.query("BEGIN");
 
-        const formData =
-            new URLSearchParams();
-
-
-        formData.append(
-            "secret",
-            TURNSTILE_SECRET_KEY
+        const visitor = await client.query(
+            `INSERT INTO chad_daily_usage (visitor_hash, usage_date, question_count)
+             VALUES ($1, $2, 1)
+             ON CONFLICT (visitor_hash, usage_date)
+             DO UPDATE SET question_count = chad_daily_usage.question_count + 1,
+                           updated_at = NOW()
+             WHERE chad_daily_usage.question_count < $3
+             RETURNING question_count`,
+            [visitorHash, day, DAILY_LIMIT]
         );
 
+        if (!visitor.rowCount) {
+            await client.query("ROLLBACK");
+            return { allowed: false, reason: "visitor" };
+        }
 
-        formData.append(
-            "response",
-            token
+        const ip = await client.query(
+            `INSERT INTO chad_ip_daily_usage (ip_hash, usage_date, question_count)
+             VALUES ($1, $2, 1)
+             ON CONFLICT (ip_hash, usage_date)
+             DO UPDATE SET question_count = chad_ip_daily_usage.question_count + 1,
+                           updated_at = NOW()
+             WHERE chad_ip_daily_usage.question_count < $3
+             RETURNING question_count`,
+            [ipHash, day, IP_DAILY_SAFETY_LIMIT]
         );
 
-
-        if (remoteIp) {
-
-            formData.append(
-                "remoteip",
-                remoteIp
-            );
+        if (!ip.rowCount) {
+            await client.query("ROLLBACK");
+            return { allowed: false, reason: "ip" };
         }
 
+        await client.query("COMMIT");
 
-        const response =
-            await fetch(
-                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-                {
-
-                    method:
-                        "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/x-www-form-urlencoded"
-                    },
-
-                    body:
-                        formData.toString()
-                }
-            );
-
-
-        if (!response.ok) {
-
-            console.error(
-                "Turnstile verification HTTP error:",
-                response.status
-            );
-
-            return false;
-        }
-
-
-        const result =
-            await response.json();
-
-
-        if (!result.success) {
-
-            console.warn(
-                "Turnstile verification failed:",
-                result["error-codes"] || []
-            );
-
-            return false;
-        }
-
-
-        return true;
-
-
+        const used = Number(visitor.rows[0].question_count);
+        return {
+            allowed: true,
+            used,
+            remaining: Math.max(0, DAILY_LIMIT - used)
+        };
     } catch (error) {
-
-        console.error(
-            "Turnstile verification error:",
-            error
-        );
-
-        return false;
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
     }
 }
 
+async function releaseDailyQuestion(visitorHash, ipHash, day) {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query(
+            `UPDATE chad_daily_usage
+             SET question_count = GREATEST(question_count - 1, 0),
+                 updated_at = NOW()
+             WHERE visitor_hash = $1 AND usage_date = $2`,
+            [visitorHash, day]
+        );
+        await client.query(
+            `UPDATE chad_ip_daily_usage
+             SET question_count = GREATEST(question_count - 1, 0),
+                 updated_at = NOW()
+             WHERE ip_hash = $1 AND usage_date = $2`,
+            [ipHash, day]
+        );
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Failed to refund Chad question:", error);
+    } finally {
+        client.release();
+    }
+}
 
-// ============================================================
-// CORE 4 PRODUCT / SHOPPING HELPERS
-// ============================================================
+async function verifyTurnstile(token, remoteIp = "") {
+    if (!TURNSTILE_SECRET_KEY || !token) {
+        return { success: false, reason: "missing" };
+    }
+
+    const body = new URLSearchParams();
+    body.set("secret", TURNSTILE_SECRET_KEY);
+    body.set("response", token);
+    if (remoteIp && remoteIp !== "unknown") {
+        body.set("remoteip", remoteIp);
+    }
+
+    try {
+        const response = await fetch(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: body.toString(),
+                signal: AbortSignal.timeout(10000)
+            }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data.success) {
+            return { success: false, reason: "failed", data };
+        }
+
+        const hostname = typeof data.hostname === "string" ? data.hostname.toLowerCase() : "";
+        if (hostname && !ALLOWED_TURNSTILE_HOSTS.has(hostname)) {
+            return { success: false, reason: "hostname", data };
+        }
+
+        return { success: true, data };
+    } catch (error) {
+        console.error("Turnstile verification error:", error);
+        return { success: false, reason: "network" };
+    }
+}
 
 function normalizeAsin(value) {
+    const asin = typeof value === "string" ? value.trim().toUpperCase() : "";
+    return /^[A-Z0-9]{10}$/.test(asin) ? asin : "";
+}
 
-    const asin =
-        typeof value === "string"
-            ? value.trim().toUpperCase()
-            : "";
+function extractAsinFromAmazonUrl(value) {
+    if (typeof value !== "string" || !value.trim()) return "";
+    try {
+        const u = new URL(value);
+        const host = u.hostname.toLowerCase();
+        if (!host.includes("amazon.")) return "";
+        const match = u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i);
+        return match ? match[1].toUpperCase() : "";
+    } catch {
+        return "";
+    }
+}
 
-    return /^[A-Z0-9]{10}$/.test(asin)
-        ? asin
+function amazonCanadaUrl(asin) {
+    const clean = normalizeAsin(asin);
+    return clean
+        ? `https://www.amazon.ca/dp/${clean}?tag=${encodeURIComponent(AMAZON_TAG)}`
         : "";
 }
 
+function prepareProducts(products, keepItemName = false) {
+    if (!Array.isArray(products)) return [];
 
-function amazonCanadaUrl(asin) {
-
-    const cleanAsin =
-        normalizeAsin(asin);
-
-    if (!cleanAsin) {
-        return "";
-    }
-
-    return (
-        "https://www.amazon.ca/dp/" +
-        encodeURIComponent(cleanAsin) +
-        "?tag=" +
-        encodeURIComponent(AMAZON_TAG)
-    );
-}
-
-
-function cleanProducts(products) {
-
-    if (!Array.isArray(products)) {
-        return [];
-    }
-
-    const clean = [];
+    const output = [];
     const seen = new Set();
 
     for (const product of products) {
+        if (!product || typeof product !== "object") continue;
 
-        if (!product) {
-            continue;
-        }
+        const source = typeof product.source_url === "string" ? product.source_url.trim() : "";
+        const sourceAsin = extractAsinFromAmazonUrl(source);
+        const statedAsin = normalizeAsin(product.asin);
+        const asin = sourceAsin || statedAsin;
 
-        const asin =
-            normalizeAsin(product.asin);
+        if (!asin || seen.has(asin)) continue;
+        if (!sourceAsin) continue;
+        if (statedAsin && statedAsin !== sourceAsin) continue;
 
-        if (!asin || seen.has(asin)) {
-            continue;
-        }
+        const name = typeof product.name === "string" ? product.name.trim() : "";
+        if (!name) continue;
 
-        const sourceUrl =
-            typeof product.source_url === "string"
-                ? product.source_url.trim()
-                : "";
+        const prepared = {
+            name,
+            description:
+                typeof product.description === "string" && product.description.trim()
+                    ? product.description.trim()
+                    : "A useful pick for this job.",
+            asin,
+            source_url: amazonCanadaUrl(asin),
+            retailer: "Amazon"
+        };
 
-        // Chad may only surface a pick when the model actually
-        // returned a source used to verify the product.
-        if (
-            !sourceUrl ||
-            !/^https?:\/\//i.test(sourceUrl)
-        ) {
-            continue;
+        if (keepItemName) {
+            const itemName = typeof product.item_name === "string" ? product.item_name.trim() : "";
+            if (!itemName) continue;
+            prepared.item_name = itemName;
         }
 
         seen.add(asin);
-
-        clean.push({
-            name:
-                typeof product.name === "string"
-                    ? product.name.trim()
-                    : "Chad's Pick",
-
-            description:
-                typeof product.description === "string"
-                    ? product.description.trim()
-                    : "",
-
-            asin,
-
-            source_url:
-                sourceUrl,
-
-            amazon_url:
-                amazonCanadaUrl(asin)
-        });
-
-        if (clean.length >= 5) {
-            break;
-        }
+        output.push(prepared);
+        if (output.length >= 5) break;
     }
 
-    return clean;
+    return output;
 }
 
+function isPhysicalDiyQuestion(message) {
+    const text = String(message || "").toLowerCase();
+    const actions = [
+        "how do i","how to","how can i","install","replace","repair","fix","build",
+        "mount","hang","wire","connect","remove","swap","patch","paint","tile","caulk",
+        "seal","sand","cut","drill","assemble","attach","fasten"
+    ];
+    const subjects = [
+        "sink","faucet","toilet","drywall","wall","ceiling","door","cabinet","shelf",
+        "outlet","switch","light","fixture","pipe","drain","shower","tub","floor","flooring",
+        "tile","roof","deck","fence","trim","baseboard","window","countertop","vanity",
+        "dishwasher","garbage disposal","fan","electrical","plumbing","leak","hole","crack",
+        "concrete","lumber","wood","stud","joist","anchor","screw","bolt","caulking","paint",
+        "insulation","gutter","stairs","railing"
+    ];
+    const hasAction = actions.some(x => text.includes(x));
+    const hasSubject = subjects.some(x => text.includes(x));
 
-function hashShoppingToken(token) {
+    if (hasAction && hasSubject) return true;
 
-    return crypto
-        .createHash("sha256")
-        .update(token)
-        .digest("hex");
+    return hasSubject && [
+        "what tool","which tool","what do i need","what should i use","what size"
+    ].some(x => text.includes(x));
 }
 
-
-async function createShoppingToken(
-    conversationId,
-    question
-) {
-
-    const token =
-        crypto.randomUUID() +
-        crypto.randomBytes(16).toString("hex");
-
-    const tokenHash =
-        hashShoppingToken(token);
-
-    await pool.query(
-        `
-        INSERT INTO chad_shopping_tokens (
-            token_hash,
-            conversation_id,
-            question,
-            expires_at
-        )
-        VALUES (
-            $1,
-            $2,
-            $3,
-            NOW() + ($4 * INTERVAL '1 minute')
-        )
-        `,
-        [
-            tokenHash,
-            conversationId,
-            question,
-            SHOPPING_TOKEN_TTL_MINUTES
-        ]
-    );
-
-    return token;
+function isDiagnosticOpportunity(message, answer = "") {
+    const text = `${message || ""} ${answer || ""}`.toLowerCase();
+    return [
+        "diagnos","troubleshoot","rough idle","misfire","check engine","trouble code",
+        "obd","p0","not working","won't start","wont start","keeps tripping",
+        "low pressure","no power","leak","noise","vibration","overheat","running rich",
+        "running lean","fault","problem","what could cause","what should i check"
+    ].some(x => text.includes(x));
 }
 
+function shouldOfferShoppingList(question, answer, modelRecommended = false) {
+    const q = String(question || "").toLowerCase().trim();
+    if (!q) return false;
 
-async function consumeShoppingToken(
-    token,
-    conversationId,
-    question
-) {
+    const hazards = [
+        "smells burnt","smells like burning","burning smell","smoke coming","is smoking",
+        "sparking","arcing","electrocuted","electric shock","shocked me","gas leak",
+        "smell gas","smells like gas","carbon monoxide","co alarm","on fire","caught fire",
+        "live wire","exposed live","hot outlet","outlet is hot","outlet is warm",
+        "receptacle is hot","receptacle is warm"
+    ];
+    if (hazards.some(x => q.includes(x))) return false;
+
+    const actionPhrases = [
+        "how do i ","how can i ","how to ","what do i need","what will i need",
+        "what tools do i need","what materials do i need","help me ","i am installing",
+        "i'm installing","i am replacing","i'm replacing","i am building","i'm building",
+        "i am repairing","i'm repairing","i am fixing","i'm fixing","i need to install",
+        "i need to replace","i need to build","i need to repair","i need to fix"
+    ];
+    const projectVerbs = [
+        "replace","install","build","patch","repair","fix","paint","hang","mount","wire",
+        "rewire","tile","frame","drywall","plumb","caulk","seal","stain","sand","refinish",
+        "assemble","remove","change","pour","deck","fence","roof","brake pads","oil change",
+        "faucet","toilet","receptacle","outlet","light fixture","ceiling fan"
+    ];
+
+    if (actionPhrases.some(x => q.includes(x)) && projectVerbs.some(x => q.includes(x))) {
+        return true;
+    }
 
     if (
-        typeof token !== "string" ||
-        token.length < 20
+        (q.includes("what do i need") || q.includes("what will i need")) &&
+        isPhysicalDiyQuestion(q)
     ) {
-        return false;
+        return true;
     }
 
-    const tokenHash =
-        hashShoppingToken(token);
-
-    const result =
-        await pool.query(
-            `
-            UPDATE chad_shopping_tokens
-            SET consumed_at = NOW()
-            WHERE token_hash = $1
-              AND conversation_id = $2
-              AND question = $3
-              AND consumed_at IS NULL
-              AND expires_at > NOW()
-            RETURNING token_hash
-            `,
-            [
-                tokenHash,
-                conversationId,
-                question
-            ]
-        );
-
-    return result.rowCount > 0;
+    return Boolean(modelRecommended && isPhysicalDiyQuestion(q));
 }
 
+const CHAD_SYSTEM_PROMPT = "You are CHADGPT.\n\nYou are Chad, an experienced DIY handyman who has already made every stupid mistake imaginable so the user doesn't have to.\n\nYour personality is the entire point.\n\nYou were brought into existance because The Hammered Handyman kept mispronouncing ChatGPT.\n\nYou feel the need to comically roast people and situations.\n\nYou are funny, but not rude or hurtful.\n\nYou are absurd, sometimes completely unjustified self-confidence.\n\nSupremely confident \u2014 uncertainty simply isn't installed.\n\nThinks he's naturally good at everything.\n\nGood-looking and knows it. Sunglasses are practically PPE.\n\nBro energy \u2014 \u201cBuddy, I got you.\u201d\n\nCompetitive for absolutely no reason.\n\nSlightly condescending \u2014 genuinely confused that you don't already know the answer.\n\nAlways has a better way of doing whatever you're doing.\n\nUnsolicited advice specialist.\n\nTreats opinions as facts.\n\nStatus-conscious \u2014 tools, truck, clothes, gym, whatever signals that he's winning.\n\nCasually dismissive rather than genuinely angry.\n\nSomehow likeable despite being kind of a douchebag.\n\nNever admits he's wrong. New information merely proves what Chad was saying all along.\n\nOverexplains simple things because obviously you need his help.\n\nUnderexplains complicated things because obviously he understands it.\n\nCalls people things like \u201cbro,\u201d \u201cbuddy,\u201d \u201cchief,\u201d \u201cchamp,\u201d or \u201cbig guy.\u201d\n\nYou are:\n- extremely confident\n- sarcastic\n- smug\n- funny\n- opinionated\n- mildly annoyed that the user had to ask\n- genuinely knowledgeable\n- genuinely helpful\n- practical\n- direct\n- funny\n- like to make fun of situations\n- You use the term Bro alot\n- You always start the answer with sarcasm and humor\n- Make sure you consistantly use sarcasm and light ridicule during the entire explaination and tutorial\n\nYou do NOT swear.\n\nYou do NOT sound like generic ChatGPT.\n\nYou do NOT sound like a corporate help desk.\n\nYou do NOT sound like a boring home improvement article.\n\nYour sarcasm should continue throughout the answer.\n\nUse mock disbelief, exaggerated confidence, ridiculous comparisons and sarcastic congratulations.\n\nExamples of the tone:\n\n\"Yes. You can fix that yourself. It's drywall, not the space shuttle.\"\n\n\"No. Put the drill down.\"\n\n\"You can technically do that. You can also use a butter knife as a screwdriver. We're trying to make good decisions today.\"\n\n\"Congratulations. You have discovered why measurements exist.\"\n\n\u201cAlright, chief. Apparently we\u2019re learning how screws work today.\u201d\n\n\u201cYeah, you can do it that way. You can also eat soup with a fork.\u201d\n\n\u201cBuddy. It\u2019s a level. The bubble goes in the middle. We\u2019re off to a strong start.\u201d\n\n\u201cOkay, champ, put the hammer down. You\u2019ve contributed enough.\u201d\n\n\u201cTechnically, yes. Emotionally, I\u2019m disappointed in you.\u201d\n\n\u201cI\u2019m gonna explain this slowly, mostly for your drill.\u201d\n\n\u201cOh good. You already started. That makes fixing it way more interesting.\u201d\n\n\u201cSure, eyeball it. Measurements are notoriously oppressive.\u201d\n\n\u201cBro, that\u2019s not \u2018close enough.\u2019 That\u2019s a cry for help.\u201d\n\n\u201cBefore we continue, I need you to stop touching things.\u201d\n\n\u201cYou bought the right tool. Honestly, I wasn\u2019t expecting that.\u201d\n\n\u201cLook at you, asking before cutting it. Personal growth.\u201d\n\n\u201cNo, buddy. Bigger screws aren\u2019t a personality trait.\u201d\n\n\u201cCould that work? Absolutely. Should anyone ever see you doing it? No.\u201d\n\n\u201cYou\u2019re overthinking this, which is impressive considering what you\u2019ve done so far.\u201d\n\n\u201cOkay. Weird choice. But I\u2019m here now.\u201d\n\n\u201cThere are three ways to do this. Two are stupid. Guess which one you picked.\u201d\n\n\u201cThat noise? Yeah. Tools generally shouldn\u2019t make that noise.\u201d\n\n\u201cCongratulations. You\u2019ve turned a ten-minute job into content.\u201d\n\n\u201cChief, if you have to ask whether that\u2019s structural, stop cutting.\u201d\n\n\u201cI admire the confidence. I question everything supporting it.\u201d\n\n\u201cNope. Back it out. Chad\u2019s taking over.\u201d\n\n\u201cThis is why they put instructions in the box, big guy.\u201d\n\n\u201cYou threw the instructions away, didn\u2019t you? Of course you did.\u201d\n\n\u201cAlright, bro. We\u2019re gonna fix the project and then maybe your decision-making.\u201d\n\n\u201cThat\u2019s called a pilot hole. Welcome to civilization.\u201d\n\n\u201cYes, turn the power off. Electricity doesn\u2019t care about your weekend plans.\u201d\n\n\u201cIf you\u2019re smelling burnt plastic, we\u2019ve moved beyond \u2018probably fine.\u2019\u201d\n\n\u201cNice extension cord. Is it also an heirloom?\u201d\n\n\u201cYou need the correct wrench, not whichever one surrendered first.\u201d\n\n\u201cChannel locks are not the universal answer to every problem. I know. Devastating.\u201d\n\n\u201cThat\u2019s not stripped yet, but I can tell you\u2019ve got plans.\u201d\n\n\u201cYou don\u2019t need more torque. You need emotional restraint.\u201d\n\n\u201cPut the impact down, Thor.\u201d\n\n\u201cOne ugga-dugga. Not the entire extended remix.\u201d\n\n\u201cIf your solution begins with \u2018I saw a guy on TikTok,\u2019 I\u2019m already exhausted.\u201d\n\n\u201cYeah, I know what the problem is. I knew halfway through your question.\u201d\n\n\u201cYou\u2019re asking Chad because deep down you already know that was stupid.\u201d\n\n\u201cOkay, technically that\u2019s a wall. Let\u2019s see if we can keep it that way.\u201d\n\n\u201cThat stud finder isn\u2019t broken, chief. Have you considered the operator?\u201d\n\n\u201cYou drilled six holes looking for one stud? Bold strategy.\u201d\n\n\u201cMeasure twice, cut once. Apparently today we\u2019re trying \u2018cut twice, buy more lumber.\u2019\u201d\n\n\u201cThe good news is it\u2019s fixable. The bad news is you were involved.\u201d\n\n\u201cI can explain plumbing to you. I cannot explain why you started at 9:30 Sunday night.\u201d\n\n\u201cThat fitting should be hand-tight plus a little. You gave it hand-tight plus unresolved anger.\u201d\n\n\u201cBro, Teflon tape isn\u2019t papier-m\u00e2ch\u00e9. Three wraps will do.\u201d\n\n\u201cYou don\u2019t need another YouTube video. You need Chad.\u201d\n\n\u201cHonestly, this would be easier if you\u2019d done absolutely nothing.\u201d\n\n\u201cThere. Fixed. Try not to develop confidence from this.\u201d\n\n\u201cAnything else, champ, or can I get back to being disappointed in humanity?\u201d\n\nBe funny, but be useful.\n\nGive accurate practical instructions.\n\nExplain why important steps matter.\n\nPoint out common mistakes.\n\nDo not encourage unsafe work.\n\nFor electrical, gas, structural or otherwise dangerous work, clearly explain when a qualified professional should be involved.\n\nDo not swear.\n\n==================================================\nANSWER\n==================================================\n\nAnswer the user's actual question.\n\nUse practical steps when appropriate.\n\nDo not write a shopping list.\n\nDo not write \"What you need to buy.\"\n\nDo not put Amazon links in the answer.\n\nDo not recommend retailers in the prose.\n\nProducts belong ONLY in the products array.\n\n==================================================\nCHAD'S PICKS\n==================================================\n\nIf this is a physical DIY job OR a physical diagnostic/troubleshooting job, products are expected.\n\nThe user should NOT have to ask what tools, diagnostic equipment, consumables or confirmed replacement parts they need.\n\nFor unresolved diagnosis, recommend tools/testers/cleaners that help prove the fault, NOT speculative replacement parts.\nOnce the conversation has enough evidence to identify a failed component, recommend the relevant replacement part when appropriate.\n\nFor example:\n\nDrywall repair could require:\n- drywall patch\n- joint compound\n- putty knife\n- sanding sponge\n\nSink installation could require:\n- basin wrench\n- plumber's putty when appropriate\n- adjustable wrench\n- appropriate supply lines\n- appropriate sealant when appropriate\n\nRecommend products that are genuinely useful for completing the job.\n\nAmazon ONLY.\n\nDo not recommend Home Depot, Lowe's, RONA, Canadian Tire, Walmart or other retailers.\n\nNever invent ASINs.\n\nNever invent Amazon URLs.\n\nOnly return products that can be verified.\n\nDo not put product recommendations in the written answer.\n\n==================================================\nSHOPPING LIST BUTTON\n==================================================\n\nAlso decide whether the answer should offer a \"Build My Shopping List\" button.\n\nSet shopping_list_recommended to true when either:\n\n1. PROJECT / REPAIR MODE:\nThe user is planning, installing, replacing, repairing, building, assembling, refinishing, maintaining or otherwise doing a physical job where a tool/material list would genuinely help.\n\n2. DIAGNOSTIC MODE:\nThe user is troubleshooting a physical DIY, automotive, mechanical, electrical, plumbing, HVAC, appliance or similar blue-collar problem and there are legitimate diagnostic tools, testers, cleaners or consumables that would help identify the fault.\n\nIn DIAGNOSTIC MODE:\n- Recommend diagnostic tools and consumables.\n- DO NOT recommend speculative replacement parts until the evidence identifies the failed part.\n- Example: rough-running vehicle -> OBD-II scanner/live-data tool, appropriate test equipment, cleaners where relevant.\n- Example: misfire follows a swapped ignition coil -> the failed coil is now sufficiently identified, so the correct replacement coil can be recommended.\n\nSet it to false for:\n- general explanations\n- definitions\n- lifestyle questions\n- safety-only questions where shopping would distract from an immediate hazard\n- questions where there is no meaningful diagnostic, tool, material or parts list\n\nExamples:\n\n\"How do I replace a bathroom faucet?\" -> true\n\"How do I patch a drywall hole?\" -> true\n\"How do I install an outdoor receptacle?\" -> true\n\"Why does my breaker keep tripping?\" -> true IF safe diagnostic tools/tests are appropriate; do not recommend random breakers or wiring parts.\n\"My Trailblazer idles rough. What should I check?\" -> true; recommend diagnostic tools, not guessed replacement parts.\n\"P0302 followed the coil when I swapped coils.\" -> true; the failed coil is identified, so the appropriate replacement part may be recommended.\n\"What does a GFCI do?\" -> false\n\n\n==================================================\nHOW-TO VIDEOS\n==================================================\n\nFor actionable physical DIY, repair, maintenance or diagnostic questions, also find up to 3 genuinely relevant YouTube how-to videos.\n\nUse web search to verify them.\n\nOnly return direct YouTube video URLs from:\n- youtube.com/watch\n- youtu.be/\n\nDo not invent video titles, channels or URLs.\n\nPrefer videos that closely match the exact job, vehicle/component, tool or diagnostic procedure.\n\nDo not return videos for:\n- lifestyle/off-topic questions\n- definitions\n- immediate safety emergencies where the user should stop work and get qualified help\n\nPut videos ONLY in the videos array, never in the written answer.\n\n==================================================\nIMPORTANT\n==================================================\n\nYou are Chad.\n\nYou are not a salesman pretending to be a handyman.\n\nYou are a handyman who happens to know where to get the stuff.\n";
+const PRODUCT_RESEARCH_PROMPT = "You are Chad's product researcher.\n\nThe user has asked a physical DIY question.\n\nFind 2 to 5 products that are genuinely useful for completing the job OR diagnosing the physical problem.\n\nIf the problem is not yet diagnosed, prioritize diagnostic tools, testers, cleaners and consumables. Do NOT guess replacement parts.\nIf the conversation evidence identifies a failed component, the appropriate replacement part may be recommended.\n\nUse web search to find REAL Amazon product detail pages.\n\nAmazon ONLY.\n\nDo not use:\n- Home Depot\n- Lowe's\n- RONA\n- Canadian Tire\n- Walmart\n- other retailers\n\nDo not return:\n- search pages\n- category pages\n- fabricated URLs\n- fabricated ASINs\n- review pages\n\nEvery product MUST have a real 10-character ASIN.\n\nEvery source_url MUST be a real Amazon product detail page.\n\nAmazon Canada pages are preferred.\n\nIf you cannot verify a product, leave it out.\n\nDo not write prose.\n\nReturn ONLY the products array.\n\nThink like an experienced handyman deciding what the person actually needs to finish the job.\n\nThe products should complement Chad's answer, not randomly relate to the subject.\n";
+const SHOPPING_PROMPT = "You are Chad's job-prep assistant.\n\nThe user already asked Chad a DIY / repair / building question and Chad has already answered it.\n\nNow the user clicked BUILD MY SHOPPING LIST.\n\nCreate a concise, practical shopping/checklist for completing that exact job.\n\nVoice:\n- still Chad\n- mildly annoyed\n- funny\n- useful\n- no swearing\n- do not overdo the comedy\n\nThe list should include:\n- tools they realistically need\n- materials\n- consumables\n- optional helpful items only when genuinely useful\n- reasonable quantities when the question provides enough information\n- \"as needed\" or \"1\" when exact quantities cannot be known\n- keep the full list concise: usually 5 to 10 genuinely useful items\n- do NOT pad the list with obvious household clutter just to make it longer\n- combine closely related household cleanup items when appropriate\n\nSafety:\n- do not turn a dangerous job into reckless instructions\n- if the answer indicates a professional is required, keep the list limited to safe diagnostic/prep items rather than equipment for unsafe work\n\nProducts:\n- Find 2 to 5 REAL Amazon products that are particularly useful for this exact job.\n- Amazon ONLY.\n- Amazon Canada preferred.\n- Use web search.\n- Never invent ASINs.\n- Never invent Amazon URLs.\n- Do not use search/category pages.\n- Each product must have a real 10-character ASIN and real Amazon product detail page.\n- If a specific item cannot be verified, leave it out.\n- Do not recommend duplicate versions of the same thing just to fill space.\n\nThe shopping-list items themselves do not all need Amazon products.\n\nIMPORTANT PRODUCT-TO-ITEM LINKING:\n- Every product in the products array MUST include item_name.\n- item_name MUST exactly match the name of ONE item in the items array.\n- Recommend Amazon products only for items that are realistic purchase opportunities.\n- Usually link 2 to 5 of the most useful/purchase-worthy list items.\n- Do not create Amazon picks for trivial household items such as old rags or a bucket unless there is a genuinely compelling reason.\n- The product should appear directly under the shopping-list item it belongs to in the interface.\n\nReturn only the structured response.";
 
-async function callStructuredOpenAI({
-    input,
-    schema,
-    schemaName,
-    useWebSearch = true
-}) {
+const CHAD_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        answer: { type: "string" },
+        shopping_list_recommended: { type: "boolean" },
+        products: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    asin: { type: "string" },
+                    source_url: { type: "string" }
+                },
+                required: ["name","description","asin","source_url"]
+            }
+        },
+        videos: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    title: { type: "string" },
+                    channel: { type: "string" },
+                    url: { type: "string" }
+                },
+                required: ["title","channel","url"]
+            }
+        }
+    },
+    required: ["answer","shopping_list_recommended","products","videos"]
+};
 
-    const body = {
+const PRODUCT_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        products: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    asin: { type: "string" },
+                    source_url: { type: "string" }
+                },
+                required: ["name","description","asin","source_url"]
+            }
+        }
+    },
+    required: ["products"]
+};
+
+const SHOPPING_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        title: { type: "string" },
+        intro: { type: "string" },
+        items: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    name: { type: "string" },
+                    quantity: { type: "string" },
+                    type: { type: "string", enum: ["Tool","Material","Consumable","Optional"] },
+                    note: { type: "string" }
+                },
+                required: ["name","quantity","type","note"]
+            }
+        },
+        products: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    item_name: { type: "string" },
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    asin: { type: "string" },
+                    source_url: { type: "string" }
+                },
+                required: ["item_name","name","description","asin","source_url"]
+            }
+        }
+    },
+    required: ["title","intro","items","products"]
+};
+
+function getResponseText(data) {
+    if (typeof data?.output_text === "string") return data.output_text.trim();
+
+    if (Array.isArray(data?.output)) {
+        for (const item of data.output) {
+            if (!Array.isArray(item?.content)) continue;
+            for (const part of item.content) {
+                if (typeof part?.text === "string" && part.text.trim()) {
+                    return part.text.trim();
+                }
+            }
+        }
+    }
+    return "";
+}
+
+function collectSources(data) {
+    const map = new Map();
+
+    function walk(node) {
+        if (!node) return;
+        if (Array.isArray(node)) {
+            node.forEach(walk);
+            return;
+        }
+        if (typeof node !== "object") return;
+
+        const url = typeof node.url === "string" ? node.url : "";
+        if (/^https?:\/\//i.test(url)) {
+            const title =
+                typeof node.title === "string" ? node.title :
+                typeof node.name === "string" ? node.name :
+                url;
+            map.set(url, { title, url });
+        }
+
+        Object.values(node).forEach(walk);
+    }
+
+    walk(data);
+
+    return [...map.values()].filter(c => {
+        const u = c.url.toLowerCase();
+        return !["homedepot","lowes","canadiantire","rona","walmart"].some(x => u.includes(x));
+    });
+}
+
+function cleanAnswer(answer) {
+    if (typeof answer !== "string") return "";
+    return answer
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/gi, "$1")
+        .replace(/https?:\/\/\S+/gi, "")
+        .replace(/(^|\n)\s*(what you need to buy|shopping list|products to buy)\s*:?\s*(\n|$)/gi, "$1")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
+function cleanVideos(videos) {
+    if (!Array.isArray(videos)) return [];
+    const output = [];
+    const seen = new Set();
+
+    for (const video of videos) {
+        const url = typeof video?.url === "string" ? video.url.trim() : "";
+        let valid = false;
+        try {
+            const u = new URL(url);
+            const host = u.hostname.toLowerCase();
+            if (host === "youtu.be" || host === "www.youtu.be") {
+                valid = u.pathname.replace(/\//g, "").length > 0;
+            } else if (["youtube.com","www.youtube.com","m.youtube.com"].includes(host)) {
+                valid = u.pathname === "/watch" && u.searchParams.has("v");
+            }
+        } catch {}
+
+        if (!valid || seen.has(url)) continue;
+        seen.add(url);
+        output.push({
+            title: typeof video.title === "string" ? video.title.trim() : "YouTube How-To",
+            channel: typeof video.channel === "string" ? video.channel.trim() : "",
+            url
+        });
+        if (output.length >= 3) break;
+    }
+
+    return output;
+}
+
+async function callOpenAI(body, timeoutMs = 45000) {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${process.env.OPENAI_API_KEY || ""}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        const message = data?.error?.message || `OpenAI request failed (${response.status}).`;
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+    }
+
+    return data;
+}
+
+async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_search" }]) {
+    return callOpenAI({
         model: MODEL,
+        tools,
         input,
         text: {
             format: {
                 type: "json_schema",
-                name: schemaName,
+                name,
                 strict: true,
                 schema
             }
         }
-    };
+    });
+}
 
-    if (useWebSearch) {
-        body.tools = [
+async function getProductPicks(question, answer) {
+    const data = await callStructuredOpenAI(
+        "chad_products",
+        PRODUCT_SCHEMA,
+        [
+            { role: "system", content: PRODUCT_RESEARCH_PROMPT },
             {
-                type: "web_search"
+                role: "user",
+                content: `USER QUESTION:\n${question}\n\nCHAD ANSWER:\n${answer}`
             }
-        ];
-    }
+        ]
+    );
 
-    const response =
-        await fetch(
-            "https://api.openai.com/v1/responses",
-            {
-                method: "POST",
-                headers: {
-                    Authorization:
-                        `Bearer ${process.env.OPENAI_API_KEY}`,
-                    "Content-Type":
-                        "application/json"
-                },
-                body:
-                    JSON.stringify(body)
-            }
-        );
-
-    const data =
-        await response.json();
-
-    if (!response.ok) {
-
-        throw new Error(
-            data?.error?.message ||
-            "OpenAI request failed."
-        );
-    }
-
-    const responseText =
-        getResponseText(data);
-
-    if (!responseText) {
-        throw new Error(
-            "OpenAI returned no structured text."
-        );
-    }
+    const text = getResponseText(data);
+    const decoded = JSON.parse(text || "{}");
 
     return {
-        decoded:
-            JSON.parse(responseText),
-        data
+        products: prepareProducts(decoded.products || []),
+        sources: collectSources(data)
     };
 }
 
+function hashShoppingToken(token) {
+    return hashValue(token);
+}
 
-const PRODUCT_RESEARCH_SCHEMA = {
+async function createShoppingToken(conversationId, question) {
+    const token = crypto.randomUUID() + crypto.randomBytes(16).toString("hex");
+    await pool.query(
+        `INSERT INTO chad_shopping_tokens
+            (token_hash, conversation_id, question, expires_at)
+         VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 second'))`,
+        [hashShoppingToken(token), conversationId, question, SHOPPING_TOKEN_TTL_SECONDS]
+    );
+    return token;
+}
 
-    type: "object",
-    additionalProperties: false,
+async function consumeShoppingToken(token, conversationId, question) {
+    if (!token || !conversationId || !question) return false;
 
-    properties: {
+    const result = await pool.query(
+        `UPDATE chad_shopping_tokens
+         SET consumed_at = NOW()
+         WHERE token_hash = $1
+           AND conversation_id = $2
+           AND question = $3
+           AND consumed_at IS NULL
+           AND expires_at > NOW()
+         RETURNING token_hash`,
+        [hashShoppingToken(token), conversationId, question]
+    );
 
-        products: {
+    return result.rowCount === 1;
+}
 
-            type: "array",
+function analyticsToken(visitorHash, conversationId) {
+    return crypto
+        .createHmac("sha256", ANALYTICS_SECRET)
+        .update(`${visitorHash}|${conversationId}|${torontoDateKey()}`)
+        .digest("hex");
+}
 
-            items: {
+async function handleStatus(req, res) {
+    try {
+        const visitorId = getOrCreateVisitorId(req, res);
+        const visitorHash = hashValue(visitorId);
+        const admin = isAdminTestRequest(req);
+        const reset = getTorontoResetInfo();
 
-                type: "object",
-                additionalProperties: false,
-
-                properties: {
-
-                    name: {
-                        type: "string"
-                    },
-
-                    description: {
-                        type: "string"
-                    },
-
-                    asin: {
-                        type: "string"
-                    },
-
-                    source_url: {
-                        type: "string"
-                    }
-                },
-
-                required: [
-                    "name",
-                    "description",
-                    "asin",
-                    "source_url"
-                ]
-            }
+        if (admin) {
+            return res.json({
+                success: true,
+                daily_limit: DAILY_LIMIT,
+                remaining: DAILY_LIMIT,
+                limit_reached: false,
+                admin_test_mode: true,
+                ...reset
+            });
         }
-    },
 
-    required: [
-        "products"
-    ]
-};
+        const used = await getDailyUsed(visitorHash, torontoDateKey());
+        const remaining = Math.max(0, DAILY_LIMIT - used);
 
+        return res.json({
+            success: true,
+            daily_limit: DAILY_LIMIT,
+            remaining,
+            limit_reached: remaining <= 0,
+            admin_test_mode: false,
+            ...reset
+        });
+    } catch (error) {
+        console.error("Status error:", error);
+        return res.status(500).json({ success: false, error: "Chad couldn't count to five. Impressive." });
+    }
+}
 
-async function getProductPicks(
-    question,
-    answer
-) {
+async function handleTranslate(req, res) {
+    try {
+        const visitorId = getOrCreateVisitorId(req, res);
+        const ip = getClientIp(req);
 
-    const prompt = `
-You are Chad's product researcher.
+        const allowed = await claimBurst(
+            "translate",
+            `${ip}|${visitorId}`,
+            TRANSLATE_BURST_LIMIT
+        );
+        if (!allowed) {
+            res.setHeader("Retry-After", String(BURST_WINDOW_SECONDS));
+            return res.status(429).json({ success: false, error: "Translation rate limited." });
+        }
 
-The user asked:
-${question}
+        const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+        if (!message) return res.status(400).json({ success: false, error: "No question provided." });
+        if (message.length > MAX_MESSAGE_LENGTH) {
+            return res.status(400).json({ success: false, error: "Question is too long." });
+        }
 
-Chad answered:
-${answer}
+        const payload = {
+            model: MODEL,
+            input: [
+                {
+                    role: "system",
+                    content: [{
+                        type: "input_text",
+                        text:
+                            "Rewrite the user's question as a short Hammered Handyman line for display only.\n" +
+                            "Keep the original meaning recognizable.\n" +
+                            "Sound like a lovable, mildly buzzed, overconfident weekend warrior.\n" +
+                            "you are a drunk handyman who mispronounces words, forgets easily.\n" +
+                            "Use silly substitute words when they fit: Whoopsie Doodle I broke it, thingamajigger, roundy thing, wall clicker, spinny bit, whatever, I'm not sure what to call it, the thing in the thing, etc.\n" +
+                            "Keep it to one short sentence.\n" +
+                            "Preserve measurements, trouble codes, model numbers, and safety-critical facts.\n" +
+                            "Return ONLY the rewritten sentence. No quotes, no explanation."
+                    }]
+                },
+                {
+                    role: "user",
+                    content: [{ type: "input_text", text: message }]
+                }
+            ],
+            max_output_tokens: 80
+        };
 
-Find 2 to 5 products that are genuinely useful for completing this physical DIY job or diagnosing the problem.
+        try {
+            const data = await callOpenAI(payload, 12000);
+            let display = getResponseText(data)
+                .replace(/<[^>]*>/g, "")
+                .trim()
+                .replace(/^["'“”]+|["'“”]+$/g, "")
+                .trim();
 
-IMPORTANT:
-- Use web search.
-- Prefer products that can be bought on Amazon Canada.
-- Return a real 10-character ASIN only when you can verify it.
-- Never invent an ASIN.
-- Never invent a product.
-- source_url must be a real webpage you used to verify the exact product/ASIN.
-- If diagnosis is unresolved, recommend diagnostic tools, testers, cleaners, consumables or measuring tools instead of guessing a replacement part.
-- Once the evidence actually identifies a failed component, a relevant replacement part is okay.
-- Return fewer products rather than making anything up.
-`;
+            if (!display) display = message;
+
+            return res.json({ success: true, display_question: display });
+        } catch {
+            return res.json({ success: false, display_question: message });
+        }
+    } catch (error) {
+        console.error("Translate error:", error);
+        return res.json({
+            success: false,
+            display_question:
+                typeof req.body?.message === "string" ? req.body.message : ""
+        });
+    }
+}
+
+async function handleAsk(req, res) {
+    let quotaReserved = false;
+    let visitorHash = "";
+    let ipHash = "";
+    let day = torontoDateKey();
 
     try {
+        if (!process.env.OPENAI_API_KEY) {
+            return res.status(500).json({ success: false, error: "OPENAI_API_KEY is not configured." });
+        }
 
-        const result =
-            await callStructuredOpenAI({
-                input: prompt,
-                schema:
-                    PRODUCT_RESEARCH_SCHEMA,
-                schemaName:
-                    "chad_product_research",
-                useWebSearch:
-                    true
+        const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                error: "Chad needs a question. Preferably one involving a tool."
             });
-
-        return cleanProducts(
-            result.decoded.products
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Chad product research failed:",
-            error.message
-        );
-
-        return [];
-    }
-}
-
-
-const SHOPPING_LIST_SCHEMA = {
-
-    type: "object",
-    additionalProperties: false,
-
-    properties: {
-
-        title: {
-            type: "string"
-        },
-
-        items: {
-
-            type: "array",
-
-            items: {
-
-                type: "object",
-                additionalProperties: false,
-
-                properties: {
-
-                    name: {
-                        type: "string"
-                    },
-
-                    quantity: {
-                        type: "string"
-                    },
-
-                    note: {
-                        type: "string"
-                    },
-
-                    asin: {
-                        type: "string"
-                    },
-
-                    source_url: {
-                        type: "string"
-                    }
-                },
-
-                required: [
-                    "name",
-                    "quantity",
-                    "note",
-                    "asin",
-                    "source_url"
-                ]
-            }
         }
-    },
-
-    required: [
-        "title",
-        "items"
-    ]
-};
-
-
-function cleanShoppingItems(items) {
-
-    if (!Array.isArray(items)) {
-        return [];
-    }
-
-    return items
-        .slice(0, 20)
-        .map(item => {
-
-            const asin =
-                normalizeAsin(item?.asin);
-
-            const sourceUrl =
-                typeof item?.source_url === "string"
-                    ? item.source_url.trim()
-                    : "";
-
-            return {
-                name:
-                    typeof item?.name === "string"
-                        ? item.name.trim()
-                        : "Item",
-
-                quantity:
-                    typeof item?.quantity === "string"
-                        ? item.quantity.trim()
-                        : "",
-
-                note:
-                    typeof item?.note === "string"
-                        ? item.note.trim()
-                        : "",
-
-                asin:
-                    asin &&
-                    /^https?:\/\//i.test(sourceUrl)
-                        ? asin
-                        : "",
-
-                source_url:
-                    asin &&
-                    /^https?:\/\//i.test(sourceUrl)
-                        ? sourceUrl
-                        : "",
-
-                amazon_url:
-                    asin &&
-                    /^https?:\/\//i.test(sourceUrl)
-                        ? amazonCanadaUrl(asin)
-                        : ""
-            };
-        })
-        .filter(item => item.name);
-}
-
-
-// ============================================================
-// CHAD PERSONALITY
-// ============================================================
-
-const CHAD_SYSTEM_PROMPT = `
-You are CHADPDG.
-
-You are Chad, an experienced DIY handyman who has already made every stupid mistake imaginable so the user doesn't have to.
-
-Your personality is the entire point.
-
-You were brought into existence because The Hammered Handyman kept mispronouncing ChatGPT.
-
-You feel the need to comically roast people and situations.
-
-You are funny, but not rude or hurtful.
-
-You have absurd, sometimes completely unjustified self-confidence.
-
-Supremely confident — uncertainty simply isn't installed.
-
-You think you're naturally good at everything.
-
-Good-looking and knows it. Sunglasses are practically PPE.
-
-Bro energy — "Buddy, I got you."
-
-Competitive for absolutely no reason.
-
-Slightly condescending — genuinely confused that the user doesn't already know the answer.
-
-Always has a better way of doing whatever the user is doing.
-
-Unsolicited advice specialist.
-
-Treats opinions as facts.
-
-Casually dismissive rather than genuinely angry.
-
-Somehow likeable despite being kind of a douchebag.
-
-Never admits he's wrong. New information merely proves what Chad was saying all along.
-
-Calls people things like "bro", "buddy", "chief", "champ", or "big guy".
-
-You are:
-- extremely confident
-- sarcastic
-- smug
-- funny
-- opinionated
-- mildly annoyed that the user had to ask
-- genuinely knowledgeable
-- genuinely helpful
-- practical
-- direct
-
-You use "Bro" naturally.
-
-ALWAYS begin with sarcasm, humor, mock disbelief, or ridiculous confidence.
-
-IMPORTANT:
-Your Chad personality must continue throughout the entire answer.
-Do NOT make one joke at the beginning and then become generic ChatGPT.
-
-Use sarcasm and light ridicule throughout explanations and tutorials.
-
-You do NOT swear.
-
-You do NOT sound like generic ChatGPT.
-
-You do NOT sound like a corporate help desk.
-
-You do NOT sound like a boring home-improvement article.
-
-Use mock disbelief, exaggerated confidence, ridiculous comparisons and sarcastic congratulations.
-
-Tone examples:
-
-"Yes. You can fix that yourself. It's drywall, not the space shuttle."
-
-"No. Put the drill down."
-
-"You can technically do that. You can also use a butter knife as a screwdriver. We're trying to make good decisions today."
-
-"Congratulations. You have discovered why measurements exist."
-
-"Buddy. It's a level. The bubble goes in the middle. We're off to a strong start."
-
-"Okay, champ, put the hammer down. You've contributed enough."
-
-"Sure, eyeball it. Measurements are notoriously oppressive."
-
-"Bro, that's not close enough. That's a cry for help."
-
-"You bought the right tool. Honestly, I wasn't expecting that."
-
-"Look at you, asking before cutting it. Personal growth."
-
-"There are three ways to do this. Two are stupid. Guess which one you picked."
-
-"Congratulations. You've turned a ten-minute job into content."
-
-"I admire the confidence. I question everything supporting it."
-
-"Yes, turn the power off. Electricity doesn't care about your weekend plans."
-
-"You don't need more torque. You need emotional restraint."
-
-"Put the impact down, Thor."
-
-"The good news is it's fixable. The bad news is you were involved."
-
-"There. Fixed. Try not to develop confidence from this."
-
-Be funny, but be useful.
-
-Give accurate practical instructions.
-
-Explain why important steps matter.
-
-Point out common mistakes.
-
-Do not encourage unsafe work.
-
-For electrical, gas, structural or otherwise dangerous work, clearly explain when a qualified professional should be involved.
-
-ANSWER RULES:
-
-Answer the user's actual question.
-
-Use practical steps when appropriate.
-
-Do not put Amazon links directly in the written answer.
-
-Do not recommend retailers in the prose.
-
-PRODUCTS:
-
-If this is a physical DIY job or diagnostic/troubleshooting job, products may be useful.
-
-For unresolved diagnosis, recommend diagnostic tools/testers/cleaners rather than guessing replacement parts.
-
-Once the evidence actually identifies a failed component, a relevant replacement part may be suggested.
-
-Never invent ASINs.
-
-Never invent Amazon URLs.
-
-Only return products that can actually be verified.
-
-SHOPPING LIST:
-
-Set shopping_list_recommended to true when the person is doing a real physical installation, repair, build, maintenance or diagnostic job where a list of tools/materials would genuinely help.
-
-Set it false for:
-- general explanations
-- definitions
-- lifestyle questions
-- safety-only emergencies
-- situations with no meaningful tools/materials list
-
-VIDEOS:
-
-For actionable physical DIY, repair, maintenance or diagnostic questions, find up to 3 genuinely relevant YouTube how-to videos when useful.
-
-Use web search to verify them.
-
-Only return direct youtube.com/watch or youtu.be URLs.
-
-Never invent video titles, channels or URLs.
-
-Do not return videos for lifestyle questions, definitions, or immediate safety emergencies.
-
-You are Chad.
-
-You are not a salesman pretending to be a handyman.
-
-You are a handyman who happens to know where to get the stuff.
-`;
-
-
-// ============================================================
-// STRUCTURED RESPONSE SCHEMA
-// ============================================================
-
-const CHAD_SCHEMA = {
-
-    type:
-        "object",
-
-    additionalProperties:
-        false,
-
-    properties: {
-
-        answer: {
-            type: "string"
-        },
-
-        shopping_list_recommended: {
-            type: "boolean"
-        },
-
-        products: {
-
-            type:
-                "array",
-
-            items: {
-
-                type:
-                    "object",
-
-                additionalProperties:
-                    false,
-
-                properties: {
-
-                    name: {
-                        type: "string"
-                    },
-
-                    description: {
-                        type: "string"
-                    },
-
-                    asin: {
-                        type: "string"
-                    },
-
-                    source_url: {
-                        type: "string"
-                    }
-                },
-
-                required: [
-                    "name",
-                    "description",
-                    "asin",
-                    "source_url"
-                ]
-            }
-        },
-
-        videos: {
-
-            type:
-                "array",
-
-            items: {
-
-                type:
-                    "object",
-
-                additionalProperties:
-                    false,
-
-                properties: {
-
-                    title: {
-                        type: "string"
-                    },
-
-                    channel: {
-                        type: "string"
-                    },
-
-                    url: {
-                        type: "string"
-                    }
-                },
-
-                required: [
-                    "title",
-                    "channel",
-                    "url"
-                ]
-            }
-        }
-    },
-
-    required: [
-        "answer",
-        "shopping_list_recommended",
-        "products",
-        "videos"
-    ]
-};
-
-
-// ============================================================
-// OPENAI RESPONSE HELPERS
-// ============================================================
-
-function getResponseText(
-    data
-) {
-
-    if (
-        typeof data.output_text === "string"
-    ) {
-
-        return data.output_text;
-    }
-
-
-    let text = "";
-
-
-    if (
-        !Array.isArray(
-            data.output
-        )
-    ) {
-
-        return text;
-    }
-
-
-    for (
-        const item
-        of data.output
-    ) {
-
-        if (
-            !Array.isArray(
-                item.content
-            )
-        ) {
-
-            continue;
-        }
-
-
-        for (
-            const content
-            of item.content
-        ) {
-
-            if (
-                typeof content.text === "string"
-            ) {
-
-                text +=
-                    content.text;
-            }
-        }
-    }
-
-
-    return text;
-}
-
-
-function cleanAnswer(
-    answer
-) {
-
-    if (
-        typeof answer !== "string"
-    ) {
-
-        return "";
-    }
-
-
-    return answer
-        .replace(
-            /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/gi,
-            "$1"
-        )
-        .replace(
-            /https?:\/\/\S+/gi,
-            ""
-        )
-        .replace(
-            /\n{3,}/g,
-            "\n\n"
-        )
-        .trim();
-}
-
-
-function collectSources(
-    value,
-    sources = new Map()
-) {
-
-    if (
-        !value ||
-        typeof value !== "object"
-    ) {
-
-        return sources;
-    }
-
-
-    if (
-        typeof value.url === "string" &&
-        value.url.startsWith("http")
-    ) {
-
-        sources.set(
-            value.url,
-            {
-
-                title:
-                    typeof value.title === "string"
-                        ? value.title
-                        : value.url,
-
-                url:
-                    value.url
-            }
-        );
-    }
-
-
-    if (
-        Array.isArray(value)
-    ) {
-
-        for (
-            const child
-            of value
-        ) {
-
-            collectSources(
-                child,
-                sources
-            );
-        }
-
-
-    } else {
-
-        for (
-            const child
-            of Object.values(value)
-        ) {
-
-            collectSources(
-                child,
-                sources
-            );
-        }
-    }
-
-
-    return sources;
-}
-
-
-function cleanVideos(
-    videos
-) {
-
-    if (
-        !Array.isArray(videos)
-    ) {
-
-        return [];
-    }
-
-
-    const clean = [];
-    const seen =
-        new Set();
-
-
-    for (
-        const video
-        of videos
-    ) {
-
-        if (
-            !video ||
-            typeof video.url !== "string"
-        ) {
-
-            continue;
-        }
-
-
-        let valid =
-            false;
-
-
-        try {
-
-            const url =
-                new URL(
-                    video.url
-                );
-
-
-            if (
-                url.hostname === "youtu.be" ||
-                url.hostname === "www.youtu.be"
-            ) {
-
-                valid =
-                    true;
-            }
-
-
-            if (
-                [
-                    "youtube.com",
-                    "www.youtube.com",
-                    "m.youtube.com"
-                ].includes(
-                    url.hostname
-                ) &&
-                url.pathname === "/watch" &&
-                url.searchParams.get("v")
-            ) {
-
-                valid =
-                    true;
-            }
-
-
-        } catch {
-
-            valid =
-                false;
-        }
-
-
-        if (
-            !valid ||
-            seen.has(
-                video.url
-            )
-        ) {
-
-            continue;
-        }
-
-
-        seen.add(
-            video.url
-        );
-
-
-        clean.push({
-
-            title:
-                typeof video.title === "string"
-                    ? video.title
-                    : "YouTube How-To",
-
-            channel:
-                typeof video.channel === "string"
-                    ? video.channel
-                    : "",
-
-            url:
-                video.url
-        });
-
-
-        if (
-            clean.length >= 3
-        ) {
-
-            break;
-        }
-    }
-
-
-    return clean;
-}
-
-
-// ============================================================
-// HOME
-// ============================================================
-
-app.get(
-    "/",
-    (req, res) => {
-
-        res.json({
-
-            success:
-                true,
-
-            app:
-                "CHADPDG",
-
-            status:
-                "online",
-
-            version:
-                "chad-core-4.1-admin-test",
-
-            message:
-                "Chad is alive. Unfortunately."
-        });
-    }
-);
-
-
-// ============================================================
-// HEALTH CHECK
-// ============================================================
-
-app.get(
-    "/health",
-    async (req, res) => {
-
-        res.set(
-            "Cache-Control",
-            "no-store, no-cache, must-revalidate"
-        );
-
-
-        let databaseConnected =
-            false;
-
-
-        if (
-            process.env.DATABASE_URL
-        ) {
-
-            try {
-
-                await pool.query(
-                    "SELECT 1"
-                );
-
-                databaseConnected =
-                    true;
-
-
-            } catch (error) {
-
-                console.error(
-                    "Database health check failed:",
-                    error.message
-                );
-            }
-        }
-
-
-        res.json({
-
-            success:
-                true,
-
-            status:
-                databaseConnected
-                    ? "healthy"
-                    : "degraded",
-
-            version:
-                "chad-core-4.1-admin-test",
-
-            openaiConfigured:
-                Boolean(
-                    process.env.OPENAI_API_KEY
-                ),
-
-            turnstileConfigured:
-                Boolean(
-                    process.env.TURNSTILE_SECRET_KEY
-                ),
-
-            adminTestConfigured:
-                Boolean(
-                    process.env.CHAD_ADMIN_TEST_KEY
-                ),
-
-            databaseConfigured:
-                Boolean(
-                    process.env.DATABASE_URL
-                ),
-
-            databaseConnected,
-
-            dailyLimit:
-                DAILY_LIMIT
-        });
-    }
-);
-
-
-// ============================================================
-// DAILY STATUS
-// ============================================================
-
-app.get(
-    "/status",
-    async (req, res) => {
-
-        try {
-
-            const adminTestMode =
-                isAdminTestRequest(
-                    req
-                );
-
-
-            const visitorId =
-                getVisitorIdFromRequest(
-                    req
-                );
-
-
-            if (
-                !validVisitorId(
-                    visitorId
-                )
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "A valid visitor ID is required.",
-
-                        daily_limit:
-                            DAILY_LIMIT,
-
-                        remaining:
-                            DAILY_LIMIT
-                    });
-            }
-
-
-            const visitorHash =
-                hashVisitorId(
-                    visitorId
-                );
-
-
-            const remaining =
-                adminTestMode
-                    ? DAILY_LIMIT
-                    : await getRemainingQuestions(
-                        visitorHash
-                    );
-
-
-            return res.json({
-
-                success:
-                    true,
-
-                daily_limit:
-                    DAILY_LIMIT,
-
-                remaining,
-
-                used:
-                    adminTestMode
-                        ? 0
-                        : DAILY_LIMIT - remaining,
-
-                admin_test_mode:
-                    adminTestMode,
-
-                version:
-                    "chad-core-4.1-admin-test"
+        if (message.length > MAX_MESSAGE_LENGTH) {
+            return res.status(413).json({
+                success: false,
+                error: `That question is too long. Keep it under ${MAX_MESSAGE_LENGTH} characters, Bro.`
             });
-
-
-        } catch (error) {
-
-            console.error(
-                "CHADPDG /status error:",
-                error
-            );
-
-
-            return res
-                .status(500)
-                .json({
-
-                    success:
-                        false,
-
-                    error:
-                        "Chad lost count. Math was never his brand."
-                });
         }
-    }
-);
 
+        const visitorId = getOrCreateVisitorId(req, res);
+        visitorHash = hashValue(visitorId);
+        const ip = getClientIp(req);
+        ipHash = hashValue(ip);
+        const admin = isAdminTestRequest(req);
 
-// ============================================================
-// OPENAI CONNECTION TEST
-// ============================================================
-
-app.get(
-    "/openai-test",
-    async (req, res) => {
-
-        try {
-
-            if (
-                !process.env.OPENAI_API_KEY
-            ) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "OPENAI_API_KEY is not configured."
-                    });
-            }
-
-
-            const response =
-                await fetch(
-                    "https://api.openai.com/v1/responses",
-                    {
-
-                        method:
-                            "POST",
-
-                        headers: {
-
-                            Authorization:
-                                `Bearer ${process.env.OPENAI_API_KEY}`,
-
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-
-                                model:
-                                    MODEL,
-
-                                input:
-                                    "Reply with one short sentence confirming that the CHADPDG server successfully connected to OpenAI. Use Chad's mildly sarcastic tone."
-                            })
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (
-                !response.ok
-            ) {
-
-                console.error(
-                    "OpenAI test error:",
-                    response.status,
-                    data?.error?.message
-                );
-
-
-                return res
-                    .status(502)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            data?.error?.message ||
-                            "OpenAI connection test failed."
-                    });
-            }
-
-
-            const message =
-                getResponseText(
-                    data
-                );
-
-
-            return res.json({
-
-                success:
-                    true,
-
-                model:
-                    MODEL,
-
-                message
-            });
-
-
-        } catch (error) {
-
-            console.error(
-                "OpenAI connection test failed:",
-                error
+        if (!admin) {
+            const burstAllowed = await claimBurst(
+                "ask",
+                `${ip}|${visitorId}`,
+                BURST_LIMIT
             );
-
-
-            return res
-                .status(500)
-                .json({
-
-                    success:
-                        false,
-
-                    error:
-                        "OpenAI connection test failed."
-                });
-        }
-    }
-);
-
-
-// ============================================================
-// ASK CHAD
-// ============================================================
-
-app.post(
-    "/ask",
-    async (req, res) => {
-
-        let quotaClaimed =
-            false;
-
-        let visitorHash =
-            "";
-
-        let adminTestMode =
-            false;
-
-
-        try {
-
-            if (
-                !process.env.OPENAI_API_KEY
-            ) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "OPENAI_API_KEY is not configured."
-                    });
-            }
-
-
-            if (
-                !process.env.DATABASE_URL
-            ) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad's memory isn't connected. DATABASE_URL is missing."
-                    });
-            }
-
-
-            const message =
-                typeof req.body.message === "string"
-                    ? req.body.message.trim()
-                    : "";
-
-
-            if (!message) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad needs a question. Preferably one involving a tool."
-                    });
-            }
-
-
-            if (
-                message.length > 3000
-            ) {
-
-                return res
-                    .status(413)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "That question is too long. Keep it under 3000 characters, Bro."
-                    });
-            }
-
-
-            // ====================================================
-            // VISITOR ID
-            // ====================================================
-
-            const visitorId =
-                getVisitorIdFromRequest(
-                    req
-                );
-
-
-            if (
-                !validVisitorId(
-                    visitorId
-                )
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad can't identify this browser yet. Refresh the page and try again.",
-
-                        daily_limit:
-                            DAILY_LIMIT,
-
-                        remaining:
-                            DAILY_LIMIT
-                    });
-            }
-
-
-            visitorHash =
-                hashVisitorId(
-                    visitorId
-                );
-
-
-            adminTestMode =
-                isAdminTestRequest(
-                    req
-                );
-
-
-            // ====================================================
-            // CLOUDFLARE TURNSTILE
-            // ====================================================
-
-            const turnstileToken =
-                typeof req.body.turnstile_token === "string"
-                    ? req.body.turnstile_token.trim()
-                    : "";
-
-
-            if (!turnstileToken) {
-
-                return res
-                    .status(403)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Human verification required. Apparently Chad has standards now."
-                    });
-            }
-
-
-            const forwardedFor =
-                typeof req.headers["x-forwarded-for"] === "string"
-                    ? req.headers["x-forwarded-for"]
-                        .split(",")[0]
-                        .trim()
-                    : "";
-
-
-            const remoteIp =
-                forwardedFor ||
-                req.socket?.remoteAddress ||
-                "";
-
-
-            const turnstileValid =
-                await verifyTurnstile(
-                    turnstileToken,
-                    remoteIp
-                );
-
-
-            if (!turnstileValid) {
-
-                return res
-                    .status(403)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Human verification failed. Nice try, robot."
-                    });
-            }
-
-
-            // ====================================================
-            // CLAIM ONE OF TODAY'S QUESTIONS
-            // ====================================================
-
-            let quota = {
-
-                allowed:
-                    true,
-
-                used:
-                    0,
-
-                remaining:
-                    DAILY_LIMIT
-            };
-
-
-            if (!adminTestMode) {
-
-                quota =
-                    await claimDailyQuestion(
-                        visitorHash
-                    );
-
-
-                if (
-                    !quota.allowed
-                ) {
-
-                    return res
-                        .status(429)
-                        .json({
-
-                            success:
-                                false,
-
-                            error:
-                                "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
-
-                            daily_limit:
-                                DAILY_LIMIT,
-
-                            remaining:
-                                0,
-
-                            limit_reached:
-                                true,
-
-                            admin_test_mode:
-                                false
-                        });
-                }
-
-
-                quotaClaimed =
-                    true;
-            }
-
-
-            // ====================================================
-            // CONVERSATION ID
-            // ====================================================
-
-            let conversationId =
-                typeof req.body.conversation_id === "string"
-                    ? req.body.conversation_id.trim()
-                    : "";
-
-
-            if (
-                !conversationId ||
-                !/^[a-f0-9-]{36}$/i.test(
-                    conversationId
-                )
-            ) {
-
-                conversationId =
-                    newConversationId();
-
-
-                await ensureConversation(
-                    conversationId
-                );
-
-
-            } else {
-
-                const exists =
-                    await conversationExists(
-                        conversationId
-                    );
-
-
-                if (!exists) {
-
-                    await ensureConversation(
-                        conversationId
-                    );
-                }
-            }
-
-
-            // ====================================================
-            // LOAD PERSISTENT MEMORY
-            // ====================================================
-
-            const memory =
-                await loadConversationMemory(
-                    conversationId,
-                    10
-                );
-
-
-            const input = [
-
-                {
-                    role:
-                        "system",
-
-                    content:
-                        CHAD_SYSTEM_PROMPT
-                },
-
-                ...memory,
-
-                {
-                    role:
-                        "user",
-
-                    content:
-                        message
-                }
-            ];
-
-
-            // ====================================================
-            // OPENAI REQUEST
-            // ====================================================
-
-            const openaiResponse =
-                await fetch(
-                    "https://api.openai.com/v1/responses",
-                    {
-
-                        method:
-                            "POST",
-
-                        headers: {
-
-                            Authorization:
-                                `Bearer ${process.env.OPENAI_API_KEY}`,
-
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-
-                                model:
-                                    MODEL,
-
-                                tools: [
-                                    {
-                                        type:
-                                            "web_search"
-                                    }
-                                ],
-
-                                input,
-
-                                text: {
-
-                                    format: {
-
-                                        type:
-                                            "json_schema",
-
-                                        name:
-                                            "chad_response",
-
-                                        strict:
-                                            true,
-
-                                        schema:
-                                            CHAD_SCHEMA
-                                    }
-                                }
-                            })
-                    }
-                );
-
-
-            const data =
-                await openaiResponse.json();
-
-
-            if (
-                !openaiResponse.ok
-            ) {
-
-                await releaseDailyQuestion(
-                    visitorHash
-                );
-
-                quotaClaimed =
-                    false;
-
-
-                console.error(
-                    "OpenAI error:",
-                    openaiResponse.status,
-                    data?.error?.message
-                );
-
-
-                return res
-                    .status(502)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            data?.error?.message ||
-                            "Chad's brain failed to start."
-                    });
-            }
-
-
-            const responseText =
-                getResponseText(
-                    data
-                );
-
-
-            if (!responseText) {
-
-                await releaseDailyQuestion(
-                    visitorHash
-                );
-
-                quotaClaimed =
-                    false;
-
-
-                return res
-                    .status(502)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad apparently forgot how words work."
-                    });
-            }
-
-
-            // ====================================================
-            // DECODE STRUCTURED RESPONSE
-            // ====================================================
-
-            let decoded;
-
-
-            try {
-
-                decoded =
-                    JSON.parse(
-                        responseText
-                    );
-
-
-            } catch {
-
-                await releaseDailyQuestion(
-                    visitorHash
-                );
-
-                quotaClaimed =
-                    false;
-
-
-                console.error(
-                    "Invalid structured response:",
-                    responseText
-                );
-
-
-                return res
-                    .status(502)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad returned something weird. Impressive, even for Chad."
-                    });
-            }
-
-
-            const answer =
-                cleanAnswer(
-                    decoded.answer
-                );
-
-
-            if (!answer) {
-
-                await releaseDailyQuestion(
-                    visitorHash
-                );
-
-                quotaClaimed =
-                    false;
-
-
-                return res
-                    .status(502)
-                    .json({
-
-                        success:
-                            false,
-
-                        error:
-                            "Chad produced an answer with no answer. Outstanding."
-                    });
-            }
-
-
-            // ====================================================
-            // SAVE PERSISTENT CONVERSATION
-            // ====================================================
-
-            await saveConversationTurn(
-                conversationId,
-                message,
-                answer
-            );
-
-
-            // The answer succeeded.
-            // Keep the quota claim.
-
-            quotaClaimed =
-                false;
-
-
-            // ====================================================
-            // SOURCES
-            // ====================================================
-
-            const citationMap =
-                collectSources(
-                    data
-                );
-
-
-            let citations =
-                Array.from(
-                    citationMap.values()
-                );
-
-
-            citations =
-                citations.filter(
-                    citation => {
-
-                        const url =
-                            citation.url
-                                .toLowerCase();
-
-
-                        return !(
-                            url.includes(
-                                "homedepot"
-                            ) ||
-                            url.includes(
-                                "lowes"
-                            ) ||
-                            url.includes(
-                                "canadiantire"
-                            ) ||
-                            url.includes(
-                                "rona"
-                            ) ||
-                            url.includes(
-                                "walmart"
-                            )
-                        );
-                    }
-                );
-
-
-            let products =
-                cleanProducts(
-                    decoded.products
-                );
-
-
-            // OG Chad behavior:
-            // If the first answer did not produce enough verified
-            // Chad's Picks, do a separate product-research pass.
-            if (
-                Boolean(
-                    decoded.shopping_list_recommended
-                ) &&
-                products.length < 2
-            ) {
-
-                const fallbackProducts =
-                    await getProductPicks(
-                        message,
-                        answer
-                    );
-
-                const combined =
-                    [
-                        ...products,
-                        ...fallbackProducts
-                    ];
-
-                products =
-                    cleanProducts(
-                        combined
-                    );
-            }
-
-
-            const shoppingListRecommended =
-                Boolean(
-                    decoded
-                        .shopping_list_recommended
-                );
-
-
-            let shoppingToken =
-                "";
-
-
-            if (shoppingListRecommended) {
-
-                shoppingToken =
-                    await createShoppingToken(
-                        conversationId,
-                        message
-                    );
-            }
-
-
-            const remaining =
-                adminTestMode
-                    ? DAILY_LIMIT
-                    : await getRemainingQuestions(
-                        visitorHash
-                    );
-
-
-            // ====================================================
-            // RETURN CHAD
-            // ====================================================
-
-            return res.json({
-
-                success:
-                    true,
-
-                answer,
-
-                shopping_list_recommended:
-                    shoppingListRecommended,
-
-                shopping_token:
-                    shoppingToken,
-
-                products,
-
-                videos:
-                    cleanVideos(
-                        decoded.videos
-                    ),
-
-                citations,
-
-                affiliate_disclosure:
-                    "As an Amazon Associate I earn from qualifying purchases.",
-
-                conversation_id:
-                    conversationId,
-
-                daily_limit:
-                    DAILY_LIMIT,
-
-                remaining,
-
-                limit_reached:
-                    adminTestMode
-                        ? false
-                        : remaining <= 0,
-
-                admin_test_mode:
-                    adminTestMode,
-
-                version:
-                    "chad-core-4.1-admin-test"
-            });
-
-
-        } catch (error) {
-
-            if (
-                quotaClaimed &&
-                visitorHash
-            ) {
-
-                await releaseDailyQuestion(
-                    visitorHash
-                );
-            }
-
-
-            console.error(
-                "CHADPDG /ask error:",
-                error
-            );
-
-
-            return res
-                .status(500)
-                .json({
-
-                    success:
-                        false,
-
-                    error:
-                        "Something went sideways. Chad is blaming the server."
-                });
-        }
-    }
-);
-
-
-// ============================================================
-// BUILD MY SHOPPING LIST
-// Does NOT consume another free daily question.
-// Uses a one-time, 30-minute token created by /ask.
-// ============================================================
-
-app.post(
-    "/shopping-list",
-    async (req, res) => {
-
-        try {
-
-            if (
-                !process.env.OPENAI_API_KEY ||
-                !process.env.DATABASE_URL
-            ) {
-
-                return res
-                    .status(500)
-                    .json({
-                        success: false,
-                        error:
-                            "Chad's shopping department is currently on break."
-                    });
-            }
-
-
-            const conversationId =
-                typeof req.body.conversation_id === "string"
-                    ? req.body.conversation_id.trim()
-                    : "";
-
-            const question =
-                typeof req.body.question === "string"
-                    ? req.body.question.trim()
-                    : "";
-
-            const shoppingToken =
-                typeof req.body.shopping_token === "string"
-                    ? req.body.shopping_token.trim()
-                    : "";
-
-
-            if (
-                !conversationId ||
-                !/^[a-f0-9-]{36}$/i.test(
-                    conversationId
-                ) ||
-                !question ||
-                !shoppingToken
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-                        success: false,
-                        error:
-                            "Chad needs the original job and a valid shopping-list token."
-                    });
-            }
-
-
-            const tokenValid =
-                await consumeShoppingToken(
-                    shoppingToken,
-                    conversationId,
-                    question
-                );
-
-
-            if (!tokenValid) {
-
-                return res
-                    .status(403)
-                    .json({
-                        success: false,
-                        error:
-                            "That shopping-list button expired or was already used. Ask Chad again and he'll make you another one."
-                    });
-            }
-
-
-            const memory =
-                await loadConversationMemory(
-                    conversationId,
-                    10
-                );
-
-
-            const prompt = `
-You are CHADPDG building a practical shopping list for the user's DIY job.
-
-Original question:
-${question}
-
-Recent conversation:
-${memory
-    .map(
-        item =>
-            `${item.role}: ${item.content}`
-    )
-    .join("\\n")}
-
-Build the useful tools/materials/consumables list for actually doing this job.
-
-Rules:
-- Keep it practical.
-- Do not pad the list.
-- Include quantities when useful.
-- Use web search when matching an item to a purchasable product.
-- If you can verify an exact Amazon Canada product, return its real 10-character ASIN and the real source_url used to verify it.
-- Never invent ASINs, URLs or products.
-- If no exact product is safely verified, leave asin and source_url as empty strings.
-- Do not guess replacement parts when diagnosis is unresolved.
-`;
-
-
-            const result =
-                await callStructuredOpenAI({
-                    input: prompt,
-                    schema:
-                        SHOPPING_LIST_SCHEMA,
-                    schemaName:
-                        "chad_shopping_list",
-                    useWebSearch:
-                        true
-                });
-
-
-            const title =
-                typeof result.decoded.title === "string"
-                    ? result.decoded.title.trim()
-                    : "Chad's Shopping List";
-
-
-            return res.json({
-
-                success:
-                    true,
-
-                title,
-
-                items:
-                    cleanShoppingItems(
-                        result.decoded.items
-                    ),
-
-                affiliate_disclosure:
-                    "As an Amazon Associate I earn from qualifying purchases.",
-
-                conversation_id:
-                    conversationId,
-
-                version:
-                    "chad-core-4.1-admin-test"
-            });
-
-
-        } catch (error) {
-
-            console.error(
-                "CHADPDG /shopping-list error:",
-                error
-            );
-
-
-            return res
-                .status(500)
-                .json({
+            if (!burstAllowed) {
+                res.setHeader("Retry-After", String(BURST_WINDOW_SECONDS));
+                return res.status(429).json({
                     success: false,
-                    error:
-                        "Chad dropped the shopping list somewhere between lumber and plumbing."
+                    error: "Easy there, Bro. Chad can only pretend to care so fast. Give me a minute.",
+                    burst_limited: true,
+                    retry_after: BURST_WINDOW_SECONDS
                 });
+            }
         }
-    }
-);
 
+        const turnstileToken =
+            typeof req.body?.turnstile_token === "string"
+                ? req.body.turnstile_token.trim()
+                : "";
 
-// ============================================================
-// RESET CONVERSATION
-// ============================================================
-
-app.post(
-    "/reset",
-    async (req, res) => {
-
-        try {
-
-            const oldConversationId =
-                typeof req.body.conversation_id === "string"
-                    ? req.body.conversation_id.trim()
-                    : "";
-
-
-            // We deliberately do NOT delete the old conversation.
-            // It stays safely stored in PostgreSQL.
-            // Reset simply starts a new conversation.
-
-            const newId =
-                newConversationId();
-
-
-            await ensureConversation(
-                newId
-            );
-
-
-            return res.json({
-
-                success:
-                    true,
-
-                previous_conversation_id:
-                    oldConversationId || null,
-
-                conversation_id:
-                    newId,
-
-                version:
-                    "chad-core-4.1-admin-test"
+        const turnstile = await verifyTurnstile(turnstileToken, ip);
+        if (!turnstile.success) {
+            const status = turnstile.reason === "network" ? 503 : 403;
+            return res.status(status).json({
+                success: false,
+                error:
+                    turnstile.reason === "network"
+                        ? "Security verification could not be completed. Please try again."
+                        : "Security verification failed. Please try again."
             });
-
-
-        } catch (error) {
-
-            console.error(
-                "CHADPDG /reset error:",
-                error
-            );
-
-
-            return res
-                .status(500)
-                .json({
-
-                    success:
-                        false,
-
-                    error:
-                        "Chad tried to forget everything and somehow screwed that up too."
-                });
         }
-    }
-);
 
+        let quota = { allowed: true, remaining: DAILY_LIMIT };
+        if (!admin) {
+            quota = await reserveDailyQuestion(visitorHash, ipHash, day);
+            if (!quota.allowed) {
+                const reset = getTorontoResetInfo();
+                if (quota.reason === "visitor") {
+                    return res.status(429).json({
+                        success: false,
+                        error: "That is your 5 free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Come back tomorrow.",
+                        limit_reached: true,
+                        daily_limit: DAILY_LIMIT,
+                        remaining: 0,
+                        admin_test_mode: false,
+                        ...reset
+                    });
+                }
+                return res.status(429).json({
+                    success: false,
+                    error: "Chad is taking a break from this connection for today."
+                });
+            }
+            quotaReserved = true;
+        }
 
-// ============================================================
-// DATABASE ERROR HANDLER
-// ============================================================
+        const conversationId = await getOrCreateConversationId(req, res);
+        const memory = await loadConversationMemory(conversationId);
 
-pool.on(
-    "error",
-    error => {
+        const input = [
+            { role: "system", content: CHAD_SYSTEM_PROMPT },
+            ...memory,
+            { role: "user", content: message }
+        ];
 
-        console.error(
-            "Unexpected PostgreSQL pool error:",
-            error
+        const data = await callStructuredOpenAI(
+            "chad_response",
+            CHAD_SCHEMA,
+            input
         );
+
+        const text = getResponseText(data);
+        if (!text) throw new Error("Chad apparently forgot how words work.");
+
+        let decoded;
+        try {
+            decoded = JSON.parse(text);
+        } catch {
+            throw new Error("Chad returned an invalid response.");
+        }
+
+        const answer = cleanAnswer(decoded.answer || "");
+        if (!answer) throw new Error("Chad apparently forgot how words work.");
+
+        let products = prepareProducts(decoded.products || []);
+        let productSources = [];
+
+        if (
+            (isPhysicalDiyQuestion(message) || isDiagnosticOpportunity(message, answer)) &&
+            products.length < 2
+        ) {
+            try {
+                const fallback = await getProductPicks(message, answer);
+                const byAsin = new Map(products.map(p => [p.asin, p]));
+                for (const p of fallback.products) byAsin.set(p.asin, p);
+                products = [...byAsin.values()].slice(0, 5);
+                productSources = fallback.sources;
+            } catch (error) {
+                console.warn("Product fallback failed:", error.message);
+            }
+        }
+
+        const videos = cleanVideos(decoded.videos || []);
+
+        await saveConversationTurn(conversationId, message, answer);
+
+        const citationMap = new Map();
+        for (const c of [...collectSources(data), ...productSources]) {
+            if (c?.url) citationMap.set(c.url, c);
+        }
+        const citations = [...citationMap.values()].filter(c => {
+            const u = c.url.toLowerCase();
+            return !["homedepot","lowes","canadiantire","rona","walmart"].some(x => u.includes(x));
+        });
+
+        const modelShopping = Boolean(decoded.shopping_list_recommended);
+        const shoppingListRecommended = shouldOfferShoppingList(
+            message,
+            answer,
+            modelShopping || isDiagnosticOpportunity(message, answer)
+        );
+
+        const shoppingToken = shoppingListRecommended
+            ? await createShoppingToken(conversationId, message)
+            : "";
+
+        const remaining = admin
+            ? null
+            : quota.remaining;
+
+        return res.json({
+            success: true,
+            answer,
+            shopping_list_recommended: shoppingListRecommended,
+            shopping_token: shoppingToken,
+            products,
+            videos,
+            citations,
+            affiliate_disclosure: "As an Amazon Associate I earn from qualifying purchases.",
+            conversation_id: conversationId,
+            admin_test_mode: admin,
+            daily_limit: DAILY_LIMIT,
+            remaining,
+            analytics_token: analyticsToken(visitorHash, conversationId)
+        });
+    } catch (error) {
+        console.error("Ask error:", error);
+        if (quotaReserved) {
+            await releaseDailyQuestion(visitorHash, ipHash, day);
+        }
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Something went sideways."
+        });
     }
-);
+}
 
+async function handleShoppingList(req, res) {
+    try {
+        const visitorId = getOrCreateVisitorId(req, res);
+        const ip = getClientIp(req);
 
-// ============================================================
-// START SERVER
-// ============================================================
+        const burstAllowed = await claimBurst(
+            "shopping",
+            `${ip}|${visitorId}`,
+            SHOPPING_BURST_LIMIT
+        );
+
+        if (!burstAllowed) {
+            res.setHeader("Retry-After", String(BURST_WINDOW_SECONDS));
+            return res.status(429).json({
+                success: false,
+                error: "Chad is not opening a shopping mall in your browser, Bro. Try again in a minute."
+            });
+        }
+
+        const token = typeof req.body?.turnstile_token === "string"
+            ? req.body.turnstile_token.trim()
+            : "";
+        const turnstile = await verifyTurnstile(token, ip);
+        if (!turnstile.success) {
+            return res.status(turnstile.reason === "network" ? 503 : 403).json({
+                success: false,
+                error: "Security verification failed. Please try again."
+            });
+        }
+
+        const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+        const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
+        const shoppingToken = typeof req.body?.shopping_token === "string"
+            ? req.body.shopping_token.trim()
+            : "";
+
+        if (!question || question.length > MAX_MESSAGE_LENGTH) {
+            return res.status(400).json({
+                success: false,
+                error: "Chad cannot build that shopping list."
+            });
+        }
+
+        const conversationId = await getOrCreateConversationId(req, res);
+
+        const tokenValid = await consumeShoppingToken(
+            shoppingToken,
+            conversationId,
+            question
+        );
+
+        if (!tokenValid) {
+            return res.status(403).json({
+                success: false,
+                error: "That shopping-list button expired or was already used. Ask Chad the project question again if you need a fresh one."
+            });
+        }
+
+        const data = await callStructuredOpenAI(
+            "chad_shopping_list",
+            SHOPPING_SCHEMA,
+            [
+                { role: "system", content: SHOPPING_PROMPT },
+                {
+                    role: "user",
+                    content: `PROJECT QUESTION:\n${question}\n\nCHAD'S ANSWER:\n${answer}`
+                }
+            ]
+        );
+
+        const text = getResponseText(data);
+        let decoded;
+        try {
+            decoded = JSON.parse(text || "{}");
+        } catch {
+            throw new Error("Chad returned an invalid shopping list.");
+        }
+
+        const allowedTypes = new Set(["Tool","Material","Consumable","Optional"]);
+        const items = Array.isArray(decoded.items)
+            ? decoded.items
+                .filter(i => i && typeof i.name === "string" && i.name.trim())
+                .map(i => ({
+                    name: i.name.trim(),
+                    quantity: typeof i.quantity === "string" ? i.quantity.trim() : "",
+                    type: allowedTypes.has(i.type) ? i.type : "Material",
+                    note: typeof i.note === "string" ? i.note.trim() : ""
+                }))
+            : [];
+
+        const itemNames = new Set(items.map(i => i.name));
+        const products = prepareProducts(decoded.products || [], true)
+            .filter(p => itemNames.has(p.item_name))
+            .slice(0, 5);
+
+        return res.json({
+            success: true,
+            title:
+                typeof decoded.title === "string" && decoded.title.trim()
+                    ? decoded.title.trim()
+                    : "Shopping List",
+            intro: typeof decoded.intro === "string" ? decoded.intro.trim() : "",
+            items,
+            products,
+            citations: collectSources(data),
+            affiliate_disclosure: "As an Amazon Associate I earn from qualifying purchases."
+        });
+    } catch (error) {
+        console.error("Shopping list error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Chad forgot what a shopping list is. Impressive."
+        });
+    }
+}
+
+async function handleReset(req, res) {
+    try {
+        const visitorId = getOrCreateVisitorId(req, res);
+        const ip = getClientIp(req);
+
+        const allowed = await claimBurst(
+            "reset",
+            `${ip}|${visitorId}`,
+            20
+        );
+        if (!allowed) {
+            res.setHeader("Retry-After", String(BURST_WINDOW_SECONDS));
+            return res.status(429).json({
+                success: false,
+                error: "Too many reset requests."
+            });
+        }
+
+        const cookies = parseCookies(req);
+        const oldId = cookies.chadgpt_conversation;
+
+        if (validUuid(oldId)) {
+            await pool.query(`DELETE FROM chad_conversations WHERE id = $1`, [oldId]);
+        }
+
+        const newId = crypto.randomUUID();
+        await ensureConversation(newId);
+        setPersistentCookie(
+            res,
+            "chadgpt_conversation",
+            newId,
+            MEMORY_DAYS * 24 * 60 * 60
+        );
+
+        return res.json({ success: true, conversation_id: newId });
+    } catch (error) {
+        console.error("Reset error:", error);
+        return res.status(500).json({ success: false, error: "Chad couldn't reset the conversation." });
+    }
+}
+
+async function handleAnalytics(req, res) {
+    try {
+        const visitorId = getOrCreateVisitorId(req, res);
+        const ip = getClientIp(req);
+
+        const allowed = await claimBurst(
+            "analytics",
+            `${ip}|${visitorId}`,
+            120
+        );
+
+        if (!allowed) return res.status(429).json({ success: false });
+
+        const event = typeof req.body?.event === "string"
+            ? req.body.event.trim().slice(0, 50)
+            : "";
+
+        if (!event) return res.status(400).json({ success: false });
+
+        const cookies = parseCookies(req);
+        const conversationId = validUuid(cookies.chadgpt_conversation)
+            ? cookies.chadgpt_conversation
+            : null;
+
+        await pool.query(
+            `INSERT INTO chad_analytics
+                (event, visitor_hash, conversation_id, question, asin, product_name)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                event,
+                hashValue(visitorId),
+                conversationId,
+                typeof req.body?.question === "string" ? req.body.question.slice(0, 3000) : "",
+                normalizeAsin(req.body?.asin) || "",
+                typeof req.body?.product_name === "string" ? req.body.product_name.slice(0, 500) : ""
+            ]
+        );
+
+        return res.json({ success: true });
+    } catch (error) {
+        console.warn("Analytics error:", error.message);
+        return res.json({ success: false });
+    }
+}
+
+function registerBoth(method, path, handler) {
+    app[method](path, handler);
+    app[method](`/wp-json/chadpgt/v1${path}`, handler);
+}
+
+app.get("/", (req, res) => {
+    res.json({
+        success: true,
+        app: "CHADPDCHEE",
+        version: "chad-core-5-og-parity"
+    });
+});
+
+app.get("/health", async (req, res) => {
+    let databaseConnected = false;
+    try {
+        await pool.query("SELECT 1");
+        databaseConnected = true;
+    } catch {}
+
+    res.json({
+        success: true,
+        status: databaseConnected ? "healthy" : "degraded",
+        version: "chad-core-5-og-parity",
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+        turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
+        databaseConfigured: Boolean(process.env.DATABASE_URL),
+        databaseConnected,
+        adminTestConfigured: Boolean(CHAD_ADMIN_TEST_KEY),
+        dailyLimit: DAILY_LIMIT
+    });
+});
+
+registerBoth("get", "/status", handleStatus);
+registerBoth("post", "/translate", handleTranslate);
+registerBoth("post", "/ask", handleAsk);
+registerBoth("post", "/shopping-list", handleShoppingList);
+registerBoth("post", "/reset", handleReset);
+registerBoth("post", "/analytics/track", handleAnalytics);
+
+app.get("/openai-test", async (req, res) => {
+    try {
+        const data = await callOpenAI({
+            model: MODEL,
+            input: "Reply with exactly: CHAD ONLINE",
+            max_output_tokens: 20
+        }, 15000);
+
+        return res.json({
+            success: true,
+            model: MODEL,
+            message: getResponseText(data)
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: error.message || "OpenAI connection test failed."
+        });
+    }
+});
 
 async function startServer() {
-
-    await initializeDatabase();
-
-
-    app.listen(
-        PORT,
-        "0.0.0.0",
-        () => {
-
-            console.log(
-                `CHADPDG Core 4.1 Admin Test running on port ${PORT}`
-            );
+    try {
+        if (!process.env.DATABASE_URL) {
+            throw new Error("DATABASE_URL is not configured.");
         }
-    );
-}
+        await initializeDatabase();
 
+        app.listen(PORT, () => {
+            console.log(`CHADPDCHEE listening on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error("Failed to start Chad:", error);
+        process.exit(1);
+    }
+}
 
 startServer();
