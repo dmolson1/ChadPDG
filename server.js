@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const app = express();
 
 app.use(express.json({ limit: "12kb" }));
+app.use(express.static("public"));
 
 const PORT = process.env.PORT || 8080;
 const MODEL = "gpt-5.6-luna";
