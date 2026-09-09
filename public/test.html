@@ -227,13 +227,66 @@
 
         turnstileWidgetId = window.turnstile.render('#turnstile', {
             sitekey: TURNSTILE_SITE_KEY,
+            execution: 'execute',
+            appearance: 'interaction-only',
             theme: 'auto'
         });
     }
 
-    function getTurnstileToken() {
-        if (!window.turnstile || turnstileWidgetId === null) return '';
-        return window.turnstile.getResponse(turnstileWidgetId) || '';
+    function getTurnstileTokenForAsk() {
+        return new Promise(function (resolve, reject) {
+
+            if (!window.turnstile || turnstileWidgetId === null) {
+                reject(new Error('Human verification is still loading. Try again in a second.'));
+                return;
+            }
+
+            const existing =
+                window.turnstile.getResponse(turnstileWidgetId) || '';
+
+            if (existing) {
+                resolve(existing);
+                return;
+            }
+
+            let finished = false;
+
+            const timeout = setTimeout(function () {
+                if (!finished) {
+                    finished = true;
+                    reject(new Error('Human verification timed out. Try Ask Chad again.'));
+                }
+            }, 15000);
+
+            try {
+                window.turnstile.execute(turnstileWidgetId, {
+                    callback: function (token) {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timeout);
+                        resolve(token || '');
+                    },
+                    'error-callback': function () {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timeout);
+                        reject(new Error('Human verification failed. Try again.'));
+                    },
+                    'expired-callback': function () {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timeout);
+                        reject(new Error('Human verification expired. Try again.'));
+                    }
+                });
+            } catch (error) {
+                if (!finished) {
+                    finished = true;
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            }
+        });
     }
 
     function resetTurnstile() {
@@ -272,18 +325,19 @@
 
         if (!message) return;
 
-        const turnstileToken = getTurnstileToken();
-
-        if (!turnstileToken) {
-            alert('Complete the Turnstile check first, then ask Chad.');
-            return;
-        }
-
         ask.disabled = true;
-        addMessage('you', 'Hammered Handyman', message);
-        question.value = '';
 
         try {
+            const turnstileToken =
+                await getTurnstileTokenForAsk();
+
+            if (!turnstileToken) {
+                throw new Error('Human verification did not return a token. Try again.');
+            }
+
+            addMessage('you', 'Hammered Handyman', message);
+            question.value = '';
+
             const body = {
                 message: message,
                 visitor_id: getVisitorId(),
