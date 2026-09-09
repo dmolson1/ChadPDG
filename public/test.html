@@ -106,7 +106,7 @@
     <div class="card">
         <label for="question">Ask Chad</label>
         <textarea id="question" placeholder="How do I install a bathroom exhaust fan where there isn't one now?"></textarea>
-        <div id="turnstile"></div>
+        <div id="chad-turnstile-widget"></div>
         <div class="row">
             <button id="ask" type="button">Ask Chad</button>
             <button id="reset" type="button">New Conversation</button>
@@ -234,7 +234,7 @@
         if (turnstileWidgetId !== null) return true;
 
         try {
-            turnstileWidgetId = window.turnstile.render('#turnstile', {
+            turnstileWidgetId = window.turnstile.render('#chad-turnstile-widget', {
                 sitekey: TURNSTILE_SITE_KEY,
                 execution: 'execute',
                 appearance: 'interaction-only',
