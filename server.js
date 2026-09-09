@@ -30,6 +30,7 @@ const pool = new Pool({
     }
 });
 
+
 // ============================================================
 // DATABASE INITIALIZATION
 // ============================================================
@@ -280,49 +281,63 @@ async function saveConversationTurn(
 async function verifyTurnstile(token, remoteIp = "") {
 
     if (!TURNSTILE_SECRET_KEY) {
+
         console.error(
             "TURNSTILE_SECRET_KEY is not configured."
         );
+
         return false;
     }
+
 
     if (!token || typeof token !== "string") {
         return false;
     }
+
 
     try {
 
         const formData =
             new URLSearchParams();
 
+
         formData.append(
             "secret",
             TURNSTILE_SECRET_KEY
         );
+
 
         formData.append(
             "response",
             token
         );
 
+
         if (remoteIp) {
+
             formData.append(
                 "remoteip",
                 remoteIp
             );
         }
 
-        const response = await fetch(
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/x-www-form-urlencoded"
-                },
-                body: formData.toString()
-            }
-        );
+
+        const response =
+            await fetch(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+                    },
+
+                    body:
+                        formData.toString()
+                }
+            );
+
 
         if (!response.ok) {
 
@@ -334,8 +349,10 @@ async function verifyTurnstile(token, remoteIp = "") {
             return false;
         }
 
+
         const result =
             await response.json();
+
 
         if (!result.success) {
 
@@ -347,7 +364,9 @@ async function verifyTurnstile(token, remoteIp = "") {
             return false;
         }
 
+
         return true;
+
 
     } catch (error) {
 
@@ -359,6 +378,8 @@ async function verifyTurnstile(token, remoteIp = "") {
         return false;
     }
 }
+
+
 // ============================================================
 // CHAD PERSONALITY
 // ============================================================
@@ -654,11 +675,14 @@ function getResponseText(data) {
         return data.output_text;
     }
 
+
     let text = "";
+
 
     if (!Array.isArray(data.output)) {
         return text;
     }
+
 
     for (const item of data.output) {
 
@@ -666,15 +690,18 @@ function getResponseText(data) {
             continue;
         }
 
+
         for (const content of item.content) {
 
             if (
                 typeof content.text === "string"
             ) {
+
                 text += content.text;
             }
         }
     }
+
 
     return text;
 }
@@ -685,6 +712,7 @@ function cleanAnswer(answer) {
     if (typeof answer !== "string") {
         return "";
     }
+
 
     return answer
         .replace(
@@ -712,8 +740,10 @@ function collectSources(
         !value ||
         typeof value !== "object"
     ) {
+
         return sources;
     }
+
 
     if (
         typeof value.url === "string" &&
@@ -728,10 +758,12 @@ function collectSources(
                         ? value.title
                         : value.url,
 
-                url: value.url
+                url:
+                    value.url
             }
         );
     }
+
 
     if (Array.isArray(value)) {
 
@@ -757,6 +789,7 @@ function collectSources(
         }
     }
 
+
     return sources;
 }
 
@@ -767,8 +800,10 @@ function cleanVideos(videos) {
         return [];
     }
 
+
     const clean = [];
     const seen = new Set();
+
 
     for (const video of videos) {
 
@@ -776,22 +811,28 @@ function cleanVideos(videos) {
             !video ||
             typeof video.url !== "string"
         ) {
+
             continue;
         }
 
+
         let valid = false;
+
 
         try {
 
             const url =
                 new URL(video.url);
 
+
             if (
                 url.hostname === "youtu.be" ||
                 url.hostname === "www.youtu.be"
             ) {
+
                 valid = true;
             }
+
 
             if (
                 [
@@ -802,6 +843,7 @@ function cleanVideos(videos) {
                 url.pathname === "/watch" &&
                 url.searchParams.get("v")
             ) {
+
                 valid = true;
             }
 
@@ -810,14 +852,20 @@ function cleanVideos(videos) {
             valid = false;
         }
 
+
         if (
             !valid ||
             seen.has(video.url)
         ) {
+
             continue;
         }
 
-        seen.add(video.url);
+
+        seen.add(
+            video.url
+        );
+
 
         clean.push({
 
@@ -835,10 +883,12 @@ function cleanVideos(videos) {
                 video.url
         });
 
+
         if (clean.length >= 3) {
             break;
         }
     }
+
 
     return clean;
 }
@@ -859,7 +909,7 @@ app.get("/", (req, res) => {
         status: "online",
 
         version:
-            "chad-core-2-db",
+            "chad-core-2-db-turnstile",
 
         message:
             "Chad is alive. Unfortunately."
@@ -871,64 +921,70 @@ app.get("/", (req, res) => {
 // HEALTH CHECK
 // ============================================================
 
-app.get("/health", async (req, res) => {
+app.get(
+    "/health",
+    async (req, res) => {
 
-    res.set(
-        "Cache-Control",
-        "no-store, no-cache, must-revalidate"
-    );
+        res.set(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate"
+        );
 
-    let databaseConnected = false;
 
-    if (process.env.DATABASE_URL) {
+        let databaseConnected = false;
 
-        try {
 
-            await pool.query(
-                "SELECT 1"
-            );
+        if (process.env.DATABASE_URL) {
 
-            databaseConnected = true;
+            try {
 
-        } catch (error) {
+                await pool.query(
+                    "SELECT 1"
+                );
 
-            console.error(
-                "Database health check failed:",
-                error.message
-            );
+                databaseConnected = true;
+
+            } catch (error) {
+
+                console.error(
+                    "Database health check failed:",
+                    error.message
+                );
+            }
         }
-    }
 
-    res.json({
 
-        success: true,
+        res.json({
 
-        status:
+            success: true,
+
+            status:
+                databaseConnected
+                    ? "healthy"
+                    : "degraded",
+
+            version:
+                "chad-core-2-db-turnstile",
+
+            openaiConfigured:
+                Boolean(
+                    process.env.OPENAI_API_KEY
+                ),
+
+            turnstileConfigured:
+                Boolean(
+                    process.env.TURNSTILE_SECRET_KEY
+                ),
+
+            databaseConfigured:
+                Boolean(
+                    process.env.DATABASE_URL
+                ),
+
             databaseConnected
-                ? "healthy"
-                : "degraded",
-
-        version:
-            "chad-core-2-db",
-
-        openaiConfigured:
-            Boolean(
-                process.env.OPENAI_API_KEY
-            ),
-
-        turnstileConfigured:
-            Boolean(
-                process.env.TURNSTILE_SECRET_KEY
-            ),
-
-        databaseConfigured:
-            Boolean(
-                process.env.DATABASE_URL
-            ),
-
-        databaseConnected
-    });
-});
+        });
+    }
+);
 
 
 // ============================================================
@@ -956,6 +1012,7 @@ app.get(
                     });
             }
 
+
             const response =
                 await fetch(
                     "https://api.openai.com/v1/responses",
@@ -972,18 +1029,22 @@ app.get(
                                 "application/json"
                         },
 
-                        body: JSON.stringify({
+                        body:
+                            JSON.stringify({
 
-                            model: MODEL,
+                                model:
+                                    MODEL,
 
-                            input:
-                                "Reply with one short sentence confirming that the CHADPDG server successfully connected to OpenAI. Use Chad's mildly sarcastic tone."
-                        })
+                                input:
+                                    "Reply with one short sentence confirming that the CHADPDG server successfully connected to OpenAI. Use Chad's mildly sarcastic tone."
+                            })
                     }
                 );
 
+
             const data =
                 await response.json();
+
 
             if (!response.ok) {
 
@@ -1005,17 +1066,23 @@ app.get(
                     });
             }
 
+
             const message =
-                getResponseText(data);
+                getResponseText(
+                    data
+                );
+
 
             return res.json({
 
                 success: true,
 
-                model: MODEL,
+                model:
+                    MODEL,
 
                 message
             });
+
 
         } catch (error) {
 
@@ -1023,6 +1090,7 @@ app.get(
                 "OpenAI connection test failed:",
                 error
             );
+
 
             return res
                 .status(500)
@@ -1115,6 +1183,65 @@ app.post(
 
 
             // ====================================================
+            // CLOUDFLARE TURNSTILE
+            // ====================================================
+
+            const turnstileToken =
+                typeof req.body.turnstile_token === "string"
+                    ? req.body.turnstile_token.trim()
+                    : "";
+
+
+            if (!turnstileToken) {
+
+                return res
+                    .status(403)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Human verification required. Apparently Chad has standards now."
+                    });
+            }
+
+
+            const forwardedFor =
+                typeof req.headers["x-forwarded-for"] === "string"
+                    ? req.headers["x-forwarded-for"]
+                        .split(",")[0]
+                        .trim()
+                    : "";
+
+
+            const remoteIp =
+                forwardedFor ||
+                req.socket?.remoteAddress ||
+                "";
+
+
+            const turnstileValid =
+                await verifyTurnstile(
+                    turnstileToken,
+                    remoteIp
+                );
+
+
+            if (!turnstileValid) {
+
+                return res
+                    .status(403)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "Human verification failed. Nice try, robot."
+                    });
+            }
+
+
+            // ====================================================
             // CONVERSATION ID
             // ====================================================
 
@@ -1134,6 +1261,7 @@ app.post(
                 conversationId =
                     newConversationId();
 
+
                 await ensureConversation(
                     conversationId
                 );
@@ -1144,6 +1272,7 @@ app.post(
                     await conversationExists(
                         conversationId
                     );
+
 
                 if (!exists) {
 
@@ -1168,7 +1297,9 @@ app.post(
             const input = [
 
                 {
-                    role: "system",
+                    role:
+                        "system",
+
                     content:
                         CHAD_SYSTEM_PROMPT
                 },
@@ -1176,8 +1307,11 @@ app.post(
                 ...memory,
 
                 {
-                    role: "user",
-                    content: message
+                    role:
+                        "user",
+
+                    content:
+                        message
                 }
             ];
 
@@ -1191,7 +1325,8 @@ app.post(
                     "https://api.openai.com/v1/responses",
                     {
 
-                        method: "POST",
+                        method:
+                            "POST",
 
                         headers: {
 
@@ -1202,37 +1337,39 @@ app.post(
                                 "application/json"
                         },
 
-                        body: JSON.stringify({
+                        body:
+                            JSON.stringify({
 
-                            model: MODEL,
+                                model:
+                                    MODEL,
 
-                            tools: [
-                                {
-                                    type:
-                                        "web_search"
+                                tools: [
+                                    {
+                                        type:
+                                            "web_search"
+                                    }
+                                ],
+
+                                input,
+
+                                text: {
+
+                                    format: {
+
+                                        type:
+                                            "json_schema",
+
+                                        name:
+                                            "chad_response",
+
+                                        strict:
+                                            true,
+
+                                        schema:
+                                            CHAD_SCHEMA
+                                    }
                                 }
-                            ],
-
-                            input,
-
-                            text: {
-
-                                format: {
-
-                                    type:
-                                        "json_schema",
-
-                                    name:
-                                        "chad_response",
-
-                                    strict:
-                                        true,
-
-                                    schema:
-                                        CHAD_SCHEMA
-                                }
-                            }
-                        })
+                            })
                     }
                 );
 
@@ -1249,11 +1386,13 @@ app.post(
                     data?.error?.message
                 );
 
+
                 return res
                     .status(502)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             data?.error?.message ||
@@ -1263,7 +1402,9 @@ app.post(
 
 
             const responseText =
-                getResponseText(data);
+                getResponseText(
+                    data
+                );
 
 
             if (!responseText) {
@@ -1272,7 +1413,8 @@ app.post(
                     .status(502)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Chad apparently forgot how words work."
@@ -1285,6 +1427,7 @@ app.post(
             // ====================================================
 
             let decoded;
+
 
             try {
 
@@ -1300,11 +1443,13 @@ app.post(
                     responseText
                 );
 
+
                 return res
                     .status(502)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Chad returned something weird. Impressive, even for Chad."
@@ -1324,7 +1469,8 @@ app.post(
                     .status(502)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Chad produced an answer with no answer. Outstanding."
@@ -1348,7 +1494,9 @@ app.post(
             // ====================================================
 
             const citationMap =
-                collectSources(data);
+                collectSources(
+                    data
+                );
 
 
             let citations =
@@ -1364,6 +1512,7 @@ app.post(
                         const url =
                             citation.url
                                 .toLowerCase();
+
 
                         return !(
                             url.includes(
@@ -1392,7 +1541,8 @@ app.post(
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 answer,
 
@@ -1426,7 +1576,7 @@ app.post(
                     conversationId,
 
                 version:
-                    "chad-core-2-db"
+                    "chad-core-2-db-turnstile"
             });
 
 
@@ -1437,11 +1587,13 @@ app.post(
                 error
             );
 
+
             return res
                 .status(500)
                 .json({
 
-                    success: false,
+                    success:
+                        false,
 
                     error:
                         "Something went sideways. Chad is blaming the server."
@@ -1482,7 +1634,8 @@ app.post(
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 previous_conversation_id:
                     oldConversationId || null,
@@ -1491,7 +1644,7 @@ app.post(
                     newId,
 
                 version:
-                    "chad-core-2-db"
+                    "chad-core-2-db-turnstile"
             });
 
 
@@ -1502,11 +1655,13 @@ app.post(
                 error
             );
 
+
             return res
                 .status(500)
                 .json({
 
-                    success: false,
+                    success:
+                        false,
 
                     error:
                         "Chad tried to forget everything and somehow screwed that up too."
@@ -1539,6 +1694,7 @@ pool.on(
 async function startServer() {
 
     await initializeDatabase();
+
 
     app.listen(
         PORT,
