@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHADPDG Test</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 20px;
+}
+
+textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 12px;
+    font-size: 16px;
+}
+
+button {
+    margin-top: 10px;
+    padding: 12px 18px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#chat {
+    margin-top: 30px;
+}
+
+.message {
+    margin-bottom: 20px;
+}
+
+.user {
+    font-weight: bold;
+}
+
+.chad {
+    white-space: pre-wrap;
+    line-height: 1.5;
+}
+</style>
+</head>
+
+<body>
+
+<h1>CHADPDG TEST</h1>
+
+<textarea id="question" placeholder="Ask Chad something..."></textarea>
+
+<br>
+
+<button id="ask">ASK CHAD</button>
+
+<button id="reset">NEW CONVERSATION</button>
+
+<div id="chat"></div>
+
+<script>
+
+let conversationId =
+    localStorage.getItem("chad_test_conversation_id") || "";
+
+const chat =
+    document.getElementById("chat");
+
+const question =
+    document.getElementById("question");
+
+document
+    .getElementById("ask")
+    .addEventListener(
+        "click",
+        async () => {
+
+            const message =
+                question.value.trim();
+
+            if (!message) return;
+
+            chat.innerHTML += `
+                <div class="message">
+                    <div class="user">You:</div>
+                    <div>${escapeHtml(message)}</div>
+                </div>
+            `;
+
+            question.value = "";
+
+            const loading =
+                document.createElement("div");
+
+            loading.className = "message";
+
+            loading.innerHTML =
+                "<strong>Chad:</strong> judging your question...";
+
+            chat.appendChild(loading);
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/ask",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    message,
+                                    conversation_id:
+                                        conversationId
+                                })
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                loading.remove();
+
+                if (!data.success) {
+
+                    chat.innerHTML += `
+                        <div class="message">
+                            <strong>ERROR:</strong>
+                            ${escapeHtml(
+                                data.error ||
+                                "Something went sideways."
+                            )}
+                        </div>
+                    `;
+
+                    return;
+                }
+
+                conversationId =
+                    data.conversation_id;
+
+                localStorage.setItem(
+                    "chad_test_conversation_id",
+                    conversationId
+                );
+
+                chat.innerHTML += `
+                    <div class="message">
+                        <div><strong>Chad:</strong></div>
+                        <div class="chad">
+                            ${escapeHtml(data.answer)}
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+
+                loading.remove();
+
+                chat.innerHTML += `
+                    <div class="message">
+                        <strong>ERROR:</strong>
+                        Could not reach Chad.
+                    </div>
+                `;
+            }
+        }
+    );
+
+
+document
+    .getElementById("reset")
+    .addEventListener(
+        "click",
+        async () => {
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/reset",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body:
+                                JSON.stringify({
+                                    conversation_id:
+                                        conversationId
+                                })
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                conversationId =
+                    data.conversation_id || "";
+
+                localStorage.setItem(
+                    "chad_test_conversation_id",
+                    conversationId
+                );
+
+                chat.innerHTML = "";
+
+            } catch (error) {
+
+                alert(
+                    "Chad failed to forget. Very on-brand."
+                );
+            }
+        }
+    );
+
+
+function escapeHtml(value) {
+
+    const div =
+        document.createElement("div");
+
+    div.textContent =
+        String(value);
+
+    return div.innerHTML;
+}
+
+</script>
+
+</body>
+</html>
