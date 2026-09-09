@@ -16,9 +16,11 @@ const MODEL = "gpt-5.6-luna";
 // ============================================================
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
-
 
 // ============================================================
 // DATABASE INITIALIZATION
