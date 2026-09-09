@@ -1,931 +1,402 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>CHADPDG Test</title>
-
-    <script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        async
-        defer
-    ></script>
-
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CHADPDG Core 4.1 Test</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-
+        * { box-sizing: border-box; }
         body {
             margin: 0;
-            padding: 30px 15px;
-            background: #111;
-            color: #fff;
             font-family: Arial, Helvetica, sans-serif;
+            background: #f4f4f4;
+            color: #111;
         }
-
-        #app {
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
+        .wrap {
+            width: min(900px, calc(100% - 24px));
+            margin: 24px auto;
         }
-
-        h1 {
-            margin: 0 0 5px;
-            font-size: 34px;
-        }
-
-        .tagline {
-            color: #bbb;
-            margin-bottom: 25px;
-        }
-
-        #quota {
-            margin-bottom: 15px;
-            padding: 10px 12px;
-            background: #1c1c1c;
-            border: 1px solid #333;
-            border-radius: 6px;
-            font-weight: bold;
-        }
-
-        #chat {
-            background: #1c1c1c;
-            border: 1px solid #333;
-            border-radius: 10px;
-            min-height: 300px;
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 14px;
             padding: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
-
-        .message {
-            padding: 12px 15px;
-            margin-bottom: 14px;
-            border-radius: 8px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-        }
-
-        .user {
-            background: #333;
-        }
-
-        .chad {
-            background: #242424;
-            border-left: 4px solid #f5c518;
-        }
-
-        .label {
-            font-weight: bold;
-            margin-bottom: 6px;
-        }
-
-        textarea {
+        h1 { margin: 0 0 8px; }
+        .sub { color: #555; margin-bottom: 18px; }
+        label { display: block; font-weight: 700; margin-bottom: 6px; }
+        input, textarea {
             width: 100%;
-            min-height: 100px;
             padding: 12px;
-            font-size: 16px;
-            border-radius: 6px;
-            border: 1px solid #555;
-            resize: vertical;
+            border: 1px solid #aaa;
+            border-radius: 8px;
+            font: inherit;
         }
-
-        #turnstile-wrap {
-            margin: 15px 0;
-        }
-
-        #buttons {
+        textarea { min-height: 110px; resize: vertical; }
+        .row {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            margin-top: 10px;
         }
-
         button {
-            padding: 12px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
+            padding: 11px 16px;
             border: 0;
-            border-radius: 6px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
         }
-
-        #ask {
-            background: #f5c518;
-            color: #111;
+        #ask { background: #111; color: #fff; }
+        #reset { background: #ddd; color: #111; }
+        #save-key { background: #0066cc; color: #fff; }
+        #clear-key { background: #eee; color: #111; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        #quota {
+            font-weight: 700;
+            margin-top: 10px;
         }
-
-        #reset {
-            background: #444;
-            color: #fff;
+        .admin {
+            color: #0a6b22;
+            font-weight: 800;
         }
-
-        button:disabled,
-        textarea:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        #chat { margin-top: 18px; }
+        .msg {
+            padding: 12px 14px;
+            border-radius: 10px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            line-height: 1.45;
         }
-
-        #status {
-            margin-top: 15px;
-            color: #aaa;
-            font-size: 14px;
-        }
-
-        .error {
-            color: #ff8080 !important;
-        }
+        .you { background: #e8f1ff; }
+        .chad { background: #f1f1f1; }
+        .error { background: #ffe8e8; color: #8a0000; }
+        .small { font-size: 13px; color: #666; }
+        #turnstile { margin-top: 12px; min-height: 1px; }
     </style>
 </head>
-
 <body>
+<div class="wrap">
+    <div class="card">
+        <h1>CHADPDG Core 4.1 Test</h1>
+        <div class="sub">DigitalOcean backend test page — private developer mode supported.</div>
 
-<div id="app">
-
-    <h1>CHADPDG</h1>
-
-    <div class="tagline">
-        DIY advice from an AI who is annoyingly confident about everything.
+        <label for="admin-key">Developer test key</label>
+        <input id="admin-key" type="password" autocomplete="off"
+               placeholder="Paste your CHAD_ADMIN_TEST_KEY here">
+        <div class="row">
+            <button id="save-key" type="button">Use Developer Key</button>
+            <button id="clear-key" type="button">Clear Developer Key</button>
+        </div>
+        <p class="small">
+            The key is stored only in this browser tab using sessionStorage.
+            It is not hard-coded into this page or saved in GitHub.
+        </p>
+        <div id="quota">Checking status...</div>
     </div>
 
-    <div id="quota">
-        Checking Chad's daily tolerance...
+    <div class="card">
+        <label for="question">Ask Chad</label>
+        <textarea id="question" placeholder="How do I install a bathroom exhaust fan where there isn't one now?"></textarea>
+        <div id="turnstile"></div>
+        <div class="row">
+            <button id="ask" type="button">Ask Chad</button>
+            <button id="reset" type="button">New Conversation</button>
+        </div>
+        <div id="chat"></div>
     </div>
-
-    <div id="chat"></div>
-
-    <textarea
-        id="question"
-        placeholder="Ask Chad something..."
-    ></textarea>
-
-    <div id="turnstile-wrap">
-
-        <div
-            class="cf-turnstile"
-            data-sitekey="0x4AAAAAAEs8NPfO2xl4mDcY"
-            data-callback="onTurnstileSuccess"
-            data-expired-callback="onTurnstileExpired"
-            data-error-callback="onTurnstileError"
-        ></div>
-
-    </div>
-
-    <div id="buttons">
-
-        <button
-            id="ask"
-            type="button"
-        >
-            ASK CHAD
-        </button>
-
-        <button
-            id="reset"
-            type="button"
-        >
-            NEW CONVERSATION
-        </button>
-
-    </div>
-
-    <div id="status"></div>
-
 </div>
 
-
 <script>
+(function () {
+    'use strict';
 
-const CONVERSATION_STORAGE_KEY =
-    "chadpdg_conversation_id";
+    const API_BASE = window.location.origin;
+    const TURNSTILE_SITE_KEY = '0x4AAAAAAEs8NPfO2xl4mDcY';
 
-const VISITOR_STORAGE_KEY =
-    "chadpdg_visitor_id";
+    const visitorKey = 'chadpdg_visitor_id';
+    const conversationKey = 'chadpdg_conversation_id';
+    const adminSessionKey = 'chadpdg_admin_test_key';
 
-const DAILY_LIMIT =
-    5;
+    const adminInput = document.getElementById('admin-key');
+    const saveKeyButton = document.getElementById('save-key');
+    const clearKeyButton = document.getElementById('clear-key');
+    const quota = document.getElementById('quota');
+    const question = document.getElementById('question');
+    const ask = document.getElementById('ask');
+    const reset = document.getElementById('reset');
+    const chat = document.getElementById('chat');
 
-let turnstileToken = "";
+    let turnstileWidgetId = null;
 
-let remainingQuestions =
-    DAILY_LIMIT;
-
-
-const chat =
-    document.getElementById("chat");
-
-const question =
-    document.getElementById("question");
-
-const askButton =
-    document.getElementById("ask");
-
-const resetButton =
-    document.getElementById("reset");
-
-const statusBox =
-    document.getElementById("status");
-
-const quotaBox =
-    document.getElementById("quota");
-
-
-// ============================================================
-// VISITOR ID
-// ============================================================
-
-function createVisitorId() {
-
-    if (
-        window.crypto &&
-        typeof window.crypto.randomUUID === "function"
-    ) {
-
-        return window.crypto
-            .randomUUID()
-            .replace(/-/g, "");
-    }
-
-
-    return (
-        Date.now().toString(36) +
-        Math.random().toString(36).slice(2) +
-        Math.random().toString(36).slice(2)
-    );
-}
-
-
-function getVisitorId() {
-
-    let visitorId =
-        localStorage.getItem(
-            VISITOR_STORAGE_KEY
-        );
-
-
-    if (!visitorId) {
-
-        visitorId =
-            createVisitorId();
-
-
-        localStorage.setItem(
-            VISITOR_STORAGE_KEY,
-            visitorId
+    function makeId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID().replace(/-/g, '');
+        }
+        return (
+            Date.now().toString(36) +
+            Math.random().toString(36).slice(2) +
+            Math.random().toString(36).slice(2)
         );
     }
 
-
-    return visitorId;
-}
-
-
-// ============================================================
-// CONVERSATION ID
-// ============================================================
-
-function getConversationId() {
-
-    return localStorage.getItem(
-        CONVERSATION_STORAGE_KEY
-    ) || "";
-}
-
-
-function saveConversationId(id) {
-
-    if (!id) {
-        return;
+    function getVisitorId() {
+        let id = localStorage.getItem(visitorKey);
+        if (!id) {
+            id = makeId();
+            localStorage.setItem(visitorKey, id);
+        }
+        return id;
     }
 
-
-    localStorage.setItem(
-        CONVERSATION_STORAGE_KEY,
-        id
-    );
-}
-
-
-function clearConversationId() {
-
-    localStorage.removeItem(
-        CONVERSATION_STORAGE_KEY
-    );
-}
-
-
-// ============================================================
-// DISPLAY
-// ============================================================
-
-function setStatus(
-    message,
-    isError = false
-) {
-
-    statusBox.textContent =
-        message || "";
-
-
-    statusBox.className =
-        isError
-            ? "error"
-            : "";
-}
-
-
-function updateQuota(
-    remaining,
-    limit = DAILY_LIMIT
-) {
-
-    remainingQuestions =
-        Math.max(
-            0,
-            Number(remaining) || 0
-        );
-
-
-    quotaBox.textContent =
-        remainingQuestions +
-        " of " +
-        limit +
-        " free questions remaining today";
-
-
-    if (
-        remainingQuestions <= 0
-    ) {
-
-        askButton.disabled =
-            true;
-
-        question.disabled =
-            true;
-
-        question.placeholder =
-            "Chad has reached his daily tolerance. Try again tomorrow.";
-
-    } else {
-
-        askButton.disabled =
-            false;
-
-        question.disabled =
-            false;
-
-        question.placeholder =
-            "Ask Chad something...";
+    function getConversationId() {
+        return localStorage.getItem(conversationKey) || '';
     }
-}
 
+    function getAdminKey() {
+        return sessionStorage.getItem(adminSessionKey) || '';
+    }
 
-function addMessage(
-    role,
-    text
-) {
+    function adminHeaders() {
+        const key = getAdminKey();
+        return key ? { 'X-Chad-Admin-Key': key } : {};
+    }
 
-    const wrapper =
-        document.createElement("div");
+    function addMessage(kind, label, text) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + kind;
+        const strong = document.createElement('strong');
+        strong.textContent = label + ': ';
+        div.appendChild(strong);
+        div.appendChild(document.createTextNode(text));
+        chat.appendChild(div);
+        div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
+    function updateQuota(data) {
+        if (data && data.admin_test_mode) {
+            quota.innerHTML =
+                '<span class="admin">DEVELOPER TEST MODE — UNLIMITED QUESTIONS</span>';
+            ask.disabled = false;
+            question.disabled = false;
+            return;
+        }
 
-    wrapper.className =
-        "message " +
-        (
-            role === "user"
-                ? "user"
-                : "chad"
-        );
+        const remaining =
+            data && Number.isFinite(Number(data.remaining))
+                ? Number(data.remaining)
+                : 0;
+        const limit =
+            data && Number.isFinite(Number(data.daily_limit))
+                ? Number(data.daily_limit)
+                : 5;
 
+        quota.textContent =
+            remaining + ' of ' + limit + ' free questions remaining today';
 
-    const label =
-        document.createElement("div");
+        ask.disabled = remaining <= 0;
+        question.disabled = remaining <= 0;
+    }
 
+    async function refreshStatus() {
+        try {
+            const url =
+                API_BASE +
+                '/status?visitor_id=' +
+                encodeURIComponent(getVisitorId());
 
-    label.className =
-        "label";
+            const response = await fetch(url, {
+                headers: adminHeaders()
+            });
 
+            const data = await response.json();
 
-    label.textContent =
-        role === "user"
-            ? "You"
-            : "Chad";
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Status check failed.');
+            }
 
+            updateQuota(data);
+        } catch (error) {
+            quota.textContent = 'Status error: ' + error.message;
+        }
+    }
 
-    const body =
-        document.createElement("div");
+    function renderTurnstile() {
+        if (!window.turnstile || turnstileWidgetId !== null) return;
 
+        turnstileWidgetId = window.turnstile.render('#turnstile', {
+            sitekey: TURNSTILE_SITE_KEY,
+            theme: 'auto'
+        });
+    }
 
-    body.textContent =
-        text;
+    function getTurnstileToken() {
+        if (!window.turnstile || turnstileWidgetId === null) return '';
+        return window.turnstile.getResponse(turnstileWidgetId) || '';
+    }
 
+    function resetTurnstile() {
+        if (window.turnstile && turnstileWidgetId !== null) {
+            window.turnstile.reset(turnstileWidgetId);
+        }
+    }
 
-    wrapper.appendChild(
-        label
-    );
+    saveKeyButton.addEventListener('click', async function () {
+        const value = adminInput.value.trim();
 
-    wrapper.appendChild(
-        body
-    );
+        if (!value) {
+            alert('Paste your private developer test key first.');
+            return;
+        }
 
-    chat.appendChild(
-        wrapper
-    );
+        sessionStorage.setItem(adminSessionKey, value);
+        adminInput.value = '';
+        await refreshStatus();
 
-
-    window.scrollTo({
-        top:
-            document.body.scrollHeight,
-
-        behavior:
-            "smooth"
+        if (!quota.textContent.includes('UNLIMITED')) {
+            sessionStorage.removeItem(adminSessionKey);
+            alert('That key was not accepted. Developer mode is still off.');
+            await refreshStatus();
+        }
     });
-}
 
+    clearKeyButton.addEventListener('click', async function () {
+        sessionStorage.removeItem(adminSessionKey);
+        adminInput.value = '';
+        await refreshStatus();
+    });
 
-// ============================================================
-// DAILY STATUS
-// ============================================================
+    ask.addEventListener('click', async function () {
+        const message = question.value.trim();
 
-async function loadDailyStatus() {
+        if (!message) return;
 
-    try {
+        const turnstileToken = getTurnstileToken();
 
-        const visitorId =
-            getVisitorId();
+        if (!turnstileToken) {
+            alert('Complete the Turnstile check first, then ask Chad.');
+            return;
+        }
 
+        ask.disabled = true;
+        addMessage('you', 'Hammered Handyman', message);
+        question.value = '';
 
-        const response =
-            await fetch(
-                "/status?visitor_id=" +
-                encodeURIComponent(
-                    visitorId
+        try {
+            const body = {
+                message: message,
+                visitor_id: getVisitorId(),
+                conversation_id: getConversationId(),
+                turnstile_token: turnstileToken
+            };
+
+            const response = await fetch(API_BASE + '/ask', {
+                method: 'POST',
+                headers: Object.assign(
+                    { 'Content-Type': 'application/json' },
+                    adminHeaders()
                 ),
-                {
-                    cache:
-                        "no-store"
+                body: JSON.stringify(body)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                if (data && typeof data.remaining !== 'undefined') {
+                    updateQuota(data);
                 }
-            );
+                throw new Error(data.error || 'Chad encountered a technical difficulty.');
+            }
 
+            if (data.conversation_id) {
+                localStorage.setItem(
+                    conversationKey,
+                    data.conversation_id
+                );
+            }
 
-        const data =
-            await response.json();
+            addMessage('chad', 'Chad', data.answer || 'No answer returned.');
+            updateQuota(data);
 
+        } catch (error) {
+            addMessage('error', 'Chad', error.message);
+            await refreshStatus();
+        } finally {
+            resetTurnstile();
 
-        if (
-            !response.ok ||
-            !data.success
-        ) {
-
-            throw new Error(
-                data.error ||
-                "Could not load quota."
-            );
+            if (quota.textContent.includes('UNLIMITED')) {
+                ask.disabled = false;
+                question.disabled = false;
+            } else if (!question.disabled) {
+                ask.disabled = false;
+            }
         }
-
-
-        updateQuota(
-            data.remaining,
-            data.daily_limit
-        );
-
-
-    } catch (error) {
-
-        quotaBox.textContent =
-            "Could not load today's question count.";
-
-
-        console.error(
-            "Status error:",
-            error
-        );
-    }
-}
-
-
-// ============================================================
-// TURNSTILE
-// ============================================================
-
-window.onTurnstileSuccess =
-    function(token) {
-
-        turnstileToken =
-            token;
-
-
-        setStatus(
-            "Human verified. Chad is disappointed."
-        );
-    };
-
-
-window.onTurnstileExpired =
-    function() {
-
-        turnstileToken =
-            "";
-
-
-        setStatus(
-            "Verification expired. Check the box again.",
-            true
-        );
-    };
-
-
-window.onTurnstileError =
-    function() {
-
-        turnstileToken =
-            "";
-
-
-        setStatus(
-            "Turnstile had a moment. Try again.",
-            true
-        );
-    };
-
-
-function resetTurnstile() {
-
-    turnstileToken =
-        "";
-
-
-    if (
-        window.turnstile &&
-        typeof window.turnstile.reset === "function"
-    ) {
-
-        window.turnstile.reset();
-    }
-}
-
-
-// ============================================================
-// ASK CHAD
-// ============================================================
-
-async function askChad() {
-
-    const message =
-        question.value.trim();
-
-
-    if (!message) {
-
-        setStatus(
-            "Type a question first, champ.",
-            true
-        );
-
-        return;
-    }
-
-
-    if (
-        remainingQuestions <= 0
-    ) {
-
-        setStatus(
-            "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
-            true
-        );
-
-        return;
-    }
-
-
-    if (!turnstileToken) {
-
-        setStatus(
-            "Complete the human verification first.",
-            true
-        );
-
-        return;
-    }
-
-
-    askButton.disabled =
-        true;
-
-    question.disabled =
-        true;
-
-
-    setStatus(
-        "Chad is thinking. Try not to interrupt the miracle."
-    );
-
-
-    addMessage(
-        "user",
-        message
-    );
-
-
-    question.value =
-        "";
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/ask",
-                {
-
-                    method:
-                        "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            message,
-
-                            visitor_id:
-                                getVisitorId(),
-
-                            conversation_id:
-                                getConversationId(),
-
-                            turnstile_token:
-                                turnstileToken
-                        })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            typeof data.remaining !== "undefined"
-        ) {
-
-            updateQuota(
-                data.remaining,
-                data.daily_limit ||
-                DAILY_LIMIT
-            );
+    });
+
+    reset.addEventListener('click', async function () {
+        try {
+            const response = await fetch(API_BASE + '/reset', {
+                method: 'POST',
+                headers: Object.assign(
+                    { 'Content-Type': 'application/json' },
+                    adminHeaders()
+                ),
+                body: JSON.stringify({
+                    visitor_id: getVisitorId(),
+                    conversation_id: getConversationId()
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Could not reset conversation.');
+            }
+
+            if (data.conversation_id) {
+                localStorage.setItem(
+                    conversationKey,
+                    data.conversation_id
+                );
+            } else {
+                localStorage.removeItem(conversationKey);
+            }
+
+            chat.innerHTML = '';
+            addMessage('chad', 'Chad', 'New conversation. Try not to ruin this one.');
+            await refreshStatus();
+
+        } catch (error) {
+            addMessage('error', 'Chad', error.message);
         }
+    });
 
-
-        if (
-            !response.ok ||
-            !data.success
-        ) {
-
-            throw new Error(
-                data.error ||
-                "Chad broke something."
-            );
-        }
-
-
-        if (
-            data.conversation_id
-        ) {
-
-            saveConversationId(
-                data.conversation_id
-            );
-        }
-
-
-        addMessage(
-            "chad",
-            data.answer ||
-            "Chad answered without actually answering. Impressive."
-        );
-
-
-        setStatus(
-            "Conversation saved. Chad remembers your questionable decisions."
-        );
-
-
-    } catch (error) {
-
-        addMessage(
-            "chad",
-            "Something went sideways. " +
-            error.message
-        );
-
-
-        setStatus(
-            error.message,
-            true
-        );
-
-
-    } finally {
-
-        if (
-            remainingQuestions > 0
-        ) {
-
-            askButton.disabled =
-                false;
-
-            question.disabled =
-                false;
-        }
-
-
-        resetTurnstile();
-
-
-        if (
-            remainingQuestions > 0
-        ) {
-
-            question.focus();
-        }
-    }
-}
-
-
-// ============================================================
-// NEW CONVERSATION
-// ============================================================
-
-async function newConversation() {
-
-    resetButton.disabled =
-        true;
-
-
-    setStatus(
-        "Chad is forgetting this conversation. Your quota, however, has a memory."
-    );
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/reset",
-                {
-
-                    method:
-                        "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            conversation_id:
-                                getConversationId()
-                        })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            !response.ok ||
-            !data.success
-        ) {
-
-            throw new Error(
-                data.error ||
-                "Could not reset conversation."
-            );
-        }
-
-
-        clearConversationId();
-
-
-        if (
-            data.conversation_id
-        ) {
-
-            saveConversationId(
-                data.conversation_id
-            );
-        }
-
-
-        chat.innerHTML =
-            "";
-
-
-        addMessage(
-            "chad",
-            "Fresh conversation. Your five-question limit did not magically regenerate. Nice try."
-        );
-
-
-        await loadDailyStatus();
-
-
-        setStatus(
-            "New conversation started."
-        );
-
-
-        resetTurnstile();
-
-
-    } catch (error) {
-
-        setStatus(
-            error.message,
-            true
-        );
-
-
-    } finally {
-
-        resetButton.disabled =
-            false;
-    }
-}
-
-
-// ============================================================
-// EVENTS
-// ============================================================
-
-askButton.addEventListener(
-    "click",
-    askChad
-);
-
-
-resetButton.addEventListener(
-    "click",
-    newConversation
-);
-
-
-question.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (
-            event.key === "Enter" &&
-            !event.shiftKey
-        ) {
-
+    adminInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
             event.preventDefault();
-
-            askChad();
+            saveKeyButton.click();
         }
-    }
-);
+    });
 
+    question.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            ask.click();
+        }
+    });
 
-// ============================================================
-// STARTUP
-// ============================================================
+    window.addEventListener('load', function () {
+        const wait = setInterval(function () {
+            if (window.turnstile) {
+                clearInterval(wait);
+                renderTurnstile();
+            }
+        }, 100);
 
-getVisitorId();
-
-loadDailyStatus();
-
-
-if (
-    getConversationId()
-) {
-
-    setStatus(
-        "Existing Chad conversation loaded."
-    );
-
-
-} else {
-
-    setStatus(
-        "No conversation yet. Chad is enjoying the silence."
-    );
-}
-
+        refreshStatus();
+    });
+})();
 </script>
-
 </body>
 </html>
