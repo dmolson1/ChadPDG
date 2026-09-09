@@ -2,33 +2,46 @@ const express = require("express");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
-const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
+const TURNSTILE_SECRET_KEY =
+    process.env.TURNSTILE_SECRET_KEY || "";
 
 const app = express();
 
 app.use(express.json({ limit: "12kb" }));
 app.use(express.static("public"));
 
-const PORT = process.env.PORT || 8080;
-const MODEL = "gpt-5.6-luna";
+const PORT =
+    process.env.PORT || 8080;
+
+const MODEL =
+    "gpt-5.6-luna";
+
+const DAILY_LIMIT =
+    5;
 
 
 // ============================================================
 // POSTGRESQL DATABASE
 // ============================================================
 
-const databaseUrl = process.env.DATABASE_URL
-    ? process.env.DATABASE_URL
-        .replace(/[?&]sslmode=[^&]*/i, "")
-        .replace(/\?$/, "")
-    : "";
+const databaseUrl =
+    process.env.DATABASE_URL
+        ? process.env.DATABASE_URL
+            .replace(/[?&]sslmode=[^&]*/i, "")
+            .replace(/\?$/, "")
+        : "";
 
-const pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
+
+const pool =
+    new Pool({
+
+        connectionString:
+            databaseUrl,
+
+        ssl: {
+            rejectUnauthorized: false
+        }
+    });
 
 
 // ============================================================
@@ -46,6 +59,7 @@ async function initializeDatabase() {
         return;
     }
 
+
     try {
 
         await pool.query(`
@@ -55,6 +69,7 @@ async function initializeDatabase() {
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
+
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS chad_messages (
@@ -68,15 +83,40 @@ async function initializeDatabase() {
             )
         `);
 
+
         await pool.query(`
             CREATE INDEX IF NOT EXISTS
             idx_chad_messages_conversation
             ON chad_messages(conversation_id, id)
         `);
 
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS chad_daily_usage (
+                visitor_hash VARCHAR(64) NOT NULL,
+                usage_date DATE NOT NULL,
+                question_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (
+                    visitor_hash,
+                    usage_date
+                )
+            )
+        `);
+
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS
+            idx_chad_daily_usage_date
+            ON chad_daily_usage(usage_date)
+        `);
+
+
         console.log(
             "CHADPDG database connected and ready."
         );
+
 
     } catch (error) {
 
@@ -93,11 +133,14 @@ async function initializeDatabase() {
 // ============================================================
 
 function newConversationId() {
+
     return crypto.randomUUID();
 }
 
 
-async function ensureConversation(conversationId) {
+async function ensureConversation(
+    conversationId
+) {
 
     await pool.query(
         `
@@ -110,17 +153,21 @@ async function ensureConversation(conversationId) {
 }
 
 
-async function conversationExists(conversationId) {
+async function conversationExists(
+    conversationId
+) {
 
-    const result = await pool.query(
-        `
-        SELECT id
-        FROM chad_conversations
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [conversationId]
-    );
+    const result =
+        await pool.query(
+            `
+            SELECT id
+            FROM chad_conversations
+            WHERE id = $1
+            LIMIT 1
+            `,
+            [conversationId]
+        );
+
 
     return result.rowCount > 0;
 }
@@ -131,67 +178,37 @@ async function loadConversationMemory(
     limit = 10
 ) {
 
-    const result = await pool.query(
-        `
-        SELECT role, content
-        FROM (
-            SELECT
-                id,
-                role,
-                content
-            FROM chad_messages
-            WHERE conversation_id = $1
-            ORDER BY id DESC
-            LIMIT $2
-        ) recent_messages
-        ORDER BY id ASC
-        `,
-        [
-            conversationId,
-            limit
-        ]
-    );
-
-    return result.rows.map(row => ({
-        role: row.role,
-        content: row.content
-    }));
-}
+    const result =
+        await pool.query(
+            `
+            SELECT role, content
+            FROM (
+                SELECT
+                    id,
+                    role,
+                    content
+                FROM chad_messages
+                WHERE conversation_id = $1
+                ORDER BY id DESC
+                LIMIT $2
+            ) recent_messages
+            ORDER BY id ASC
+            `,
+            [
+                conversationId,
+                limit
+            ]
+        );
 
 
-async function saveMessage(
-    conversationId,
-    role,
-    content
-) {
+    return result.rows.map(
+        row => ({
+            role:
+                row.role,
 
-    await ensureConversation(
-        conversationId
-    );
-
-    await pool.query(
-        `
-        INSERT INTO chad_messages (
-            conversation_id,
-            role,
-            content
-        )
-        VALUES ($1, $2, $3)
-        `,
-        [
-            conversationId,
-            role,
-            content
-        ]
-    );
-
-    await pool.query(
-        `
-        UPDATE chad_conversations
-        SET updated_at = NOW()
-        WHERE id = $1
-        `,
-        [conversationId]
+            content:
+                row.content
+        })
     );
 }
 
@@ -205,9 +222,13 @@ async function saveConversationTurn(
     const client =
         await pool.connect();
 
+
     try {
 
-        await client.query("BEGIN");
+        await client.query(
+            "BEGIN"
+        );
+
 
         await client.query(
             `
@@ -217,6 +238,7 @@ async function saveConversationTurn(
             `,
             [conversationId]
         );
+
 
         await client.query(
             `
@@ -233,6 +255,7 @@ async function saveConversationTurn(
             ]
         );
 
+
         await client.query(
             `
             INSERT INTO chad_messages (
@@ -248,6 +271,7 @@ async function saveConversationTurn(
             ]
         );
 
+
         await client.query(
             `
             UPDATE chad_conversations
@@ -257,13 +281,20 @@ async function saveConversationTurn(
             [conversationId]
         );
 
-        await client.query("COMMIT");
+
+        await client.query(
+            "COMMIT"
+        );
+
 
     } catch (error) {
 
-        await client.query("ROLLBACK");
+        await client.query(
+            "ROLLBACK"
+        );
 
         throw error;
+
 
     } finally {
 
@@ -272,13 +303,258 @@ async function saveConversationTurn(
 }
 
 
-/*
- * ============================================================
- * CLOUDFLARE TURNSTILE VERIFICATION
- * ============================================================
- */
+// ============================================================
+// VISITOR / DAILY QUOTA HELPERS
+// ============================================================
 
-async function verifyTurnstile(token, remoteIp = "") {
+function validVisitorId(
+    visitorId
+) {
+
+    if (
+        typeof visitorId !== "string"
+    ) {
+        return false;
+    }
+
+
+    const trimmed =
+        visitorId.trim();
+
+
+    if (
+        trimmed.length < 16 ||
+        trimmed.length > 128
+    ) {
+        return false;
+    }
+
+
+    return /^[a-zA-Z0-9_-]+$/.test(
+        trimmed
+    );
+}
+
+
+function hashVisitorId(
+    visitorId
+) {
+
+    return crypto
+        .createHash("sha256")
+        .update(visitorId)
+        .digest("hex");
+}
+
+
+function getVisitorIdFromRequest(
+    req
+) {
+
+    const bodyVisitor =
+        typeof req.body?.visitor_id === "string"
+            ? req.body.visitor_id.trim()
+            : "";
+
+
+    if (bodyVisitor) {
+        return bodyVisitor;
+    }
+
+
+    const legacyAnalyticsVisitor =
+        typeof req.body?.analytics_visitor === "string"
+            ? req.body.analytics_visitor.trim()
+            : "";
+
+
+    if (legacyAnalyticsVisitor) {
+        return legacyAnalyticsVisitor;
+    }
+
+
+    const queryVisitor =
+        typeof req.query?.visitor_id === "string"
+            ? req.query.visitor_id.trim()
+            : "";
+
+
+    if (queryVisitor) {
+        return queryVisitor;
+    }
+
+
+    const queryAnalyticsVisitor =
+        typeof req.query?.analytics_visitor === "string"
+            ? req.query.analytics_visitor.trim()
+            : "";
+
+
+    return queryAnalyticsVisitor;
+}
+
+
+async function getDailyQuestionCount(
+    visitorHash
+) {
+
+    const result =
+        await pool.query(
+            `
+            SELECT question_count
+            FROM chad_daily_usage
+            WHERE visitor_hash = $1
+              AND usage_date =
+                  (NOW() AT TIME ZONE 'UTC')::date
+            LIMIT 1
+            `,
+            [visitorHash]
+        );
+
+
+    if (!result.rowCount) {
+        return 0;
+    }
+
+
+    return Number(
+        result.rows[0].question_count
+    ) || 0;
+}
+
+
+async function getRemainingQuestions(
+    visitorHash
+) {
+
+    const used =
+        await getDailyQuestionCount(
+            visitorHash
+        );
+
+
+    return Math.max(
+        0,
+        DAILY_LIMIT - used
+    );
+}
+
+
+async function claimDailyQuestion(
+    visitorHash
+) {
+
+    const result =
+        await pool.query(
+            `
+            INSERT INTO chad_daily_usage (
+                visitor_hash,
+                usage_date,
+                question_count
+            )
+            VALUES (
+                $1,
+                (NOW() AT TIME ZONE 'UTC')::date,
+                1
+            )
+
+            ON CONFLICT (
+                visitor_hash,
+                usage_date
+            )
+
+            DO UPDATE SET
+                question_count =
+                    chad_daily_usage.question_count + 1,
+                updated_at =
+                    NOW()
+
+            WHERE
+                chad_daily_usage.question_count < $2
+
+            RETURNING
+                question_count
+            `,
+            [
+                visitorHash,
+                DAILY_LIMIT
+            ]
+        );
+
+
+    if (!result.rowCount) {
+
+        return {
+            allowed: false,
+            used: DAILY_LIMIT,
+            remaining: 0
+        };
+    }
+
+
+    const used =
+        Number(
+            result.rows[0].question_count
+        ) || 0;
+
+
+    return {
+        allowed: true,
+
+        used,
+
+        remaining:
+            Math.max(
+                0,
+                DAILY_LIMIT - used
+            )
+    };
+}
+
+
+async function releaseDailyQuestion(
+    visitorHash
+) {
+
+    try {
+
+        await pool.query(
+            `
+            UPDATE chad_daily_usage
+            SET
+                question_count =
+                    GREATEST(
+                        question_count - 1,
+                        0
+                    ),
+                updated_at =
+                    NOW()
+            WHERE visitor_hash = $1
+              AND usage_date =
+                  (NOW() AT TIME ZONE 'UTC')::date
+            `,
+            [visitorHash]
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Failed to refund Chad question:",
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// CLOUDFLARE TURNSTILE VERIFICATION
+// ============================================================
+
+async function verifyTurnstile(
+    token,
+    remoteIp = ""
+) {
 
     if (!TURNSTILE_SECRET_KEY) {
 
@@ -290,7 +566,11 @@ async function verifyTurnstile(token, remoteIp = "") {
     }
 
 
-    if (!token || typeof token !== "string") {
+    if (
+        !token ||
+        typeof token !== "string"
+    ) {
+
         return false;
     }
 
@@ -326,7 +606,9 @@ async function verifyTurnstile(token, remoteIp = "") {
             await fetch(
                 "https://challenges.cloudflare.com/turnstile/v0/siteverify",
                 {
-                    method: "POST",
+
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
@@ -568,9 +850,11 @@ You are a handyman who happens to know where to get the stuff.
 
 const CHAD_SCHEMA = {
 
-    type: "object",
+    type:
+        "object",
 
-    additionalProperties: false,
+    additionalProperties:
+        false,
 
     properties: {
 
@@ -584,13 +868,16 @@ const CHAD_SCHEMA = {
 
         products: {
 
-            type: "array",
+            type:
+                "array",
 
             items: {
 
-                type: "object",
+                type:
+                    "object",
 
-                additionalProperties: false,
+                additionalProperties:
+                    false,
 
                 properties: {
 
@@ -622,13 +909,16 @@ const CHAD_SCHEMA = {
 
         videos: {
 
-            type: "array",
+            type:
+                "array",
 
             items: {
 
-                type: "object",
+                type:
+                    "object",
 
-                additionalProperties: false,
+                additionalProperties:
+                    false,
 
                 properties: {
 
@@ -667,11 +957,14 @@ const CHAD_SCHEMA = {
 // OPENAI RESPONSE HELPERS
 // ============================================================
 
-function getResponseText(data) {
+function getResponseText(
+    data
+) {
 
     if (
         typeof data.output_text === "string"
     ) {
+
         return data.output_text;
     }
 
@@ -679,25 +972,42 @@ function getResponseText(data) {
     let text = "";
 
 
-    if (!Array.isArray(data.output)) {
+    if (
+        !Array.isArray(
+            data.output
+        )
+    ) {
+
         return text;
     }
 
 
-    for (const item of data.output) {
+    for (
+        const item
+        of data.output
+    ) {
 
-        if (!Array.isArray(item.content)) {
+        if (
+            !Array.isArray(
+                item.content
+            )
+        ) {
+
             continue;
         }
 
 
-        for (const content of item.content) {
+        for (
+            const content
+            of item.content
+        ) {
 
             if (
                 typeof content.text === "string"
             ) {
 
-                text += content.text;
+                text +=
+                    content.text;
             }
         }
     }
@@ -707,9 +1017,14 @@ function getResponseText(data) {
 }
 
 
-function cleanAnswer(answer) {
+function cleanAnswer(
+    answer
+) {
 
-    if (typeof answer !== "string") {
+    if (
+        typeof answer !== "string"
+    ) {
+
         return "";
     }
 
@@ -753,6 +1068,7 @@ function collectSources(
         sources.set(
             value.url,
             {
+
                 title:
                     typeof value.title === "string"
                         ? value.title
@@ -765,15 +1081,21 @@ function collectSources(
     }
 
 
-    if (Array.isArray(value)) {
+    if (
+        Array.isArray(value)
+    ) {
 
-        for (const child of value) {
+        for (
+            const child
+            of value
+        ) {
 
             collectSources(
                 child,
                 sources
             );
         }
+
 
     } else {
 
@@ -794,18 +1116,27 @@ function collectSources(
 }
 
 
-function cleanVideos(videos) {
+function cleanVideos(
+    videos
+) {
 
-    if (!Array.isArray(videos)) {
+    if (
+        !Array.isArray(videos)
+    ) {
+
         return [];
     }
 
 
     const clean = [];
-    const seen = new Set();
+    const seen =
+        new Set();
 
 
-    for (const video of videos) {
+    for (
+        const video
+        of videos
+    ) {
 
         if (
             !video ||
@@ -816,13 +1147,16 @@ function cleanVideos(videos) {
         }
 
 
-        let valid = false;
+        let valid =
+            false;
 
 
         try {
 
             const url =
-                new URL(video.url);
+                new URL(
+                    video.url
+                );
 
 
             if (
@@ -830,7 +1164,8 @@ function cleanVideos(videos) {
                 url.hostname === "www.youtu.be"
             ) {
 
-                valid = true;
+                valid =
+                    true;
             }
 
 
@@ -839,23 +1174,30 @@ function cleanVideos(videos) {
                     "youtube.com",
                     "www.youtube.com",
                     "m.youtube.com"
-                ].includes(url.hostname) &&
+                ].includes(
+                    url.hostname
+                ) &&
                 url.pathname === "/watch" &&
                 url.searchParams.get("v")
             ) {
 
-                valid = true;
+                valid =
+                    true;
             }
+
 
         } catch {
 
-            valid = false;
+            valid =
+                false;
         }
 
 
         if (
             !valid ||
-            seen.has(video.url)
+            seen.has(
+                video.url
+            )
         ) {
 
             continue;
@@ -884,7 +1226,10 @@ function cleanVideos(videos) {
         });
 
 
-        if (clean.length >= 3) {
+        if (
+            clean.length >= 3
+        ) {
+
             break;
         }
     }
@@ -898,23 +1243,29 @@ function cleanVideos(videos) {
 // HOME
 // ============================================================
 
-app.get("/", (req, res) => {
+app.get(
+    "/",
+    (req, res) => {
 
-    res.json({
+        res.json({
 
-        success: true,
+            success:
+                true,
 
-        app: "CHADPDG",
+            app:
+                "CHADPDG",
 
-        status: "online",
+            status:
+                "online",
 
-        version:
-            "chad-core-2-db-turnstile",
+            version:
+                "chad-core-3-quota",
 
-        message:
-            "Chad is alive. Unfortunately."
-    });
-});
+            message:
+                "Chad is alive. Unfortunately."
+        });
+    }
+);
 
 
 // ============================================================
@@ -931,10 +1282,13 @@ app.get(
         );
 
 
-        let databaseConnected = false;
+        let databaseConnected =
+            false;
 
 
-        if (process.env.DATABASE_URL) {
+        if (
+            process.env.DATABASE_URL
+        ) {
 
             try {
 
@@ -942,7 +1296,9 @@ app.get(
                     "SELECT 1"
                 );
 
-                databaseConnected = true;
+                databaseConnected =
+                    true;
+
 
             } catch (error) {
 
@@ -956,7 +1312,8 @@ app.get(
 
         res.json({
 
-            success: true,
+            success:
+                true,
 
             status:
                 databaseConnected
@@ -964,7 +1321,7 @@ app.get(
                     : "degraded",
 
             version:
-                "chad-core-2-db-turnstile",
+                "chad-core-3-quota",
 
             openaiConfigured:
                 Boolean(
@@ -981,8 +1338,105 @@ app.get(
                     process.env.DATABASE_URL
                 ),
 
-            databaseConnected
+            databaseConnected,
+
+            dailyLimit:
+                DAILY_LIMIT
         });
+    }
+);
+
+
+// ============================================================
+// DAILY STATUS
+// ============================================================
+
+app.get(
+    "/status",
+    async (req, res) => {
+
+        try {
+
+            const visitorId =
+                getVisitorIdFromRequest(
+                    req
+                );
+
+
+            if (
+                !validVisitorId(
+                    visitorId
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        success:
+                            false,
+
+                        error:
+                            "A valid visitor ID is required.",
+
+                        daily_limit:
+                            DAILY_LIMIT,
+
+                        remaining:
+                            DAILY_LIMIT
+                    });
+            }
+
+
+            const visitorHash =
+                hashVisitorId(
+                    visitorId
+                );
+
+
+            const remaining =
+                await getRemainingQuestions(
+                    visitorHash
+                );
+
+
+            return res.json({
+
+                success:
+                    true,
+
+                daily_limit:
+                    DAILY_LIMIT,
+
+                remaining,
+
+                used:
+                    DAILY_LIMIT - remaining,
+
+                version:
+                    "chad-core-3-quota"
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "CHADPDG /status error:",
+                error
+            );
+
+
+            return res
+                .status(500)
+                .json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Chad lost count. Math was never his brand."
+                });
+        }
     }
 );
 
@@ -1005,7 +1459,8 @@ app.get(
                     .status(500)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "OPENAI_API_KEY is not configured."
@@ -1018,7 +1473,8 @@ app.get(
                     "https://api.openai.com/v1/responses",
                     {
 
-                        method: "POST",
+                        method:
+                            "POST",
 
                         headers: {
 
@@ -1046,7 +1502,9 @@ app.get(
                 await response.json();
 
 
-            if (!response.ok) {
+            if (
+                !response.ok
+            ) {
 
                 console.error(
                     "OpenAI test error:",
@@ -1054,11 +1512,13 @@ app.get(
                     data?.error?.message
                 );
 
+
                 return res
                     .status(502)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             data?.error?.message ||
@@ -1075,7 +1535,8 @@ app.get(
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 model:
                     MODEL,
@@ -1096,7 +1557,8 @@ app.get(
                 .status(500)
                 .json({
 
-                    success: false,
+                    success:
+                        false,
 
                     error:
                         "OpenAI connection test failed."
@@ -1114,6 +1576,13 @@ app.post(
     "/ask",
     async (req, res) => {
 
+        let quotaClaimed =
+            false;
+
+        let visitorHash =
+            "";
+
+
         try {
 
             if (
@@ -1124,7 +1593,8 @@ app.post(
                     .status(500)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "OPENAI_API_KEY is not configured."
@@ -1140,7 +1610,8 @@ app.post(
                     .status(500)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Chad's memory isn't connected. DATABASE_URL is missing."
@@ -1160,7 +1631,8 @@ app.post(
                     .status(400)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Chad needs a question. Preferably one involving a tool."
@@ -1168,18 +1640,62 @@ app.post(
             }
 
 
-            if (message.length > 3000) {
+            if (
+                message.length > 3000
+            ) {
 
                 return res
                     .status(413)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "That question is too long. Keep it under 3000 characters, Bro."
                     });
             }
+
+
+            // ====================================================
+            // VISITOR ID
+            // ====================================================
+
+            const visitorId =
+                getVisitorIdFromRequest(
+                    req
+                );
+
+
+            if (
+                !validVisitorId(
+                    visitorId
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        success:
+                            false,
+
+                        error:
+                            "Chad can't identify this browser yet. Refresh the page and try again.",
+
+                        daily_limit:
+                            DAILY_LIMIT,
+
+                        remaining:
+                            DAILY_LIMIT
+                    });
+            }
+
+
+            visitorHash =
+                hashVisitorId(
+                    visitorId
+                );
 
 
             // ====================================================
@@ -1198,7 +1714,8 @@ app.post(
                     .status(403)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Human verification required. Apparently Chad has standards now."
@@ -1233,12 +1750,53 @@ app.post(
                     .status(403)
                     .json({
 
-                        success: false,
+                        success:
+                            false,
 
                         error:
                             "Human verification failed. Nice try, robot."
                     });
             }
+
+
+            // ====================================================
+            // CLAIM ONE OF TODAY'S QUESTIONS
+            // ====================================================
+
+            const quota =
+                await claimDailyQuestion(
+                    visitorHash
+                );
+
+
+            if (
+                !quota.allowed
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+
+                        success:
+                            false,
+
+                        error:
+                            "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
+
+                        daily_limit:
+                            DAILY_LIMIT,
+
+                        remaining:
+                            0,
+
+                        limit_reached:
+                            true
+                    });
+            }
+
+
+            quotaClaimed =
+                true;
 
 
             // ====================================================
@@ -1265,6 +1823,7 @@ app.post(
                 await ensureConversation(
                     conversationId
                 );
+
 
             } else {
 
@@ -1378,7 +1937,17 @@ app.post(
                 await openaiResponse.json();
 
 
-            if (!openaiResponse.ok) {
+            if (
+                !openaiResponse.ok
+            ) {
+
+                await releaseDailyQuestion(
+                    visitorHash
+                );
+
+                quotaClaimed =
+                    false;
+
 
                 console.error(
                     "OpenAI error:",
@@ -1409,6 +1978,14 @@ app.post(
 
             if (!responseText) {
 
+                await releaseDailyQuestion(
+                    visitorHash
+                );
+
+                quotaClaimed =
+                    false;
+
+
                 return res
                     .status(502)
                     .json({
@@ -1436,7 +2013,16 @@ app.post(
                         responseText
                     );
 
+
             } catch {
+
+                await releaseDailyQuestion(
+                    visitorHash
+                );
+
+                quotaClaimed =
+                    false;
+
 
                 console.error(
                     "Invalid structured response:",
@@ -1465,6 +2051,14 @@ app.post(
 
             if (!answer) {
 
+                await releaseDailyQuestion(
+                    visitorHash
+                );
+
+                quotaClaimed =
+                    false;
+
+
                 return res
                     .status(502)
                     .json({
@@ -1487,6 +2081,13 @@ app.post(
                 message,
                 answer
             );
+
+
+            // The answer succeeded.
+            // Keep the quota claim.
+
+            quotaClaimed =
+                false;
 
 
             // ====================================================
@@ -1535,6 +2136,12 @@ app.post(
                 );
 
 
+            const remaining =
+                await getRemainingQuestions(
+                    visitorHash
+                );
+
+
             // ====================================================
             // RETURN CHAD
             // ====================================================
@@ -1575,12 +2182,31 @@ app.post(
                 conversation_id:
                     conversationId,
 
+                daily_limit:
+                    DAILY_LIMIT,
+
+                remaining,
+
+                limit_reached:
+                    remaining <= 0,
+
                 version:
-                    "chad-core-2-db-turnstile"
+                    "chad-core-3-quota"
             });
 
 
         } catch (error) {
+
+            if (
+                quotaClaimed &&
+                visitorHash
+            ) {
+
+                await releaseDailyQuestion(
+                    visitorHash
+                );
+            }
+
 
             console.error(
                 "CHADPDG /ask error:",
@@ -1644,7 +2270,7 @@ app.post(
                     newId,
 
                 version:
-                    "chad-core-2-db-turnstile"
+                    "chad-core-3-quota"
             });
 
 
@@ -1702,7 +2328,7 @@ async function startServer() {
         () => {
 
             console.log(
-                `CHADPDG Core 2 DB running on port ${PORT}`
+                `CHADPDG Core 3 Quota running on port ${PORT}`
             );
         }
     );
