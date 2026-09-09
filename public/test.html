@@ -3,9 +3,93 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chad P.D. Chee</title>
+<title>Chad P.D. Chee — Developer Test</title>
 </head>
 <body>
+
+<div id="chad-dev-panel" style="
+    max-width:900px;
+    margin:0 auto 12px;
+    padding:12px;
+    border:2px solid #1677B8;
+    border-radius:8px;
+    background:#eef7fc;
+    font-family:Arial,Helvetica,sans-serif;
+">
+    <div style="font-weight:900;margin-bottom:7px;">DEVELOPER TEST PAGE — UNLIMITED QUESTIONS</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input
+            id="chad-dev-key"
+            type="password"
+            placeholder="Paste developer test key"
+            autocomplete="off"
+            style="flex:1;min-width:240px;padding:10px;border:1px solid #9ebdce;border-radius:6px;font-size:14px;"
+        >
+        <button
+            id="chad-dev-enable"
+            type="button"
+            style="padding:10px 14px;border:0;border-radius:6px;background:#1677B8;color:#fff;font-weight:900;cursor:pointer;"
+        >ENABLE TEST MODE</button>
+        <button
+            id="chad-dev-clear"
+            type="button"
+            style="padding:10px 14px;border:1px solid #aaa;border-radius:6px;background:#fff;color:#222;font-weight:800;cursor:pointer;"
+        >CLEAR KEY</button>
+    </div>
+    <div id="chad-dev-status" style="margin-top:7px;font-size:12px;font-weight:700;"></div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const STORAGE_KEY = 'chadpdg_admin_test_key';
+    const savedKey = sessionStorage.getItem(STORAGE_KEY) || '';
+
+    window.CHADPDG_DEV = window.CHADPDG_DEV || {};
+
+    if (savedKey) {
+        window.CHADPDG_DEV.enabled = true;
+        window.CHADPDG_DEV.adminKey = savedKey;
+    } else {
+        window.CHADPDG_DEV.enabled = false;
+        window.CHADPDG_DEV.adminKey = '';
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+        const input = document.getElementById('chad-dev-key');
+        const enable = document.getElementById('chad-dev-enable');
+        const clear = document.getElementById('chad-dev-clear');
+        const status = document.getElementById('chad-dev-status');
+
+        if (savedKey) {
+            input.value = savedKey;
+            status.textContent = 'Test key loaded for this browser session. Unlimited mode is enabled.';
+        } else {
+            status.textContent = 'Enter your developer test key, then click ENABLE TEST MODE.';
+        }
+
+        enable.addEventListener('click', function () {
+            const key = input.value.trim();
+
+            if (!key) {
+                status.textContent = 'Paste the developer test key first.';
+                return;
+            }
+
+            sessionStorage.setItem(STORAGE_KEY, key);
+            status.textContent = 'Key saved. Reloading into unlimited test mode...';
+            location.reload();
+        });
+
+        clear.addEventListener('click', function () {
+            sessionStorage.removeItem(STORAGE_KEY);
+            status.textContent = 'Test key cleared. Reloading...';
+            location.reload();
+        });
+    });
+})();
+</script>
 <div id="chad-app">
 
     <div id="chad-header">
@@ -2257,6 +2341,14 @@
         ) {
             headers['X-ChadPDG-Dev'] =
                 window.CHADPDG_DEV.devToken;
+        }
+
+        if (
+            window.CHADPDG_DEV &&
+            window.CHADPDG_DEV.adminKey
+        ) {
+            headers['X-Chad-Admin-Key'] =
+                window.CHADPDG_DEV.adminKey;
         }
 
         return headers;
