@@ -335,8 +335,29 @@ async function initializeDatabase() {
             question TEXT,
             asin VARCHAR(20),
             product_name TEXT,
+            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+    `);
+
+    await pool.query(`
+        ALTER TABLE chad_analytics
+        ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_analytics_created_at
+        ON chad_analytics(created_at DESC)
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_analytics_event_created_at
+        ON chad_analytics(event, created_at DESC)
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_analytics_visitor_created_at
+        ON chad_analytics(visitor_hash, created_at DESC)
     `);
 
     await pool.query(`
@@ -985,6 +1006,108 @@ async function consumeShoppingToken(token, conversationId, question) {
     return result.rowCount === 1;
 }
 
+
+const PUBLIC_ANALYTICS_EVENTS = new Set([
+    "page_view",
+    "product_impression",
+    "product_click",
+    "shopping_product_impression",
+    "shopping_product_click",
+    "video_click"
+]);
+
+const ANALYTICS_EVENT_ALIASES = new Map([
+    ["impression", "product_impression"],
+    ["click", "product_click"],
+    ["shopping_impression", "shopping_product_impression"],
+    ["shopping_click", "shopping_product_click"]
+]);
+
+function cleanAnalyticsMetadata(value) {
+    const input = value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {};
+
+    const allowed = [
+        "page_path",
+        "referrer_host",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_content",
+        "utm_term",
+        "video_title",
+        "video_channel",
+        "reason",
+        "status"
+    ];
+
+    const output = {};
+    for (const key of allowed) {
+        const raw = input[key];
+        if (typeof raw === "string" && raw.trim()) {
+            output[key] = raw.trim().slice(0, 300);
+        }
+    }
+    return output;
+}
+
+async function recordAnalyticsEvent({
+    event,
+    visitorHash = null,
+    conversationId = null,
+    asin = "",
+    productName = "",
+    metadata = {}
+}) {
+    if (!event) return;
+
+    await pool.query(
+        `INSERT INTO chad_analytics
+            (event, visitor_hash, conversation_id, question, asin, product_name, metadata)
+         VALUES ($1, $2, $3, NULL, $4, $5, $6::jsonb)`,
+        [
+            String(event).slice(0, 50),
+            visitorHash || null,
+            validUuid(conversationId) ? conversationId : null,
+            normalizeAsin(asin) || "",
+            typeof productName === "string" ? productName.slice(0, 500) : "",
+            JSON.stringify(cleanAnalyticsMetadata(metadata))
+        ]
+    );
+}
+
+async function safeRecordAnalyticsEvent(payload) {
+    try {
+        await recordAnalyticsEvent(payload);
+    } catch (error) {
+        console.warn("Analytics record failed:", error.message);
+    }
+}
+
+function isTestPageRequest(req) {
+    try {
+        const referer = typeof req.headers.referer === "string"
+            ? req.headers.referer
+            : "";
+        if (!referer) return false;
+        return new URL(referer).pathname === "/test.html";
+    } catch {
+        return false;
+    }
+}
+
+function requireAdminAnalytics(req, res) {
+    if (!isAdminTestRequest(req)) {
+        res.status(401).json({
+            success: false,
+            error: "Developer analytics access required."
+        });
+        return false;
+    }
+    return true;
+}
+
 function analyticsToken(visitorHash, conversationId) {
     return crypto
         .createHmac("sha256", ANALYTICS_SECRET)
@@ -1169,6 +1292,13 @@ async function handleAsk(req, res) {
             if (!quota.allowed) {
                 const reset = getTorontoResetInfo();
                 if (quota.reason === "visitor") {
+                    if (!isTestPageRequest(req)) {
+                        await safeRecordAnalyticsEvent({
+                            event: "limit_hit",
+                            visitorHash,
+                            metadata: { reason: "daily_visitor_limit" }
+                        });
+                    }
                     return res.status(429).json({
                         success: false,
                         error: "That is your 5 free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Come back tomorrow.",
@@ -1260,6 +1390,15 @@ async function handleAsk(req, res) {
         const remaining = admin
             ? null
             : quota.remaining;
+
+        if (!admin && !isTestPageRequest(req)) {
+            await safeRecordAnalyticsEvent({
+                event: "question_answered",
+                visitorHash,
+                conversationId,
+                metadata: { status: "public" }
+            });
+        }
 
         return res.json({
             success: true,
@@ -1383,6 +1522,15 @@ async function handleShoppingList(req, res) {
             .filter(p => itemNames.has(p.item_name))
             .slice(0, 5);
 
+        if (!isTestPageRequest(req)) {
+            await safeRecordAnalyticsEvent({
+                event: "shopping_list_generated",
+                visitorHash: hashValue(visitorId),
+                conversationId,
+                metadata: { status: "success" }
+            });
+        }
+
         return res.json({
             success: true,
             title:
@@ -1438,6 +1586,15 @@ async function handleReset(req, res) {
             MEMORY_DAYS * 24 * 60 * 60
         );
 
+        if (!isTestPageRequest(req)) {
+            await safeRecordAnalyticsEvent({
+                event: "new_conversation",
+                visitorHash: hashValue(visitorId),
+                conversationId: newId,
+                metadata: { status: "manual_reset" }
+            });
+        }
+
         return res.json({ success: true, conversation_id: newId });
     } catch (error) {
         console.error("Reset error:", error);
@@ -1457,36 +1614,220 @@ async function handleAnalytics(req, res) {
         );
 
         if (!allowed) return res.status(429).json({ success: false });
+        if (isTestPageRequest(req)) return res.json({ success: true, test_ignored: true });
 
-        const event = typeof req.body?.event === "string"
+        let event = typeof req.body?.event === "string"
             ? req.body.event.trim().slice(0, 50)
             : "";
 
-        if (!event) return res.status(400).json({ success: false });
+        event = ANALYTICS_EVENT_ALIASES.get(event) || event;
+
+        if (!PUBLIC_ANALYTICS_EVENTS.has(event)) {
+            return res.status(400).json({ success: false });
+        }
 
         const cookies = parseCookies(req);
         const conversationId = validUuid(cookies.chadgpt_conversation)
             ? cookies.chadgpt_conversation
             : null;
 
-        await pool.query(
-            `INSERT INTO chad_analytics
-                (event, visitor_hash, conversation_id, question, asin, product_name)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-                event,
-                hashValue(visitorId),
-                conversationId,
-                typeof req.body?.question === "string" ? req.body.question.slice(0, 3000) : "",
-                normalizeAsin(req.body?.asin) || "",
-                typeof req.body?.product_name === "string" ? req.body.product_name.slice(0, 500) : ""
-            ]
-        );
+        const metadata = cleanAnalyticsMetadata({
+            ...(req.body?.metadata || {}),
+            page_path: req.body?.page_path || req.body?.metadata?.page_path,
+            referrer_host: req.body?.referrer_host || req.body?.metadata?.referrer_host,
+            utm_source: req.body?.utm_source || req.body?.metadata?.utm_source,
+            utm_medium: req.body?.utm_medium || req.body?.metadata?.utm_medium,
+            utm_campaign: req.body?.utm_campaign || req.body?.metadata?.utm_campaign,
+            utm_content: req.body?.utm_content || req.body?.metadata?.utm_content,
+            utm_term: req.body?.utm_term || req.body?.metadata?.utm_term,
+            video_title: req.body?.video_title || req.body?.metadata?.video_title,
+            video_channel: req.body?.video_channel || req.body?.metadata?.video_channel
+        });
+
+        await recordAnalyticsEvent({
+            event,
+            visitorHash: hashValue(visitorId),
+            conversationId,
+            asin: req.body?.asin,
+            productName: req.body?.product_name,
+            metadata
+        });
 
         return res.json({ success: true });
     } catch (error) {
         console.warn("Analytics error:", error.message);
         return res.json({ success: false });
+    }
+}
+
+async function handleAnalyticsDashboard(req, res) {
+    if (!requireAdminAnalytics(req, res)) return;
+
+    try {
+        const requestedDays = Number(req.query.days || 30);
+        const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
+
+        const summarySql = `
+            WITH base AS (
+                SELECT *
+                FROM chad_analytics
+                WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+            ),
+            question_visitors AS (
+                SELECT COUNT(DISTINCT visitor_hash)::int AS value
+                FROM base
+                WHERE event = 'question_answered'
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE event = 'page_view')::int AS page_views,
+                COUNT(DISTINCT visitor_hash) FILTER (WHERE event = 'page_view')::int AS unique_visitors,
+                COUNT(*) FILTER (WHERE event = 'question_answered')::int AS questions,
+                COUNT(*) FILTER (WHERE event = 'new_conversation')::int AS new_conversations,
+                COUNT(*) FILTER (WHERE event = 'limit_hit')::int AS limit_hits,
+                COUNT(*) FILTER (WHERE event = 'shopping_list_generated')::int AS shopping_lists,
+                COUNT(*) FILTER (WHERE event IN ('product_impression','shopping_product_impression'))::int AS product_impressions,
+                COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click'))::int AS product_clicks,
+                COUNT(*) FILTER (WHERE event = 'video_click')::int AS video_clicks,
+                COALESCE((SELECT value FROM question_visitors), 0)::int AS question_visitors
+            FROM base
+        `;
+
+        const todaySql = `
+            SELECT
+                COUNT(*) FILTER (WHERE event = 'page_view')::int AS page_views,
+                COUNT(DISTINCT visitor_hash) FILTER (WHERE event = 'page_view')::int AS unique_visitors,
+                COUNT(*) FILTER (WHERE event = 'question_answered')::int AS questions,
+                COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click'))::int AS product_clicks,
+                COUNT(*) FILTER (WHERE event = 'limit_hit')::int AS limit_hits
+            FROM chad_analytics
+            WHERE (created_at AT TIME ZONE 'America/Toronto')::date =
+                  (NOW() AT TIME ZONE 'America/Toronto')::date
+        `;
+
+        const dailySql = `
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() AT TIME ZONE 'America/Toronto')::date - ($1::int - 1),
+                    (NOW() AT TIME ZONE 'America/Toronto')::date,
+                    INTERVAL '1 day'
+                )::date AS day
+            ), stats AS (
+                SELECT
+                    (created_at AT TIME ZONE 'America/Toronto')::date AS day,
+                    COUNT(*) FILTER (WHERE event = 'page_view')::int AS page_views,
+                    COUNT(DISTINCT visitor_hash) FILTER (WHERE event = 'page_view')::int AS visitors,
+                    COUNT(*) FILTER (WHERE event = 'question_answered')::int AS questions,
+                    COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click'))::int AS product_clicks
+                FROM chad_analytics
+                WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                GROUP BY 1
+            )
+            SELECT
+                d.day::text,
+                COALESCE(s.page_views, 0)::int AS page_views,
+                COALESCE(s.visitors, 0)::int AS visitors,
+                COALESCE(s.questions, 0)::int AS questions,
+                COALESCE(s.product_clicks, 0)::int AS product_clicks
+            FROM dates d
+            LEFT JOIN stats s USING(day)
+            ORDER BY d.day
+        `;
+
+        const productsSql = `
+            SELECT
+                COALESCE(NULLIF(product_name,''), asin, 'Unknown product') AS product,
+                asin,
+                COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click'))::int AS clicks,
+                COUNT(*) FILTER (WHERE event IN ('product_impression','shopping_product_impression'))::int AS impressions
+            FROM chad_analytics
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+              AND (asin <> '' OR product_name <> '')
+            GROUP BY 1, 2
+            HAVING COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click')) > 0
+                OR COUNT(*) FILTER (WHERE event IN ('product_impression','shopping_product_impression')) > 0
+            ORDER BY clicks DESC, impressions DESC
+            LIMIT 10
+        `;
+
+        const sourcesSql = `
+            SELECT
+                COALESCE(
+                    NULLIF(metadata->>'utm_source',''),
+                    NULLIF(metadata->>'referrer_host',''),
+                    'Direct / unknown'
+                ) AS source,
+                COUNT(*)::int AS page_views,
+                COUNT(DISTINCT visitor_hash)::int AS visitors
+            FROM chad_analytics
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+              AND event = 'page_view'
+            GROUP BY 1
+            ORDER BY page_views DESC
+            LIMIT 10
+        `;
+
+        const returningSql = `
+            WITH visitor_days AS (
+                SELECT visitor_hash,
+                       COUNT(DISTINCT (created_at AT TIME ZONE 'America/Toronto')::date)::int AS active_days
+                FROM chad_analytics
+                WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                  AND visitor_hash IS NOT NULL
+                  AND event IN ('page_view','question_answered')
+                GROUP BY visitor_hash
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE active_days >= 2)::int AS returning_visitors,
+                COUNT(*)::int AS known_visitors
+            FROM visitor_days
+        `;
+
+        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult] =
+            await Promise.all([
+                pool.query(summarySql, [days]),
+                pool.query(todaySql),
+                pool.query(dailySql, [days]),
+                pool.query(productsSql, [days]),
+                pool.query(sourcesSql, [days]),
+                pool.query(returningSql, [days])
+            ]);
+
+        const summary = summaryResult.rows[0] || {};
+        const questionVisitors = Number(summary.question_visitors || 0);
+        const questions = Number(summary.questions || 0);
+        const productImpressions = Number(summary.product_impressions || 0);
+        const productClicks = Number(summary.product_clicks || 0);
+        const knownVisitors = Number(returningResult.rows[0]?.known_visitors || 0);
+        const returningVisitors = Number(returningResult.rows[0]?.returning_visitors || 0);
+
+        return res.json({
+            success: true,
+            generated_at: new Date().toISOString(),
+            days,
+            today: todayResult.rows[0] || {},
+            summary: {
+                ...summary,
+                avg_questions_per_questioner: questionVisitors
+                    ? Number((questions / questionVisitors).toFixed(2))
+                    : 0,
+                product_ctr_percent: productImpressions
+                    ? Number(((productClicks / productImpressions) * 100).toFixed(2))
+                    : 0,
+                returning_visitors: returningVisitors,
+                returning_visitor_percent: knownVisitors
+                    ? Number(((returningVisitors / knownVisitors) * 100).toFixed(1))
+                    : 0
+            },
+            daily: dailyResult.rows,
+            top_products: productsResult.rows,
+            traffic_sources: sourcesResult.rows
+        });
+    } catch (error) {
+        console.error("Analytics dashboard error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not load Chad analytics."
+        });
     }
 }
 
@@ -1499,7 +1840,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-5-og-parity"
+        version: "chad-core-6-analytics"
     });
 });
 
@@ -1513,7 +1854,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-5-og-parity",
+        version: "chad-core-6-analytics",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -1529,6 +1870,7 @@ registerBoth("post", "/ask", handleAsk);
 registerBoth("post", "/shopping-list", handleShoppingList);
 registerBoth("post", "/reset", handleReset);
 registerBoth("post", "/analytics/track", handleAnalytics);
+registerBoth("get", "/analytics/dashboard", handleAnalyticsDashboard);
 
 app.get("/openai-test", async (req, res) => {
     try {
