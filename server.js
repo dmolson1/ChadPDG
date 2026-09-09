@@ -2,6 +2,8 @@ const express = require("express");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
+
 const app = express();
 
 app.use(express.json({ limit: "12kb" }));
@@ -269,6 +271,94 @@ async function saveConversationTurn(
 }
 
 
+/*
+ * ============================================================
+ * CLOUDFLARE TURNSTILE VERIFICATION
+ * ============================================================
+ */
+
+async function verifyTurnstile(token, remoteIp = "") {
+
+    if (!TURNSTILE_SECRET_KEY) {
+        console.error(
+            "TURNSTILE_SECRET_KEY is not configured."
+        );
+        return false;
+    }
+
+    if (!token || typeof token !== "string") {
+        return false;
+    }
+
+    try {
+
+        const formData =
+            new URLSearchParams();
+
+        formData.append(
+            "secret",
+            TURNSTILE_SECRET_KEY
+        );
+
+        formData.append(
+            "response",
+            token
+        );
+
+        if (remoteIp) {
+            formData.append(
+                "remoteip",
+                remoteIp
+            );
+        }
+
+        const response = await fetch(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/x-www-form-urlencoded"
+                },
+                body: formData.toString()
+            }
+        );
+
+        if (!response.ok) {
+
+            console.error(
+                "Turnstile verification HTTP error:",
+                response.status
+            );
+
+            return false;
+        }
+
+        const result =
+            await response.json();
+
+        if (!result.success) {
+
+            console.warn(
+                "Turnstile verification failed:",
+                result["error-codes"] || []
+            );
+
+            return false;
+        }
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Turnstile verification error:",
+            error
+        );
+
+        return false;
+    }
+}
 // ============================================================
 // CHAD PERSONALITY
 // ============================================================
