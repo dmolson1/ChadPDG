@@ -1917,7 +1917,59 @@ body {
 
         })();
 
+
     let analyticsToken = '';
+
+    function chadAnalyticsAttribution() {
+        let referrerHost = '';
+        try {
+            referrerHost = document.referrer
+                ? new URL(document.referrer).hostname
+                : '';
+        } catch (error) {}
+
+        const params = new URLSearchParams(window.location.search);
+
+        return {
+            page_path: window.location.pathname || '/',
+            referrer_host: referrerHost,
+            utm_source: params.get('utm_source') || '',
+            utm_medium: params.get('utm_medium') || '',
+            utm_campaign: params.get('utm_campaign') || '',
+            utm_content: params.get('utm_content') || '',
+            utm_term: params.get('utm_term') || ''
+        };
+    }
+
+    function trackSimpleAnalyticsEvent(
+        eventName,
+        extra
+    ) {
+        try {
+            const payload = Object.assign(
+                {
+                    event: eventName,
+                    analytics_visitor: analyticsVisitorId,
+                    metadata: chadAnalyticsAttribution()
+                },
+                extra || {}
+            );
+
+            fetch(
+                '/wp-json/chadpgt/v1/analytics/track',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    keepalive: true
+                }
+            ).catch(function () {});
+        } catch (error) {}
+    }
+
+    trackSimpleAnalyticsEvent('page_view');
 
 
     /* =====================================================
@@ -3837,6 +3889,50 @@ body {
     ) {
         syncQuestionLimit();
     }
+
+
+
+    document.addEventListener(
+        'click',
+        function (event) {
+            const link = event.target.closest
+                ? event.target.closest('.chad-video-link')
+                : null;
+
+            if (!link) {
+                return;
+            }
+
+            const channelElement =
+                link.querySelector('.chad-video-channel');
+
+            trackSimpleAnalyticsEvent(
+                'video_click',
+                {
+                    metadata: Object.assign(
+                        chadAnalyticsAttribution(),
+                        {
+                            video_title:
+                                String(link.textContent || '')
+                                    .replace(
+                                        channelElement
+                                            ? String(channelElement.textContent || '')
+                                            : '',
+                                        ''
+                                    )
+                                    .replace(/^▶\s*/, '')
+                                    .trim()
+                                    .slice(0, 300),
+                            video_channel:
+                                channelElement
+                                    ? String(channelElement.textContent || '').trim().slice(0, 300)
+                                    : ''
+                        }
+                    )
+                }
+            );
+        }
+    );
 
 
     /* =====================================================
