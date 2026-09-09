@@ -1,69 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CHADPDG Test</title>
+    <meta charset="UTF-8">
 
-<style>
-body {
-    font-family: Arial, sans-serif;
-    max-width: 800px;
-    margin: 40px auto;
-    padding: 20px;
-}
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-textarea {
-    width: 100%;
-    min-height: 100px;
-    padding: 12px;
-    font-size: 16px;
-}
+    <title>CHADPDG Test</title>
 
-button {
-    margin-top: 10px;
-    padding: 12px 18px;
-    font-weight: bold;
-    cursor: pointer;
-}
+    <script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        async
+        defer
+    ></script>
 
-#chat {
-    margin-top: 30px;
-}
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-.message {
-    margin-bottom: 20px;
-}
+        body {
+            margin: 0;
+            padding: 30px 15px;
+            background: #111;
+            color: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+        }
 
-.user {
-    font-weight: bold;
-}
+        #app {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
 
-.chad {
-    white-space: pre-wrap;
-    line-height: 1.5;
-}
-</style>
+        h1 {
+            margin: 0 0 5px;
+            font-size: 34px;
+        }
+
+        .tagline {
+            color: #bbb;
+            margin-bottom: 25px;
+        }
+
+        #chat {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            min-height: 300px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            padding: 12px 15px;
+            margin-bottom: 14px;
+            border-radius: 8px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .user {
+            background: #333;
+        }
+
+        .chad {
+            background: #242424;
+            border-left: 4px solid #f5c518;
+        }
+
+        .label {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #555;
+            resize: vertical;
+        }
+
+        #turnstile-wrap {
+            margin: 15px 0;
+        }
+
+        #buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 0;
+            border-radius: 6px;
+        }
+
+        #ask {
+            background: #f5c518;
+            color: #111;
+        }
+
+        #reset {
+            background: #444;
+            color: #fff;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 15px;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #ff8080;
+        }
+    </style>
 </head>
 
 <body>
 
-<h1>CHADPDG TEST</h1>
+<div id="app">
 
-<textarea id="question" placeholder="Ask Chad something..."></textarea>
+    <h1>CHADPDG</h1>
 
-<br>
+    <div class="tagline">
+        DIY advice from an AI who is annoyingly confident about everything.
+    </div>
 
-<button id="ask">ASK CHAD</button>
+    <div id="chat"></div>
 
-<button id="reset">NEW CONVERSATION</button>
+    <textarea
+        id="question"
+        placeholder="Ask Chad something..."
+    ></textarea>
 
-<div id="chat"></div>
+    <div id="turnstile-wrap">
+
+        <div
+            class="cf-turnstile"
+            data-sitekey="0x4AAAAAAEs8NPfO2xl4mDcY"
+            data-callback="onTurnstileSuccess"
+            data-expired-callback="onTurnstileExpired"
+            data-error-callback="onTurnstileError"
+        ></div>
+
+    </div>
+
+    <div id="buttons">
+
+        <button
+            id="ask"
+            type="button"
+        >
+            ASK CHAD
+        </button>
+
+        <button
+            id="reset"
+            type="button"
+        >
+            NEW CONVERSATION
+        </button>
+
+    </div>
+
+    <div id="status"></div>
+
+</div>
+
 
 <script>
 
-let conversationId =
-    localStorage.getItem("chad_test_conversation_id") || "";
+const CHAT_STORAGE_KEY =
+    "chadpdg_conversation_id";
+
+let turnstileToken = "";
 
 const chat =
     document.getElementById("chat");
@@ -71,169 +197,402 @@ const chat =
 const question =
     document.getElementById("question");
 
-document
-    .getElementById("ask")
-    .addEventListener(
-        "click",
-        async () => {
+const askButton =
+    document.getElementById("ask");
 
-            const message =
-                question.value.trim();
+const resetButton =
+    document.getElementById("reset");
 
-            if (!message) return;
+const statusBox =
+    document.getElementById("status");
 
-            chat.innerHTML += `
-                <div class="message">
-                    <div class="user">You:</div>
-                    <div>${escapeHtml(message)}</div>
-                </div>
-            `;
 
-            question.value = "";
+function getConversationId() {
 
-            const loading =
-                document.createElement("div");
+    return localStorage.getItem(
+        CHAT_STORAGE_KEY
+    ) || "";
+}
 
-            loading.className = "message";
 
-            loading.innerHTML =
-                "<strong>Chad:</strong> judging your question...";
+function saveConversationId(id) {
 
-            chat.appendChild(loading);
+    if (!id) {
+        return;
+    }
 
-            try {
-
-                const response =
-                    await fetch(
-                        "/ask",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    message,
-                                    conversation_id:
-                                        conversationId
-                                })
-                        }
-                    );
-
-                const data =
-                    await response.json();
-
-                loading.remove();
-
-                if (!data.success) {
-
-                    chat.innerHTML += `
-                        <div class="message">
-                            <strong>ERROR:</strong>
-                            ${escapeHtml(
-                                data.error ||
-                                "Something went sideways."
-                            )}
-                        </div>
-                    `;
-
-                    return;
-                }
-
-                conversationId =
-                    data.conversation_id;
-
-                localStorage.setItem(
-                    "chad_test_conversation_id",
-                    conversationId
-                );
-
-                chat.innerHTML += `
-                    <div class="message">
-                        <div><strong>Chad:</strong></div>
-                        <div class="chad">
-                            ${escapeHtml(data.answer)}
-                        </div>
-                    </div>
-                `;
-
-            } catch (error) {
-
-                loading.remove();
-
-                chat.innerHTML += `
-                    <div class="message">
-                        <strong>ERROR:</strong>
-                        Could not reach Chad.
-                    </div>
-                `;
-            }
-        }
+    localStorage.setItem(
+        CHAT_STORAGE_KEY,
+        id
     );
+}
 
 
-document
-    .getElementById("reset")
-    .addEventListener(
-        "click",
-        async () => {
+function clearConversationId() {
 
-            try {
-
-                const response =
-                    await fetch(
-                        "/reset",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    conversation_id:
-                                        conversationId
-                                })
-                        }
-                    );
-
-                const data =
-                    await response.json();
-
-                conversationId =
-                    data.conversation_id || "";
-
-                localStorage.setItem(
-                    "chad_test_conversation_id",
-                    conversationId
-                );
-
-                chat.innerHTML = "";
-
-            } catch (error) {
-
-                alert(
-                    "Chad failed to forget. Very on-brand."
-                );
-            }
-        }
+    localStorage.removeItem(
+        CHAT_STORAGE_KEY
     );
+}
 
 
-function escapeHtml(value) {
+function setStatus(message, isError = false) {
 
-    const div =
+    statusBox.textContent =
+        message || "";
+
+    statusBox.className =
+        isError ? "error" : "";
+}
+
+
+function addMessage(role, text) {
+
+    const wrapper =
         document.createElement("div");
 
-    div.textContent =
-        String(value);
+    wrapper.className =
+        "message " +
+        (
+            role === "user"
+                ? "user"
+                : "chad"
+        );
 
-    return div.innerHTML;
+
+    const label =
+        document.createElement("div");
+
+    label.className =
+        "label";
+
+    label.textContent =
+        role === "user"
+            ? "You"
+            : "Chad";
+
+
+    const body =
+        document.createElement("div");
+
+    body.textContent =
+        text;
+
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(body);
+
+    chat.appendChild(wrapper);
+
+    window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: "smooth"
+    });
+}
+
+
+window.onTurnstileSuccess =
+    function(token) {
+
+        turnstileToken = token;
+
+        setStatus(
+            "Human verified. Chad is disappointed."
+        );
+    };
+
+
+window.onTurnstileExpired =
+    function() {
+
+        turnstileToken = "";
+
+        setStatus(
+            "Verification expired. Check the box again.",
+            true
+        );
+    };
+
+
+window.onTurnstileError =
+    function() {
+
+        turnstileToken = "";
+
+        setStatus(
+            "Turnstile had a moment. Try again.",
+            true
+        );
+    };
+
+
+function resetTurnstile() {
+
+    turnstileToken = "";
+
+    if (
+        window.turnstile &&
+        typeof window.turnstile.reset === "function"
+    ) {
+
+        window.turnstile.reset();
+    }
+}
+
+
+async function askChad() {
+
+    const message =
+        question.value.trim();
+
+
+    if (!message) {
+
+        setStatus(
+            "Type a question first, champ.",
+            true
+        );
+
+        return;
+    }
+
+
+    if (!turnstileToken) {
+
+        setStatus(
+            "Complete the human verification first.",
+            true
+        );
+
+        return;
+    }
+
+
+    askButton.disabled = true;
+    question.disabled = true;
+
+    setStatus(
+        "Chad is thinking. Try not to interrupt the miracle."
+    );
+
+    addMessage(
+        "user",
+        message
+    );
+
+    question.value = "";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/ask",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        message,
+
+                        conversation_id:
+                            getConversationId(),
+
+                        turnstile_token:
+                            turnstileToken
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.error ||
+                "Chad broke something."
+            );
+        }
+
+
+        if (data.conversation_id) {
+
+            saveConversationId(
+                data.conversation_id
+            );
+        }
+
+
+        addMessage(
+            "chad",
+            data.answer ||
+            "Chad answered without actually answering. Impressive."
+        );
+
+
+        setStatus(
+            "Conversation ID: " +
+            (
+                data.conversation_id ||
+                getConversationId() ||
+                "none"
+            )
+        );
+
+    } catch (error) {
+
+        addMessage(
+            "chad",
+            "Something went sideways. " +
+            error.message
+        );
+
+        setStatus(
+            error.message,
+            true
+        );
+
+    } finally {
+
+        askButton.disabled = false;
+        question.disabled = false;
+
+        resetTurnstile();
+
+        question.focus();
+    }
+}
+
+
+async function newConversation() {
+
+    resetButton.disabled = true;
+
+    setStatus(
+        "Chad is forgetting you. Surprisingly easy."
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/reset",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        conversation_id:
+                            getConversationId()
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.error ||
+                "Could not reset conversation."
+            );
+        }
+
+
+        clearConversationId();
+
+        if (data.conversation_id) {
+
+            saveConversationId(
+                data.conversation_id
+            );
+        }
+
+
+        chat.innerHTML = "";
+
+        addMessage(
+            "chad",
+            "Fresh conversation. Try not to ruin this one."
+        );
+
+        setStatus(
+            "New conversation started."
+        );
+
+        resetTurnstile();
+
+    } catch (error) {
+
+        setStatus(
+            error.message,
+            true
+        );
+
+    } finally {
+
+        resetButton.disabled = false;
+    }
+}
+
+
+askButton.addEventListener(
+    "click",
+    askChad
+);
+
+
+resetButton.addEventListener(
+    "click",
+    newConversation
+);
+
+
+question.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey
+        ) {
+
+            event.preventDefault();
+
+            askChad();
+        }
+    }
+);
+
+
+if (getConversationId()) {
+
+    setStatus(
+        "Existing Chad conversation loaded."
+    );
+
+} else {
+
+    setStatus(
+        "No conversation yet. Chad is enjoying the silence."
+    );
 }
 
 </script>
