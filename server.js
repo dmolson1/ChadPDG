@@ -8,6 +8,73 @@ const TURNSTILE_SECRET_KEY =
 const app = express();
 
 app.use(express.json({ limit: "12kb" }));
+
+// ============================================================
+// CORS / BROWSER ORIGIN PROTECTION
+// ============================================================
+
+app.use((req, res, next) => {
+
+    const origin =
+        typeof req.headers.origin === "string"
+            ? req.headers.origin
+            : "";
+
+    if (origin && ALLOWED_ORIGINS.has(origin)) {
+
+        res.setHeader(
+            "Access-Control-Allow-Origin",
+            origin
+        );
+
+        res.setHeader(
+            "Vary",
+            "Origin"
+        );
+
+        res.setHeader(
+            "Access-Control-Allow-Headers",
+            "Content-Type"
+        );
+
+        res.setHeader(
+            "Access-Control-Allow-Methods",
+            "GET,POST,OPTIONS"
+        );
+    }
+
+    if (
+        req.method === "OPTIONS"
+    ) {
+
+        if (
+            origin &&
+            !ALLOWED_ORIGINS.has(origin)
+        ) {
+
+            return res.sendStatus(403);
+        }
+
+        return res.sendStatus(204);
+    }
+
+    if (
+        origin &&
+        !ALLOWED_ORIGINS.has(origin)
+    ) {
+
+        return res
+            .status(403)
+            .json({
+                success: false,
+                error:
+                    "This browser origin is not allowed to use Chad."
+            });
+    }
+
+    next();
+});
+
 app.use(express.static("public"));
 
 const PORT =
@@ -18,6 +85,19 @@ const MODEL =
 
 const DAILY_LIMIT =
     5;
+
+const SHOPPING_TOKEN_TTL_MINUTES =
+    30;
+
+const ALLOWED_ORIGINS =
+    new Set([
+        "https://hammeredhandyman.com",
+        "https://www.hammeredhandyman.com",
+        "https://seal-app-zgkfc.ondigitalocean.app"
+    ]);
+
+const AMAZON_TAG =
+    "hammeredhandy-20";
 
 
 // ============================================================
@@ -110,6 +190,27 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS
             idx_chad_daily_usage_date
             ON chad_daily_usage(usage_date)
+        `);
+
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS chad_shopping_tokens (
+                token_hash VARCHAR(64) PRIMARY KEY,
+                conversation_id UUID NOT NULL
+                    REFERENCES chad_conversations(id)
+                    ON DELETE CASCADE,
+                question TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                consumed_at TIMESTAMPTZ NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS
+            idx_chad_shopping_tokens_expires
+            ON chad_shopping_tokens(expires_at)
         `);
 
 
@@ -659,6 +760,493 @@ async function verifyTurnstile(
 
         return false;
     }
+}
+
+
+// ============================================================
+// CORE 4 PRODUCT / SHOPPING HELPERS
+// ============================================================
+
+function normalizeAsin(value) {
+
+    const asin =
+        typeof value === "string"
+            ? value.trim().toUpperCase()
+            : "";
+
+    return /^[A-Z0-9]{10}$/.test(asin)
+        ? asin
+        : "";
+}
+
+
+function amazonCanadaUrl(asin) {
+
+    const cleanAsin =
+        normalizeAsin(asin);
+
+    if (!cleanAsin) {
+        return "";
+    }
+
+    return (
+        "https://www.amazon.ca/dp/" +
+        encodeURIComponent(cleanAsin) +
+        "?tag=" +
+        encodeURIComponent(AMAZON_TAG)
+    );
+}
+
+
+function cleanProducts(products) {
+
+    if (!Array.isArray(products)) {
+        return [];
+    }
+
+    const clean = [];
+    const seen = new Set();
+
+    for (const product of products) {
+
+        if (!product) {
+            continue;
+        }
+
+        const asin =
+            normalizeAsin(product.asin);
+
+        if (!asin || seen.has(asin)) {
+            continue;
+        }
+
+        const sourceUrl =
+            typeof product.source_url === "string"
+                ? product.source_url.trim()
+                : "";
+
+        // Chad may only surface a pick when the model actually
+        // returned a source used to verify the product.
+        if (
+            !sourceUrl ||
+            !/^https?:\/\//i.test(sourceUrl)
+        ) {
+            continue;
+        }
+
+        seen.add(asin);
+
+        clean.push({
+            name:
+                typeof product.name === "string"
+                    ? product.name.trim()
+                    : "Chad's Pick",
+
+            description:
+                typeof product.description === "string"
+                    ? product.description.trim()
+                    : "",
+
+            asin,
+
+            source_url:
+                sourceUrl,
+
+            amazon_url:
+                amazonCanadaUrl(asin)
+        });
+
+        if (clean.length >= 5) {
+            break;
+        }
+    }
+
+    return clean;
+}
+
+
+function hashShoppingToken(token) {
+
+    return crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+}
+
+
+async function createShoppingToken(
+    conversationId,
+    question
+) {
+
+    const token =
+        crypto.randomUUID() +
+        crypto.randomBytes(16).toString("hex");
+
+    const tokenHash =
+        hashShoppingToken(token);
+
+    await pool.query(
+        `
+        INSERT INTO chad_shopping_tokens (
+            token_hash,
+            conversation_id,
+            question,
+            expires_at
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            NOW() + ($4 * INTERVAL '1 minute')
+        )
+        `,
+        [
+            tokenHash,
+            conversationId,
+            question,
+            SHOPPING_TOKEN_TTL_MINUTES
+        ]
+    );
+
+    return token;
+}
+
+
+async function consumeShoppingToken(
+    token,
+    conversationId,
+    question
+) {
+
+    if (
+        typeof token !== "string" ||
+        token.length < 20
+    ) {
+        return false;
+    }
+
+    const tokenHash =
+        hashShoppingToken(token);
+
+    const result =
+        await pool.query(
+            `
+            UPDATE chad_shopping_tokens
+            SET consumed_at = NOW()
+            WHERE token_hash = $1
+              AND conversation_id = $2
+              AND question = $3
+              AND consumed_at IS NULL
+              AND expires_at > NOW()
+            RETURNING token_hash
+            `,
+            [
+                tokenHash,
+                conversationId,
+                question
+            ]
+        );
+
+    return result.rowCount > 0;
+}
+
+
+async function callStructuredOpenAI({
+    input,
+    schema,
+    schemaName,
+    useWebSearch = true
+}) {
+
+    const body = {
+        model: MODEL,
+        input,
+        text: {
+            format: {
+                type: "json_schema",
+                name: schemaName,
+                strict: true,
+                schema
+            }
+        }
+    };
+
+    if (useWebSearch) {
+        body.tools = [
+            {
+                type: "web_search"
+            }
+        ];
+    }
+
+    const response =
+        await fetch(
+            "https://api.openai.com/v1/responses",
+            {
+                method: "POST",
+                headers: {
+                    Authorization:
+                        `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Content-Type":
+                        "application/json"
+                },
+                body:
+                    JSON.stringify(body)
+            }
+        );
+
+    const data =
+        await response.json();
+
+    if (!response.ok) {
+
+        throw new Error(
+            data?.error?.message ||
+            "OpenAI request failed."
+        );
+    }
+
+    const responseText =
+        getResponseText(data);
+
+    if (!responseText) {
+        throw new Error(
+            "OpenAI returned no structured text."
+        );
+    }
+
+    return {
+        decoded:
+            JSON.parse(responseText),
+        data
+    };
+}
+
+
+const PRODUCT_RESEARCH_SCHEMA = {
+
+    type: "object",
+    additionalProperties: false,
+
+    properties: {
+
+        products: {
+
+            type: "array",
+
+            items: {
+
+                type: "object",
+                additionalProperties: false,
+
+                properties: {
+
+                    name: {
+                        type: "string"
+                    },
+
+                    description: {
+                        type: "string"
+                    },
+
+                    asin: {
+                        type: "string"
+                    },
+
+                    source_url: {
+                        type: "string"
+                    }
+                },
+
+                required: [
+                    "name",
+                    "description",
+                    "asin",
+                    "source_url"
+                ]
+            }
+        }
+    },
+
+    required: [
+        "products"
+    ]
+};
+
+
+async function getProductPicks(
+    question,
+    answer
+) {
+
+    const prompt = `
+You are Chad's product researcher.
+
+The user asked:
+${question}
+
+Chad answered:
+${answer}
+
+Find 2 to 5 products that are genuinely useful for completing this physical DIY job or diagnosing the problem.
+
+IMPORTANT:
+- Use web search.
+- Prefer products that can be bought on Amazon Canada.
+- Return a real 10-character ASIN only when you can verify it.
+- Never invent an ASIN.
+- Never invent a product.
+- source_url must be a real webpage you used to verify the exact product/ASIN.
+- If diagnosis is unresolved, recommend diagnostic tools, testers, cleaners, consumables or measuring tools instead of guessing a replacement part.
+- Once the evidence actually identifies a failed component, a relevant replacement part is okay.
+- Return fewer products rather than making anything up.
+`;
+
+    try {
+
+        const result =
+            await callStructuredOpenAI({
+                input: prompt,
+                schema:
+                    PRODUCT_RESEARCH_SCHEMA,
+                schemaName:
+                    "chad_product_research",
+                useWebSearch:
+                    true
+            });
+
+        return cleanProducts(
+            result.decoded.products
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Chad product research failed:",
+            error.message
+        );
+
+        return [];
+    }
+}
+
+
+const SHOPPING_LIST_SCHEMA = {
+
+    type: "object",
+    additionalProperties: false,
+
+    properties: {
+
+        title: {
+            type: "string"
+        },
+
+        items: {
+
+            type: "array",
+
+            items: {
+
+                type: "object",
+                additionalProperties: false,
+
+                properties: {
+
+                    name: {
+                        type: "string"
+                    },
+
+                    quantity: {
+                        type: "string"
+                    },
+
+                    note: {
+                        type: "string"
+                    },
+
+                    asin: {
+                        type: "string"
+                    },
+
+                    source_url: {
+                        type: "string"
+                    }
+                },
+
+                required: [
+                    "name",
+                    "quantity",
+                    "note",
+                    "asin",
+                    "source_url"
+                ]
+            }
+        }
+    },
+
+    required: [
+        "title",
+        "items"
+    ]
+};
+
+
+function cleanShoppingItems(items) {
+
+    if (!Array.isArray(items)) {
+        return [];
+    }
+
+    return items
+        .slice(0, 20)
+        .map(item => {
+
+            const asin =
+                normalizeAsin(item?.asin);
+
+            const sourceUrl =
+                typeof item?.source_url === "string"
+                    ? item.source_url.trim()
+                    : "";
+
+            return {
+                name:
+                    typeof item?.name === "string"
+                        ? item.name.trim()
+                        : "Item",
+
+                quantity:
+                    typeof item?.quantity === "string"
+                        ? item.quantity.trim()
+                        : "",
+
+                note:
+                    typeof item?.note === "string"
+                        ? item.note.trim()
+                        : "",
+
+                asin:
+                    asin &&
+                    /^https?:\/\//i.test(sourceUrl)
+                        ? asin
+                        : "",
+
+                source_url:
+                    asin &&
+                    /^https?:\/\//i.test(sourceUrl)
+                        ? sourceUrl
+                        : "",
+
+                amazon_url:
+                    asin &&
+                    /^https?:\/\//i.test(sourceUrl)
+                        ? amazonCanadaUrl(asin)
+                        : ""
+            };
+        })
+        .filter(item => item.name);
 }
 
 
@@ -1259,7 +1847,7 @@ app.get(
                 "online",
 
             version:
-                "chad-core-3-quota",
+                "chad-core-4-og-parity",
 
             message:
                 "Chad is alive. Unfortunately."
@@ -1321,7 +1909,7 @@ app.get(
                     : "degraded",
 
             version:
-                "chad-core-3-quota",
+                "chad-core-4-og-parity",
 
             openaiConfigured:
                 Boolean(
@@ -1414,7 +2002,7 @@ app.get(
                     DAILY_LIMIT - remaining,
 
                 version:
-                    "chad-core-3-quota"
+                    "chad-core-4-og-parity"
             });
 
 
@@ -2136,6 +2724,62 @@ app.post(
                 );
 
 
+            let products =
+                cleanProducts(
+                    decoded.products
+                );
+
+
+            // OG Chad behavior:
+            // If the first answer did not produce enough verified
+            // Chad's Picks, do a separate product-research pass.
+            if (
+                Boolean(
+                    decoded.shopping_list_recommended
+                ) &&
+                products.length < 2
+            ) {
+
+                const fallbackProducts =
+                    await getProductPicks(
+                        message,
+                        answer
+                    );
+
+                const combined =
+                    [
+                        ...products,
+                        ...fallbackProducts
+                    ];
+
+                products =
+                    cleanProducts(
+                        combined
+                    );
+            }
+
+
+            const shoppingListRecommended =
+                Boolean(
+                    decoded
+                        .shopping_list_recommended
+                );
+
+
+            let shoppingToken =
+                "";
+
+
+            if (shoppingListRecommended) {
+
+                shoppingToken =
+                    await createShoppingToken(
+                        conversationId,
+                        message
+                    );
+            }
+
+
             const remaining =
                 await getRemainingQuestions(
                     visitorHash
@@ -2154,20 +2798,12 @@ app.post(
                 answer,
 
                 shopping_list_recommended:
-                    Boolean(
-                        decoded
-                            .shopping_list_recommended
-                    ),
+                    shoppingListRecommended,
 
-                products:
-                    Array.isArray(
-                        decoded.products
-                    )
-                        ? decoded.products.slice(
-                            0,
-                            5
-                        )
-                        : [],
+                shopping_token:
+                    shoppingToken,
+
+                products,
 
                 videos:
                     cleanVideos(
@@ -2191,7 +2827,7 @@ app.post(
                     remaining <= 0,
 
                 version:
-                    "chad-core-3-quota"
+                    "chad-core-4-og-parity"
             });
 
 
@@ -2223,6 +2859,184 @@ app.post(
 
                     error:
                         "Something went sideways. Chad is blaming the server."
+                });
+        }
+    }
+);
+
+
+// ============================================================
+// BUILD MY SHOPPING LIST
+// Does NOT consume another free daily question.
+// Uses a one-time, 30-minute token created by /ask.
+// ============================================================
+
+app.post(
+    "/shopping-list",
+    async (req, res) => {
+
+        try {
+
+            if (
+                !process.env.OPENAI_API_KEY ||
+                !process.env.DATABASE_URL
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+                        success: false,
+                        error:
+                            "Chad's shopping department is currently on break."
+                    });
+            }
+
+
+            const conversationId =
+                typeof req.body.conversation_id === "string"
+                    ? req.body.conversation_id.trim()
+                    : "";
+
+            const question =
+                typeof req.body.question === "string"
+                    ? req.body.question.trim()
+                    : "";
+
+            const shoppingToken =
+                typeof req.body.shopping_token === "string"
+                    ? req.body.shopping_token.trim()
+                    : "";
+
+
+            if (
+                !conversationId ||
+                !/^[a-f0-9-]{36}$/i.test(
+                    conversationId
+                ) ||
+                !question ||
+                !shoppingToken
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            "Chad needs the original job and a valid shopping-list token."
+                    });
+            }
+
+
+            const tokenValid =
+                await consumeShoppingToken(
+                    shoppingToken,
+                    conversationId,
+                    question
+                );
+
+
+            if (!tokenValid) {
+
+                return res
+                    .status(403)
+                    .json({
+                        success: false,
+                        error:
+                            "That shopping-list button expired or was already used. Ask Chad again and he'll make you another one."
+                    });
+            }
+
+
+            const memory =
+                await loadConversationMemory(
+                    conversationId,
+                    10
+                );
+
+
+            const prompt = `
+You are CHADPDG building a practical shopping list for the user's DIY job.
+
+Original question:
+${question}
+
+Recent conversation:
+${memory
+    .map(
+        item =>
+            `${item.role}: ${item.content}`
+    )
+    .join("\\n")}
+
+Build the useful tools/materials/consumables list for actually doing this job.
+
+Rules:
+- Keep it practical.
+- Do not pad the list.
+- Include quantities when useful.
+- Use web search when matching an item to a purchasable product.
+- If you can verify an exact Amazon Canada product, return its real 10-character ASIN and the real source_url used to verify it.
+- Never invent ASINs, URLs or products.
+- If no exact product is safely verified, leave asin and source_url as empty strings.
+- Do not guess replacement parts when diagnosis is unresolved.
+`;
+
+
+            const result =
+                await callStructuredOpenAI({
+                    input: prompt,
+                    schema:
+                        SHOPPING_LIST_SCHEMA,
+                    schemaName:
+                        "chad_shopping_list",
+                    useWebSearch:
+                        true
+                });
+
+
+            const title =
+                typeof result.decoded.title === "string"
+                    ? result.decoded.title.trim()
+                    : "Chad's Shopping List";
+
+
+            return res.json({
+
+                success:
+                    true,
+
+                title,
+
+                items:
+                    cleanShoppingItems(
+                        result.decoded.items
+                    ),
+
+                affiliate_disclosure:
+                    "As an Amazon Associate I earn from qualifying purchases.",
+
+                conversation_id:
+                    conversationId,
+
+                version:
+                    "chad-core-4-og-parity"
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "CHADPDG /shopping-list error:",
+                error
+            );
+
+
+            return res
+                .status(500)
+                .json({
+                    success: false,
+                    error:
+                        "Chad dropped the shopping list somewhere between lumber and plumbing."
                 });
         }
     }
@@ -2270,7 +3084,7 @@ app.post(
                     newId,
 
                 version:
-                    "chad-core-3-quota"
+                    "chad-core-4-og-parity"
             });
 
 
@@ -2328,7 +3142,7 @@ async function startServer() {
         () => {
 
             console.log(
-                `CHADPDG Core 3 Quota running on port ${PORT}`
+                `CHADPDG Core 4 OG Parity running on port ${PORT}`
             );
         }
     );
