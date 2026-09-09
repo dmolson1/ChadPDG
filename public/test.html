@@ -45,6 +45,15 @@
             margin-bottom: 25px;
         }
 
+        #quota {
+            margin-bottom: 15px;
+            padding: 10px 12px;
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
         #chat {
             background: #1c1c1c;
             border: 1px solid #333;
@@ -115,7 +124,8 @@
             color: #fff;
         }
 
-        button:disabled {
+        button:disabled,
+        textarea:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
@@ -127,7 +137,7 @@
         }
 
         .error {
-            color: #ff8080;
+            color: #ff8080 !important;
         }
     </style>
 </head>
@@ -140,6 +150,10 @@
 
     <div class="tagline">
         DIY advice from an AI who is annoyingly confident about everything.
+    </div>
+
+    <div id="quota">
+        Checking Chad's daily tolerance...
     </div>
 
     <div id="chat"></div>
@@ -186,10 +200,20 @@
 
 <script>
 
-const CHAT_STORAGE_KEY =
+const CONVERSATION_STORAGE_KEY =
     "chadpdg_conversation_id";
 
+const VISITOR_STORAGE_KEY =
+    "chadpdg_visitor_id";
+
+const DAILY_LIMIT =
+    5;
+
 let turnstileToken = "";
+
+let remainingQuestions =
+    DAILY_LIMIT;
+
 
 const chat =
     document.getElementById("chat");
@@ -206,11 +230,68 @@ const resetButton =
 const statusBox =
     document.getElementById("status");
 
+const quotaBox =
+    document.getElementById("quota");
+
+
+// ============================================================
+// VISITOR ID
+// ============================================================
+
+function createVisitorId() {
+
+    if (
+        window.crypto &&
+        typeof window.crypto.randomUUID === "function"
+    ) {
+
+        return window.crypto
+            .randomUUID()
+            .replace(/-/g, "");
+    }
+
+
+    return (
+        Date.now().toString(36) +
+        Math.random().toString(36).slice(2) +
+        Math.random().toString(36).slice(2)
+    );
+}
+
+
+function getVisitorId() {
+
+    let visitorId =
+        localStorage.getItem(
+            VISITOR_STORAGE_KEY
+        );
+
+
+    if (!visitorId) {
+
+        visitorId =
+            createVisitorId();
+
+
+        localStorage.setItem(
+            VISITOR_STORAGE_KEY,
+            visitorId
+        );
+    }
+
+
+    return visitorId;
+}
+
+
+// ============================================================
+// CONVERSATION ID
+// ============================================================
 
 function getConversationId() {
 
     return localStorage.getItem(
-        CHAT_STORAGE_KEY
+        CONVERSATION_STORAGE_KEY
     ) || "";
 }
 
@@ -221,8 +302,9 @@ function saveConversationId(id) {
         return;
     }
 
+
     localStorage.setItem(
-        CHAT_STORAGE_KEY,
+        CONVERSATION_STORAGE_KEY,
         id
     );
 }
@@ -231,25 +313,85 @@ function saveConversationId(id) {
 function clearConversationId() {
 
     localStorage.removeItem(
-        CHAT_STORAGE_KEY
+        CONVERSATION_STORAGE_KEY
     );
 }
 
 
-function setStatus(message, isError = false) {
+// ============================================================
+// DISPLAY
+// ============================================================
+
+function setStatus(
+    message,
+    isError = false
+) {
 
     statusBox.textContent =
         message || "";
 
+
     statusBox.className =
-        isError ? "error" : "";
+        isError
+            ? "error"
+            : "";
 }
 
 
-function addMessage(role, text) {
+function updateQuota(
+    remaining,
+    limit = DAILY_LIMIT
+) {
+
+    remainingQuestions =
+        Math.max(
+            0,
+            Number(remaining) || 0
+        );
+
+
+    quotaBox.textContent =
+        remainingQuestions +
+        " of " +
+        limit +
+        " free questions remaining today";
+
+
+    if (
+        remainingQuestions <= 0
+    ) {
+
+        askButton.disabled =
+            true;
+
+        question.disabled =
+            true;
+
+        question.placeholder =
+            "Chad has reached his daily tolerance. Try again tomorrow.";
+
+    } else {
+
+        askButton.disabled =
+            false;
+
+        question.disabled =
+            false;
+
+        question.placeholder =
+            "Ask Chad something...";
+    }
+}
+
+
+function addMessage(
+    role,
+    text
+) {
 
     const wrapper =
         document.createElement("div");
+
 
     wrapper.className =
         "message " +
@@ -263,8 +405,10 @@ function addMessage(role, text) {
     const label =
         document.createElement("div");
 
+
     label.className =
         "label";
+
 
     label.textContent =
         role === "user"
@@ -275,26 +419,105 @@ function addMessage(role, text) {
     const body =
         document.createElement("div");
 
+
     body.textContent =
         text;
 
 
-    wrapper.appendChild(label);
-    wrapper.appendChild(body);
+    wrapper.appendChild(
+        label
+    );
 
-    chat.appendChild(wrapper);
+    wrapper.appendChild(
+        body
+    );
+
+    chat.appendChild(
+        wrapper
+    );
+
 
     window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth"
+        top:
+            document.body.scrollHeight,
+
+        behavior:
+            "smooth"
     });
 }
 
 
+// ============================================================
+// DAILY STATUS
+// ============================================================
+
+async function loadDailyStatus() {
+
+    try {
+
+        const visitorId =
+            getVisitorId();
+
+
+        const response =
+            await fetch(
+                "/status?visitor_id=" +
+                encodeURIComponent(
+                    visitorId
+                ),
+                {
+                    cache:
+                        "no-store"
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            throw new Error(
+                data.error ||
+                "Could not load quota."
+            );
+        }
+
+
+        updateQuota(
+            data.remaining,
+            data.daily_limit
+        );
+
+
+    } catch (error) {
+
+        quotaBox.textContent =
+            "Could not load today's question count.";
+
+
+        console.error(
+            "Status error:",
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// TURNSTILE
+// ============================================================
+
 window.onTurnstileSuccess =
     function(token) {
 
-        turnstileToken = token;
+        turnstileToken =
+            token;
+
 
         setStatus(
             "Human verified. Chad is disappointed."
@@ -305,7 +528,9 @@ window.onTurnstileSuccess =
 window.onTurnstileExpired =
     function() {
 
-        turnstileToken = "";
+        turnstileToken =
+            "";
+
 
         setStatus(
             "Verification expired. Check the box again.",
@@ -317,7 +542,9 @@ window.onTurnstileExpired =
 window.onTurnstileError =
     function() {
 
-        turnstileToken = "";
+        turnstileToken =
+            "";
+
 
         setStatus(
             "Turnstile had a moment. Try again.",
@@ -328,7 +555,9 @@ window.onTurnstileError =
 
 function resetTurnstile() {
 
-    turnstileToken = "";
+    turnstileToken =
+        "";
+
 
     if (
         window.turnstile &&
@@ -339,6 +568,10 @@ function resetTurnstile() {
     }
 }
 
+
+// ============================================================
+// ASK CHAD
+// ============================================================
 
 async function askChad() {
 
@@ -357,6 +590,19 @@ async function askChad() {
     }
 
 
+    if (
+        remainingQuestions <= 0
+    ) {
+
+        setStatus(
+            "That's five for today, champ. Chad has exceeded his daily tolerance for you.",
+            true
+        );
+
+        return;
+    }
+
+
     if (!turnstileToken) {
 
         setStatus(
@@ -368,19 +614,26 @@ async function askChad() {
     }
 
 
-    askButton.disabled = true;
-    question.disabled = true;
+    askButton.disabled =
+        true;
+
+    question.disabled =
+        true;
+
 
     setStatus(
         "Chad is thinking. Try not to interrupt the miracle."
     );
+
 
     addMessage(
         "user",
         message
     );
 
-    question.value = "";
+
+    question.value =
+        "";
 
 
     try {
@@ -389,23 +642,29 @@ async function askChad() {
             await fetch(
                 "/ask",
                 {
-                    method: "POST",
+
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
 
-                    body: JSON.stringify({
+                    body:
+                        JSON.stringify({
 
-                        message,
+                            message,
 
-                        conversation_id:
-                            getConversationId(),
+                            visitor_id:
+                                getVisitorId(),
 
-                        turnstile_token:
-                            turnstileToken
-                    })
+                            conversation_id:
+                                getConversationId(),
+
+                            turnstile_token:
+                                turnstileToken
+                        })
                 }
             );
 
@@ -414,7 +673,22 @@ async function askChad() {
             await response.json();
 
 
-        if (!response.ok || !data.success) {
+        if (
+            typeof data.remaining !== "undefined"
+        ) {
+
+            updateQuota(
+                data.remaining,
+                data.daily_limit ||
+                DAILY_LIMIT
+            );
+        }
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.error ||
@@ -423,7 +697,9 @@ async function askChad() {
         }
 
 
-        if (data.conversation_id) {
+        if (
+            data.conversation_id
+        ) {
 
             saveConversationId(
                 data.conversation_id
@@ -439,13 +715,9 @@ async function askChad() {
 
 
         setStatus(
-            "Conversation ID: " +
-            (
-                data.conversation_id ||
-                getConversationId() ||
-                "none"
-            )
+            "Conversation saved. Chad remembers your questionable decisions."
         );
+
 
     } catch (error) {
 
@@ -455,29 +727,52 @@ async function askChad() {
             error.message
         );
 
+
         setStatus(
             error.message,
             true
         );
 
+
     } finally {
 
-        askButton.disabled = false;
-        question.disabled = false;
+        if (
+            remainingQuestions > 0
+        ) {
+
+            askButton.disabled =
+                false;
+
+            question.disabled =
+                false;
+        }
+
 
         resetTurnstile();
 
-        question.focus();
+
+        if (
+            remainingQuestions > 0
+        ) {
+
+            question.focus();
+        }
     }
 }
 
 
+// ============================================================
+// NEW CONVERSATION
+// ============================================================
+
 async function newConversation() {
 
-    resetButton.disabled = true;
+    resetButton.disabled =
+        true;
+
 
     setStatus(
-        "Chad is forgetting you. Surprisingly easy."
+        "Chad is forgetting this conversation. Your quota, however, has a memory."
     );
 
 
@@ -487,18 +782,21 @@ async function newConversation() {
             await fetch(
                 "/reset",
                 {
-                    method: "POST",
+
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
 
-                    body: JSON.stringify({
+                    body:
+                        JSON.stringify({
 
-                        conversation_id:
-                            getConversationId()
-                    })
+                            conversation_id:
+                                getConversationId()
+                        })
                 }
             );
 
@@ -507,7 +805,10 @@ async function newConversation() {
             await response.json();
 
 
-        if (!response.ok || !data.success) {
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.error ||
@@ -518,7 +819,10 @@ async function newConversation() {
 
         clearConversationId();
 
-        if (data.conversation_id) {
+
+        if (
+            data.conversation_id
+        ) {
 
             saveConversationId(
                 data.conversation_id
@@ -526,18 +830,26 @@ async function newConversation() {
         }
 
 
-        chat.innerHTML = "";
+        chat.innerHTML =
+            "";
+
 
         addMessage(
             "chad",
-            "Fresh conversation. Try not to ruin this one."
+            "Fresh conversation. Your five-question limit did not magically regenerate. Nice try."
         );
+
+
+        await loadDailyStatus();
+
 
         setStatus(
             "New conversation started."
         );
 
+
         resetTurnstile();
+
 
     } catch (error) {
 
@@ -546,12 +858,18 @@ async function newConversation() {
             true
         );
 
+
     } finally {
 
-        resetButton.disabled = false;
+        resetButton.disabled =
+            false;
     }
 }
 
+
+// ============================================================
+// EVENTS
+// ============================================================
 
 askButton.addEventListener(
     "click",
@@ -582,11 +900,23 @@ question.addEventListener(
 );
 
 
-if (getConversationId()) {
+// ============================================================
+// STARTUP
+// ============================================================
+
+getVisitorId();
+
+loadDailyStatus();
+
+
+if (
+    getConversationId()
+) {
 
     setStatus(
         "Existing Chad conversation loaded."
     );
+
 
 } else {
 
