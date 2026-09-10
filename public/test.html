@@ -274,6 +274,28 @@ body {
     border-top:1px solid #e5e8eb;
 }
 
+/* AdSense is deliberately outside #chad-input-area.
+   Keep Google's async sizing in normal document flow so it cannot
+   enlarge the sticky mobile composer or push it over the copy above. */
+#chad-google-ad-region{
+    position:relative;
+    z-index:1;
+    width:100%;
+    margin:0 auto 14px;
+    padding:0;
+    overflow:hidden;
+}
+
+#chad-google-ad-region .chad-sponsor-google-static{
+    margin-top:12px;
+}
+
+@media(max-width:700px){
+    #chad-google-ad-region{
+        margin-bottom:calc(10px + env(safe-area-inset-bottom));
+    }
+}
+
 .chad-sponsor-google-static[hidden]{
     display:none!important;
 }
@@ -559,6 +581,14 @@ body.chad-test-enabled .chad-dev-title{
                 </span>
             </button>
 
+            <a href="/advertise.html" class="chad-sidebar-row" style="text-decoration:none;color:inherit;">
+                <span class="chad-sidebar-icon">★</span>
+                <span>
+                    <strong>Become a Sponsor</strong>
+                    <small>Advertise with Chad</small>
+                </span>
+            </a>
+
             <button type="button" class="chad-sidebar-row chad-placeholder-control">
                 <span class="chad-sidebar-icon">★</span>
                 <span>
@@ -717,13 +747,19 @@ body.chad-test-enabled .chad-dev-title{
             </div>
         </div>
 
-        <div id="chad-sponsor-google-static" class="chad-sponsor-google-static" hidden></div>
     </div>
 
         <div id="chad-turnstile"></div>
 
         <div id="chad-question-limit" aria-live="polite"></div>
 
+    </div>
+
+    <!-- Google AdSense intentionally lives OUTSIDE the sticky composer.
+         This prevents the mobile input/chat area from changing height while
+         Google initializes, fills, resizes, or returns an unfilled ad. -->
+    <div id="chad-google-ad-region" aria-label="Advertisement">
+        <div id="chad-sponsor-google-static" class="chad-sponsor-google-static" hidden></div>
     </div>
 
 </div>
@@ -2372,8 +2408,17 @@ body {
         padding: 10px 0 18px !important;
     }
 
+    /* Mobile: keep the composer in normal document flow.
+       A bottom-sticky composer can be shifted upward on first load when the
+       header/disclaimer make the page taller than the viewport, which makes
+       it visually float over the disclaimer. */
     #chad-input-area {
+        position: static !important;
+        bottom: auto !important;
+        z-index: auto !important;
+        margin-top: 10px !important;
         padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+        background: #fff !important;
     }
 
     #chad-question {
