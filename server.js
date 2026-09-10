@@ -1,6 +1,9 @@
 const express = require("express");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const multer = require("multer");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+
 
 const app = express();
 app.set("trust proxy", 1);
@@ -838,6 +841,32 @@ async function initializeDatabase() {
 
         CREATE INDEX IF NOT EXISTS chad_sponsors_active_schedule_idx
             ON chad_sponsors (is_active, priority, starts_at, ends_at);
+
+
+        CREATE TABLE IF NOT EXISTS chad_sponsor_leads (
+            id TEXT PRIMARY KEY,
+            company_name TEXT NOT NULL,
+            contact_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            website TEXT NOT NULL DEFAULT '',
+            campaign_goal TEXT NOT NULL DEFAULT '',
+            destination_url TEXT NOT NULL DEFAULT '',
+            headline TEXT NOT NULL DEFAULT '',
+            ad_copy TEXT NOT NULL DEFAULT '',
+            cta_text TEXT NOT NULL DEFAULT '',
+            preferred_start TIMESTAMPTZ,
+            preferred_end TIMESTAMPTZ,
+            budget TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            logo_url TEXT NOT NULL DEFAULT '',
+            creative_url TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'new',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS chad_sponsor_leads_status_created_idx
+            ON chad_sponsor_leads (status, created_at DESC);
 
         CREATE TABLE IF NOT EXISTS chad_ad_settings (
             settings_key TEXT PRIMARY KEY,
@@ -3741,6 +3770,384 @@ async function handleAccountDelete(req, res) {
 }
 
 
+
+const sponsorUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 8 * 1024 * 1024,
+        files: 2
+    },
+    fileFilter: (req, file, cb) => {
+        const allowed = new Set([
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "application/pdf"
+        ]);
+
+        if (!allowed.has(String(file.mimetype || "").toLowerCase())) {
+            return cb(new Error("Only JPG, PNG, WEBP, GIF, and PDF files are allowed."));
+        }
+
+        cb(null, true);
+    }
+});
+
+function getSpacesConfig() {
+    const endpoint = String(process.env.SPACES_ENDPOINT || "").trim();
+    const region = String(process.env.SPACES_REGION || "").trim();
+    const bucket = String(process.env.SPACES_BUCKET || "").trim();
+    const key = String(process.env.SPACES_KEY || "").trim();
+    const secret = String(process.env.SPACES_SECRET || "").trim();
+    const cdnBase = String(process.env.SPACES_CDN_BASE || "").trim();
+
+    if (!endpoint || !region || !bucket || !key || !secret) {
+        return null;
+    }
+
+    return {
+        endpoint,
+        region,
+        bucket,
+        key,
+        secret,
+        cdnBase
+    };
+}
+
+async function uploadSponsorFile(file, leadId, label) {
+    if (!file) return "";
+
+    const config = getSpacesConfig();
+
+    if (!config) {
+        throw new Error("Sponsor uploads are not configured yet.");
+    }
+
+    const extByMime = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "application/pdf": "pdf"
+    };
+
+    const ext = extByMime[String(file.mimetype || "").toLowerCase()] || "bin";
+    const objectKey =
+        `sponsor-leads/${leadId}/${label}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+
+    const client = new S3Client({
+        region: config.region,
+        endpoint: config.endpoint,
+        credentials: {
+            accessKeyId: config.key,
+            secretAccessKey: config.secret
+        },
+        forcePathStyle: false
+    });
+
+    await client.send(new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        ACL: "public-read",
+        CacheControl: "public, max-age=31536000, immutable"
+    }));
+
+    if (config.cdnBase) {
+        return config.cdnBase.replace(/\/+$/, "") + "/" + objectKey;
+    }
+
+    return config.endpoint.replace(/\/+$/, "") + "/" + config.bucket + "/" + objectKey;
+}
+
+function cleanLeadText(value, max = 500) {
+    return String(value ?? "").trim().slice(0, max);
+}
+
+function cleanLeadDate(value) {
+    const raw = cleanLeadText(value, 80);
+    if (!raw) return null;
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function validateLeadUrl(value, required = false) {
+    const raw = cleanLeadText(value, 1000);
+
+    if (!raw && !required) return "";
+    if (!raw && required) return "A URL is required.";
+
+    try {
+        const url = new URL(raw);
+        if (!["http:", "https:"].includes(url.protocol)) {
+            return "Only http and https URLs are allowed.";
+        }
+    } catch {
+        return "That URL is not valid.";
+    }
+
+    return "";
+}
+
+async function handleSponsorLeadSubmit(req, res) {
+    try {
+        const companyName = cleanLeadText(req.body?.company_name, 160);
+        const contactName = cleanLeadText(req.body?.contact_name, 160);
+        const email = cleanLeadText(req.body?.email, 240).toLowerCase();
+        const website = cleanLeadText(req.body?.website, 1000);
+        const campaignGoal = cleanLeadText(req.body?.campaign_goal, 800);
+        const destinationUrl = cleanLeadText(req.body?.destination_url, 1000);
+        const headline = cleanLeadText(req.body?.headline, 220);
+        const adCopy = cleanLeadText(req.body?.ad_copy, 1000);
+        const ctaText = cleanLeadText(req.body?.cta_text, 100);
+        const preferredStart = cleanLeadDate(req.body?.preferred_start);
+        const preferredEnd = cleanLeadDate(req.body?.preferred_end);
+        const budget = cleanLeadText(req.body?.budget, 120);
+        const notes = cleanLeadText(req.body?.notes, 3000);
+
+        if (!companyName || !contactName || !email) {
+            return res.status(400).json({
+                success: false,
+                error: "Company name, contact name, and email are required."
+            });
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({
+                success: false,
+                error: "Please enter a valid email address."
+            });
+        }
+
+        const websiteError = validateLeadUrl(website, false);
+        if (websiteError) {
+            return res.status(400).json({
+                success: false,
+                error: "Website: " + websiteError
+            });
+        }
+
+        const destinationError = validateLeadUrl(destinationUrl, false);
+        if (destinationError) {
+            return res.status(400).json({
+                success: false,
+                error: "Destination URL: " + destinationError
+            });
+        }
+
+        if (
+            preferredStart &&
+            preferredEnd &&
+            new Date(preferredEnd) <= new Date(preferredStart)
+        ) {
+            return res.status(400).json({
+                success: false,
+                error: "Preferred end date must be after the preferred start date."
+            });
+        }
+
+        const leadId = crypto.randomUUID();
+
+        const logoFile = req.files?.logo?.[0] || null;
+        const creativeFile = req.files?.creative?.[0] || null;
+
+        let logoUrl = "";
+        let creativeUrl = "";
+
+        if (logoFile || creativeFile) {
+            [logoUrl, creativeUrl] = await Promise.all([
+                uploadSponsorFile(logoFile, leadId, "logo"),
+                uploadSponsorFile(creativeFile, leadId, "creative")
+            ]);
+        }
+
+        await pool.query(
+            `INSERT INTO chad_sponsor_leads (
+                id,
+                company_name,
+                contact_name,
+                email,
+                website,
+                campaign_goal,
+                destination_url,
+                headline,
+                ad_copy,
+                cta_text,
+                preferred_start,
+                preferred_end,
+                budget,
+                notes,
+                logo_url,
+                creative_url,
+                status
+             )
+             VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'new'
+             )`,
+            [
+                leadId,
+                companyName,
+                contactName,
+                email,
+                website,
+                campaignGoal,
+                destinationUrl,
+                headline,
+                adCopy,
+                ctaText,
+                preferredStart,
+                preferredEnd,
+                budget,
+                notes,
+                logoUrl,
+                creativeUrl
+            ]
+        );
+
+        return res.status(201).json({
+            success: true,
+            lead_id: leadId,
+            message: "Thanks — your sponsor request has been sent to Chad's people."
+        });
+    } catch (error) {
+        console.error("Sponsor lead submit error:", error);
+
+        const message =
+            error?.message === "Sponsor uploads are not configured yet."
+                ? "Your form is ready, but file uploads are not enabled yet. Remove the attachments and submit again, or try again after uploads are enabled."
+                : (error?.message || "Could not submit sponsor request.");
+
+        return res.status(500).json({
+            success: false,
+            error: message
+        });
+    }
+}
+
+async function handleAdminSponsorLeads(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const result = await pool.query(
+            `SELECT *
+             FROM chad_sponsor_leads
+             ORDER BY
+                CASE status
+                    WHEN 'new' THEN 0
+                    WHEN 'contacted' THEN 1
+                    WHEN 'approved' THEN 2
+                    WHEN 'declined' THEN 3
+                    ELSE 4
+                END,
+                created_at DESC`
+        );
+
+        return res.json({
+            success: true,
+            leads: result.rows
+        });
+    } catch (error) {
+        console.error("Sponsor leads load error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not load sponsor leads."
+        });
+    }
+}
+
+async function handleAdminSponsorLeadStatus(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const id = cleanLeadText(req.body?.id, 100);
+        const status = cleanLeadText(req.body?.status, 40).toLowerCase();
+        const allowed = new Set(["new", "contacted", "approved", "declined"]);
+
+        if (!id || !allowed.has(status)) {
+            return res.status(400).json({
+                success: false,
+                error: "Valid lead ID and status are required."
+            });
+        }
+
+        const result = await pool.query(
+            `UPDATE chad_sponsor_leads
+             SET status = $2, updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [id, status]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({
+                success: false,
+                error: "Sponsor lead not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            lead: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Sponsor lead status error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not update sponsor lead."
+        });
+    }
+}
+
+async function handleAdminSponsorLeadDelete(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const id = cleanLeadText(req.body?.id, 100);
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: "Lead ID is required."
+            });
+        }
+
+        const result = await pool.query(
+            `DELETE FROM chad_sponsor_leads
+             WHERE id = $1
+             RETURNING id`,
+            [id]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({
+                success: false,
+                error: "Sponsor lead not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            deleted_id: id
+        });
+    } catch (error) {
+        console.error("Sponsor lead delete error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not delete sponsor lead."
+        });
+    }
+}
+
+
 function sanitizeSponsorInput(body = {}) {
     const clean = value => String(value ?? "").trim();
 
@@ -4260,16 +4667,16 @@ async function handleAdminAdSettingsSave(req, res) {
 }
 
 
-function registerBoth(method, path, handler) {
-    app[method](path, handler);
-    app[method](`/wp-json/chadpgt/v1${path}`, handler);
+function registerBoth(method, path, ...handlers) {
+    app[method](path, ...handlers);
+    app[method](`/wp-json/chadpgt/v1${path}`, ...handlers);
 }
 
 app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-22-ad-server"
+        version: "chad-core-23-sponsor-sales-funnel"
     });
 });
 
@@ -4283,7 +4690,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-22-ad-server",
+        version: "chad-core-23-sponsor-sales-funnel",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -4335,6 +4742,40 @@ registerBoth("post", "/admin/sponsors/update", handleAdminSponsorUpdate);
 registerBoth("post", "/admin/sponsors/delete", handleAdminSponsorDelete);
 registerBoth("get", "/admin/ad-settings", handleAdminAdSettingsGet);
 registerBoth("post", "/admin/ad-settings", handleAdminAdSettingsSave);
+registerBoth(
+    "post",
+    "/sponsor/lead",
+    sponsorUpload.fields([
+        { name: "logo", maxCount: 1 },
+        { name: "creative", maxCount: 1 }
+    ]),
+    handleSponsorLeadSubmit
+);
+registerBoth("get", "/admin/sponsor-leads", handleAdminSponsorLeads);
+registerBoth("post", "/admin/sponsor-leads/status", handleAdminSponsorLeadStatus);
+registerBoth("post", "/admin/sponsor-leads/delete", handleAdminSponsorLeadDelete);
+
+
+app.use((error, req, res, next) => {
+    if (error instanceof multer.MulterError) {
+        return res.status(400).json({
+            success: false,
+            error:
+                error.code === "LIMIT_FILE_SIZE"
+                    ? "Each uploaded file must be 8 MB or smaller."
+                    : "Upload failed: " + error.message
+        });
+    }
+
+    if (error && /Only JPG, PNG, WEBP, GIF, and PDF/.test(String(error.message || ""))) {
+        return res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+
+    next(error);
+});
 
 app.get("/openai-test", async (req, res) => {
     try {
