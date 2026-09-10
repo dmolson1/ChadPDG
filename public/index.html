@@ -62,9 +62,15 @@ body {
     position:absolute;
     right:14px;
     top:12px;
+    z-index:3;
+    width:38px;
+    height:38px;
     border:0;
-    background:transparent;
+    border-radius:50%;
+    background:#f0f2f4;
+    color:#111;
     font-size:28px;
+    line-height:34px;
     cursor:pointer;
 }
 #chad-share-url{
@@ -287,13 +293,17 @@ body {
         <div class="chad-share-modal" role="dialog" aria-modal="true" aria-labelledby="chad-share-title">
             <button type="button" id="chad-share-close" class="chad-share-close" aria-label="Close">×</button>
             <h2 id="chad-share-title">Share Conversation</h2>
-            <p class="chad-share-copy">Send Chad's questionable brilliance to yourself or somebody else.</p>
+            <p class="chad-share-copy">Send it by text or email, post the link, save a copy, or use your phone's share sheet for installed social apps.</p>
             <input type="text" id="chad-share-url" readonly aria-label="Share link">
             <div class="chad-share-actions">
-                <button type="button" id="chad-native-share">Share…</button>
+                <button type="button" id="chad-native-share">Share to Apps…</button>
                 <button type="button" id="chad-copy-share">Copy Link</button>
                 <button type="button" id="chad-email-share">Email</button>
                 <button type="button" id="chad-text-share">Text</button>
+                <button type="button" id="chad-whatsapp-share">WhatsApp</button>
+                <button type="button" id="chad-facebook-share">Facebook</button>
+                <button type="button" id="chad-x-share">X / Twitter</button>
+                <button type="button" id="chad-download-share">Save to Device</button>
                 <button type="button" id="chad-stop-share" class="chad-stop-share">Stop Sharing</button>
             </div>
             <div id="chad-share-status" class="chad-share-status" aria-live="polite"></div>
@@ -335,7 +345,7 @@ body {
 
             <section id="chad-auth-signup" class="chad-auth-view" hidden>
                 <h2>Create account</h2>
-                <p class="chad-auth-lead">Save conversations, keep project history, and pick up where you left off.</p>
+                <p class="chad-auth-lead">Create a free account to save conversations, share projects, keep your history, and get <strong>15 Chad questions every day</strong> instead of 5.</p>
                 <form id="chad-signup-form">
                     <label>Name <span class="chad-auth-optional">(optional)</span>
                         <input type="text" id="chad-signup-name" autocomplete="name" maxlength="80">
@@ -4920,72 +4930,129 @@ document.getElementById('chad-policy-back')?.addEventListener('click',()=>setVie
 document.getElementById('chad-ask')?.addEventListener('click',()=>{if(currentUser)setTimeout(loadRecent,4500)});
 document.addEventListener('click',e=>{if(!e.target.closest('.chad-recent-menu-wrap'))closeRecentMenus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('chad-auth-open'))closeAuth()});
-loadMe();
-})();
 
-document.getElementById('chad-save-conversation')?.addEventListener('click',async()=>{
-    if(!currentUser){document.getElementById('chad-account-button')?.click();return}
+function showSignupForFeature(feature){
+    const reason = feature === 'share' ? 'share this conversation' : 'save this conversation';
+    openAuth('signup');
+    msg('Create a free account to '+reason+', keep your project history, and get 15 Chad questions every day instead of 5.','success');
+}
+
+document.getElementById('chad-save-conversation')?.addEventListener('click', async ()=>{
+    if(!currentUser){ showSignupForFeature('save'); return; }
     await saveConversation(null);
 });
 
-document.getElementById('chad-share-conversation')?.addEventListener('click',async()=>{
-    if(!currentUser){document.getElementById('chad-account-button')?.click();return}
+document.getElementById('chad-share-conversation')?.addEventListener('click', async ()=>{
+    if(!currentUser){ showSignupForFeature('share'); return; }
     await shareConversation(null);
 });
 
-document.getElementById('chad-share-close')?.addEventListener('click',closeShareModal);
-document.getElementById('chad-share-overlay')?.addEventListener('click',e=>{
-    if(e.target.id==='chad-share-overlay')closeShareModal();
+document.getElementById('chad-share-close')?.addEventListener('click', closeShareModal);
+document.getElementById('chad-share-overlay')?.addEventListener('click', e=>{
+    if(e.target === e.currentTarget) closeShareModal();
 });
 
-document.getElementById('chad-copy-share')?.addEventListener('click',async()=>{
-    const input=document.getElementById('chad-share-url');
-    const status=document.getElementById('chad-share-status');
-    try{
-        await navigator.clipboard.writeText(input?.value||'');
-        if(status)status.textContent='Copied. Technology has peaked.';
-    }catch(_){
-        input?.select();
-        document.execCommand('copy');
-        if(status)status.textContent='Copied.';
+document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){
+        const shareOverlay = document.getElementById('chad-share-overlay');
+        if(shareOverlay && !shareOverlay.hidden) closeShareModal();
     }
 });
 
-document.getElementById('chad-native-share')?.addEventListener('click',async()=>{
-    const url=document.getElementById('chad-share-url')?.value||'';
-    const status=document.getElementById('chad-share-status');
+document.getElementById('chad-copy-share')?.addEventListener('click', async ()=>{
+    const input = document.getElementById('chad-share-url');
+    const status = document.getElementById('chad-share-status');
+    const url = input?.value || '';
+    try{
+        await navigator.clipboard.writeText(url);
+        if(status) status.textContent = 'Copied. Technology has peaked.';
+    }catch(_){
+        input?.focus();
+        input?.select();
+        try{ document.execCommand('copy'); }catch(__){}
+        if(status) status.textContent = 'Link copied.';
+    }
+});
+
+document.getElementById('chad-native-share')?.addEventListener('click', async ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const status = document.getElementById('chad-share-status');
     if(navigator.share){
         try{
-            await navigator.share({title:activeShareTitle,text:'ChadPDChee conversation',url});
-        }catch(_){}
+            await navigator.share({
+                title: activeShareTitle || 'ChadPDChee conversation',
+                text: 'Check out this ChadPDChee conversation.',
+                url
+            });
+            if(status) status.textContent = 'Shared. Chad accepts your endorsement.';
+        }catch(error){
+            if(error?.name !== 'AbortError' && status) status.textContent = 'Your device did not complete the share.';
+        }
     }else if(status){
-        status.textContent='Native sharing is not available here. Use Copy Link, Email, or Text.';
+        status.textContent = 'Use Copy Link, Email, Text, WhatsApp, Facebook, X, or Save to Device.';
     }
 });
 
-document.getElementById('chad-email-share')?.addEventListener('click',()=>{
-    const url=document.getElementById('chad-share-url')?.value||'';
-    const subject=encodeURIComponent(activeShareTitle||'ChadPDChee conversation');
-    const body=encodeURIComponent('Here is the ChadPDChee conversation:\n\n'+url);
-    window.location.href='mailto:?subject='+subject+'&body='+body;
+document.getElementById('chad-email-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const subject = encodeURIComponent(activeShareTitle || 'ChadPDChee conversation');
+    const body = encodeURIComponent('Here is the ChadPDChee conversation:\n\n' + url);
+    window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
 });
 
-document.getElementById('chad-text-share')?.addEventListener('click',()=>{
-    const url=document.getElementById('chad-share-url')?.value||'';
-    const body=encodeURIComponent('ChadPDChee conversation: '+url);
-    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
-    window.location.href=isIOS?'sms:&body='+body:'sms:?body='+body;
+document.getElementById('chad-text-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const body = encodeURIComponent('ChadPDChee conversation: ' + url);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.location.href = isIOS ? 'sms:&body=' + body : 'sms:?body=' + body;
 });
 
-document.getElementById('chad-stop-share')?.addEventListener('click',async()=>{
-    const status=document.getElementById('chad-share-status');
+document.getElementById('chad-whatsapp-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const text = encodeURIComponent((activeShareTitle || 'ChadPDChee conversation') + '\n' + url);
+    window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
+});
+
+document.getElementById('chad-facebook-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url), '_blank', 'noopener,noreferrer,width=720,height=620');
+});
+
+document.getElementById('chad-x-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const text = encodeURIComponent(activeShareTitle || 'ChadPDChee conversation');
+    window.open('https://twitter.com/intent/tweet?text=' + text + '&url=' + encodeURIComponent(url), '_blank', 'noopener,noreferrer,width=720,height=620');
+});
+
+document.getElementById('chad-download-share')?.addEventListener('click', ()=>{
+    const status = document.getElementById('chad-share-status');
+    const id = activeShareConversationId || currentConversationId || '';
+    const href = '/account/conversations/download' + (id ? '?conversation_id=' + encodeURIComponent(id) : '');
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if(status) status.textContent = 'Saving a copy to your device.';
+});
+
+document.getElementById('chad-stop-share')?.addEventListener('click', async ()=>{
+    const status = document.getElementById('chad-share-status');
     try{
-        await api('/account/conversations/unshare',jsonOptions('POST',{conversation_id:activeShareConversationId||currentConversationId||''}));
-        if(status)status.textContent='Sharing stopped. That link is now dead.';
+        await api('/account/conversations/unshare', jsonOptions('POST', {
+            conversation_id: activeShareConversationId || currentConversationId || ''
+        }));
+        if(status) status.textContent = 'Sharing stopped. That link is now dead.';
     }catch(e){
-        if(status)status.textContent=e.message||'Could not stop sharing.';
+        if(status) status.textContent = e.message || 'Could not stop sharing.';
     }
 });
+
+
+loadMe();
+})();
+
 </script>
 
 </body>
