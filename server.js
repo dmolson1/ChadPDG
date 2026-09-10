@@ -841,6 +841,12 @@ async function initializeDatabase() {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
+        ALTER TABLE chad_sponsors
+            ADD COLUMN IF NOT EXISTS discount_code TEXT NOT NULL DEFAULT '';
+
+        ALTER TABLE chad_sponsors
+            ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(5,2);
+
         CREATE INDEX IF NOT EXISTS chad_sponsors_active_schedule_idx
             ON chad_sponsors (is_active, priority, starts_at, ends_at);
 
@@ -4364,6 +4370,19 @@ function sanitizeSponsorInput(body = {}) {
     const cta = clean(body.cta || "Learn more →").slice(0, 80);
     const destinationUrl = clean(body.destination_url).slice(0, 1000);
     const imageUrl = clean(body.image_url).slice(0, 1000);
+    const discountCode = clean(body.discount_code).slice(0, 80);
+
+    const discountPercentRaw =
+        body.discount_percent === '' ||
+        body.discount_percent === null ||
+        body.discount_percent === undefined
+            ? null
+            : Number(body.discount_percent);
+
+    const discountPercent =
+        Number.isFinite(discountPercentRaw)
+            ? Math.round(discountPercentRaw * 100) / 100
+            : null;
 
     const priorityRaw = Number(body.priority);
     const priority = Number.isFinite(priorityRaw)
@@ -4388,6 +4407,8 @@ function sanitizeSponsorInput(body = {}) {
         cta,
         destination_url: destinationUrl,
         image_url: imageUrl,
+        discount_code: discountCode,
+        discount_percent: discountPercent,
         starts_at: parseOptionalDate(body.starts_at),
         ends_at: parseOptionalDate(body.ends_at),
         is_active: isActive,
@@ -4419,6 +4440,17 @@ function validateSponsorInput(sponsor) {
         } catch {
             return "Image URL is not valid.";
         }
+    }
+
+    if (
+        sponsor.discount_percent !== null &&
+        (
+            !Number.isFinite(Number(sponsor.discount_percent)) ||
+            Number(sponsor.discount_percent) <= 0 ||
+            Number(sponsor.discount_percent) > 100
+        )
+    ) {
+        return "Discount percent must be greater than 0 and no more than 100.";
     }
 
     if (
@@ -4455,6 +4487,8 @@ async function handlePublicSponsorCurrent(req, res) {
                     cta,
                     destination_url,
                     image_url,
+                    discount_code,
+                    discount_percent,
                     starts_at,
                     ends_at,
                     priority
@@ -4493,6 +4527,11 @@ async function handlePublicSponsorCurrent(req, res) {
             cta: row.cta || "Learn more →",
             url: row.destination_url,
             image_url: row.image_url || "",
+            discount_code: row.discount_code || "",
+            discount_percent:
+                row.discount_percent === null || row.discount_percent === undefined
+                    ? null
+                    : Number(row.discount_percent),
             placement: "above_chat",
             mode: "direct"
         }));
@@ -4604,10 +4643,10 @@ async function handleAdminSponsorCreate(req, res) {
         const result = await pool.query(
             `INSERT INTO chad_sponsors (
                 id, campaign_id, advertiser, headline, body, cta,
-                destination_url, image_url, starts_at, ends_at,
-                is_active, priority
+                destination_url, image_url, discount_code, discount_percent,
+                starts_at, ends_at, is_active, priority
              )
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
              RETURNING *`,
             [
                 id,
@@ -4618,6 +4657,8 @@ async function handleAdminSponsorCreate(req, res) {
                 sponsor.cta,
                 sponsor.destination_url,
                 sponsor.image_url,
+                sponsor.discount_code,
+                sponsor.discount_percent,
                 sponsor.starts_at,
                 sponsor.ends_at,
                 sponsor.is_active,
@@ -4669,10 +4710,12 @@ async function handleAdminSponsorUpdate(req, res) {
                 cta = $6,
                 destination_url = $7,
                 image_url = $8,
-                starts_at = $9,
-                ends_at = $10,
-                is_active = $11,
-                priority = $12,
+                discount_code = $9,
+                discount_percent = $10,
+                starts_at = $11,
+                ends_at = $12,
+                is_active = $13,
+                priority = $14,
                 updated_at = NOW()
              WHERE id = $1
              RETURNING *`,
@@ -4685,6 +4728,8 @@ async function handleAdminSponsorUpdate(req, res) {
                 sponsor.cta,
                 sponsor.destination_url,
                 sponsor.image_url,
+                sponsor.discount_code,
+                sponsor.discount_percent,
                 sponsor.starts_at,
                 sponsor.ends_at,
                 sponsor.is_active,
