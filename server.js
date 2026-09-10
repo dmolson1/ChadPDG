@@ -1633,7 +1633,9 @@ function cleanAnalyticsMetadata(value) {
         "video_title",
         "video_channel",
         "reason",
-        "status"
+        "status",
+        "category",
+        "topic"
     ];
 
     const output = {};
@@ -1644,6 +1646,66 @@ function cleanAnalyticsMetadata(value) {
         }
     }
     return output;
+}
+
+
+function classifyQuestionForAnalytics(question) {
+    const q = String(question || "").toLowerCase();
+
+    const categories = [
+        ["Electrical", /\b(electrical|electrician|breaker|panel|outlet|receptacle|switch|wiring|wire|circuit|conduit|voltage|volt|amp|fixture|lighting|gfci|afci)\b/],
+        ["Automotive & Mechanics", /\b(car|truck|vehicle|engine|motor|transmission|brake|rotor|caliper|oil|battery|alternator|starter|spark plug|coolant|radiator|exhaust|suspension|wheel bearing|mechanic|automotive)\b/],
+        ["Carpentry & Woodworking", /\b(carpentry|woodwork|woodworking|lumber|plywood|stud|framing|joist|rafter|cabinet|trim|baseboard|shelf|shelving|deck|fence|door frame)\b/],
+        ["Plumbing", /\b(plumbing|plumber|pipe|faucet|sink|toilet|shower|tub|drain|sewer|water heater|sump pump|leak|valve|pex|copper pipe)\b/],
+        ["Drywall & Finishing", /\b(drywall|sheetrock|plaster|joint compound|mud|taping|spackle|wall repair)\b/],
+        ["HVAC", /\b(hvac|furnace|air conditioner|air conditioning|heat pump|thermostat|duct|ventilation)\b/],
+        ["Tools & Workshop", /\b(tool|drill|drill bit|saw|grinder|impact driver|wrench|socket|compressor|shop vac|workbench|multimeter|tester)\b/],
+        ["Masonry & Concrete", /\b(masonry|brick|concrete|cement|mortar|block|stucco|foundation)\b/],
+        ["Roofing & Exterior", /\b(roof|roofing|shingle|gutter|siding|soffit|fascia|flashing)\b/],
+        ["Flooring & Tile", /\b(flooring|hardwood|laminate|vinyl plank|tile|grout|subfloor)\b/],
+        ["Painting & Finishing", /\b(paint|painting|primer|stain|varnish|clear coat|caulk|caulking)\b/],
+        ["Outdoor & Landscaping", /\b(landscap|lawn|yard|irrigation|sprinkler|tree|garden|pressure washer|fence post)\b/],
+        ["Small Engines & Equipment", /\b(lawn mower|mower|snowblower|chainsaw|generator|tractor|atv|motorcycle|small engine|skid steer|excavator)\b/],
+        ["Trailer, RV & Camping", /\b(trailer|rv|camper|camping|solar panel|lifepo4|12v|converter|awning)\b/],
+        ["Welding & Metalwork", /\b(weld|welder|welding|fabrication|metalwork|lathe|machining)\b/]
+    ];
+
+    const topics = [
+        ["Circuit breakers & panels", /\b(breaker|electrical panel|panelboard|afci|gfci breaker)\b/],
+        ["Outlets, switches & wiring", /\b(outlet|receptacle|switch|wiring|wire|circuit|conduit|gfci)\b/],
+        ["Drilling & drill bits", /\b(drill|drilling|drill bit|hole saw|tap bit)\b/],
+        ["Brakes", /\b(brake|rotor|caliper|brake pad)\b/],
+        ["Engine & diagnostics", /\b(engine|check engine|trouble code|dtc|obd|misfire|spark plug|ignition)\b/],
+        ["Battery & charging", /\b(battery|alternator|starter|charging system|lifepo4)\b/],
+        ["Framing & lumber", /\b(framing|stud|joist|rafter|lumber|plywood)\b/],
+        ["Decks & fences", /\b(deck|fence|railing|fence post)\b/],
+        ["Drywall repair", /\b(drywall|sheetrock|joint compound|taping|wall repair)\b/],
+        ["Leaks & drains", /\b(leak|drain|sewer|clog|sump pump)\b/],
+        ["Faucets, sinks & toilets", /\b(faucet|sink|toilet|shower|tub)\b/],
+        ["Water heaters", /\b(water heater|tankless|hot water)\b/],
+        ["Heating & cooling", /\b(furnace|air conditioner|air conditioning|heat pump|thermostat|hvac)\b/],
+        ["Roofing & gutters", /\b(roof|roofing|shingle|gutter|flashing)\b/],
+        ["Flooring & tile", /\b(flooring|hardwood|laminate|vinyl plank|tile|grout|subfloor)\b/],
+        ["Painting & caulking", /\b(paint|painting|primer|stain|caulk|caulking)\b/],
+        ["Concrete & masonry", /\b(concrete|cement|mortar|brick|masonry|foundation)\b/],
+        ["Power tools", /\b(impact driver|circular saw|miter saw|table saw|grinder|power tool|shop vac|compressor)\b/],
+        ["Solar & 12V power", /\b(solar|12v|lifepo4|charge controller|mppt|converter|inverter)\b/],
+        ["Trailers & RVs", /\b(trailer|rv|camper|awning|tow|towing|hitch)\b/],
+        ["Lawn & outdoor equipment", /\b(lawn mower|mower|snowblower|chainsaw|pressure washer|generator)\b/],
+        ["Welding & fabrication", /\b(weld|welder|welding|fabrication|metalwork)\b/]
+    ];
+
+    let category = "General DIY";
+    for (const [name, pattern] of categories) {
+        if (pattern.test(q)) { category = name; break; }
+    }
+
+    let topic = category;
+    for (const [name, pattern] of topics) {
+        if (pattern.test(q)) { topic = name; break; }
+    }
+
+    return { category, topic };
 }
 
 async function recordAnalyticsEvent({
@@ -2012,11 +2074,16 @@ async function handleAsk(req, res) {
             : quota.remaining;
 
         if (!admin && !isTestPageRequest(req)) {
+            const analyticsClassification = classifyQuestionForAnalytics(message);
             await safeRecordAnalyticsEvent({
                 event: "question_answered",
                 visitorHash,
                 conversationId,
-                metadata: { status: "public" }
+                metadata: {
+                    status: "public",
+                    category: analyticsClassification.category,
+                    topic: analyticsClassification.topic
+                }
             });
         }
 
@@ -2427,6 +2494,29 @@ async function handleAnalyticsDashboard(req, res) {
             ORDER BY estimated_token_cost_usd DESC, api_requests DESC
         `;
 
+        const categoriesSql = `
+            SELECT
+                COALESCE(NULLIF(metadata->>'category',''), 'Unclassified') AS category,
+                COUNT(*)::int AS questions
+            FROM chad_analytics
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+              AND event = 'question_answered'
+            GROUP BY 1
+            ORDER BY questions DESC, category ASC
+        `;
+
+        const topicsSql = `
+            SELECT
+                COALESCE(NULLIF(metadata->>'topic',''), 'Unclassified') AS topic,
+                COUNT(*)::int AS questions
+            FROM chad_analytics
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+              AND event = 'question_answered'
+            GROUP BY 1
+            ORDER BY questions DESC, topic ASC
+            LIMIT 10
+        `;
+
         const returningSql = `
             WITH visitor_days AS (
                 SELECT visitor_hash,
@@ -2443,7 +2533,7 @@ async function handleAnalyticsDashboard(req, res) {
             FROM visitor_days
         `;
 
-        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult, costResult, costByKindResult] =
+        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult, costResult, costByKindResult, categoriesResult, topicsResult] =
             await Promise.all([
                 pool.query(summarySql, [days]),
                 pool.query(todaySql),
@@ -2452,7 +2542,9 @@ async function handleAnalyticsDashboard(req, res) {
                 pool.query(sourcesSql, [days]),
                 pool.query(returningSql, [days]),
                 pool.query(costSql, [days]),
-                pool.query(costByKindSql, [days])
+                pool.query(costByKindSql, [days]),
+                pool.query(categoriesSql, [days]),
+                pool.query(topicsSql, [days])
             ]);
 
         const summary = summaryResult.rows[0] || {};
@@ -2484,6 +2576,8 @@ async function handleAnalyticsDashboard(req, res) {
             daily: dailyResult.rows,
             top_products: productsResult.rows,
             traffic_sources: sourcesResult.rows,
+            conversation_categories: categoriesResult.rows,
+            top_topics: topicsResult.rows,
             openai_costs: {
                 ...(costResult.rows[0] || {}),
                 estimated_token_cost_usd: Number(costResult.rows[0]?.estimated_token_cost_usd || 0),
@@ -3576,7 +3670,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-17-nonblocking-telemetry"
+        version: "chad-core-18-analytics-intelligence"
     });
 });
 
@@ -3590,7 +3684,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-17-nonblocking-telemetry",
+        version: "chad-core-18-analytics-intelligence",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
