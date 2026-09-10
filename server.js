@@ -85,7 +85,47 @@ app.use((req, res, next) => {
 
 app.get("/verify-email", (req, res) => {
     const token = String(req.query.token || "").replace(/[^A-Za-z0-9_-]/g, "");
-    res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verify ChadPDChee</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="max-width:560px;padding:32px;text-align:center"><h1>ChadPDChee</h1><p id="msg">Verifying your email...</p><script>(async()=>{try{const r=await fetch('/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)}})});const d=await r.json();document.getElementById('msg').textContent=d.success?'Email verified. You can close this page and sign in.':(d.error||'Verification failed.');}catch(e){document.getElementById('msg').textContent='Verification failed. Please try again.';}})();</script></main></body></html>`);
+
+    res.type("html").send(`<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Verify ChadPDChee</title>
+</head>
+<body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0">
+    <main style="max-width:560px;padding:32px;text-align:center">
+        <h1>ChadPDChee</h1>
+        <p id="msg">Verifying your email and signing you in...</p>
+    </main>
+    <script>
+    (async () => {
+        const msg = document.getElementById('msg');
+        try {
+            const response = await fetch('/auth/verify-email', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: ${JSON.stringify(token)} })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                msg.textContent = 'Email verified. Chad is letting you in. Try not to make him regret it.';
+                setTimeout(() => {
+                    window.location.replace('/?verified=1');
+                }, 900);
+                return;
+            }
+
+            msg.textContent = data.error || 'Verification failed.';
+        } catch (error) {
+            msg.textContent = 'Verification failed. Please try again.';
+        }
+    })();
+    </script>
+</body>
+</html>`);
 });
 
 app.get("/reset-password", (req, res) => {
@@ -2414,11 +2454,14 @@ async function handleVerifyEmail(req, res) {
             return res.status(400).json({ success: false, error: "That verification link is invalid." });
         }
 
+        let userId = null;
+
         const client = await pool.connect();
         try {
             await client.query("BEGIN");
+
             const result = await client.query(
-                `SELECT t.user_id, u.email_verified
+                `SELECT t.user_id
                  FROM chad_email_verification_tokens t
                  JOIN chad_users u ON u.id = t.user_id
                  WHERE t.token_hash = $1
@@ -2431,28 +2474,74 @@ async function handleVerifyEmail(req, res) {
 
             if (!result.rowCount) {
                 await client.query("ROLLBACK");
-                return res.status(400).json({ success: false, error: "That verification link is invalid or expired." });
+                return res.status(400).json({
+                    success: false,
+                    error: "That verification link is invalid or expired."
+                });
             }
 
-            const userId = result.rows[0].user_id;
+            userId = result.rows[0].user_id;
+
             await client.query(
-                `UPDATE chad_users SET email_verified = TRUE, updated_at = NOW() WHERE id = $1`,
+                `UPDATE chad_users
+                 SET email_verified = TRUE,
+                     updated_at = NOW()
+                 WHERE id = $1`,
                 [userId]
             );
+
             await client.query(
                 `UPDATE chad_email_verification_tokens
                  SET used_at = NOW()
-                 WHERE user_id = $1 AND used_at IS NULL`,
+                 WHERE user_id = $1
+                   AND used_at IS NULL`,
                 [userId]
             );
+
             await client.query("COMMIT");
-            return res.json({ success: true, email_verified: true });
+        } catch (error) {
+            try { await client.query("ROLLBACK"); } catch {}
+            throw error;
         } finally {
             client.release();
         }
+
+        // The verification token proves control of the email address.
+        // Create a normal secure authenticated session immediately after verification.
+        await createAuthSession(userId, req, res);
+
+        const userResult = await pool.query(
+            `SELECT id, email, display_name, email_verified, plan, created_at
+             FROM chad_users
+             WHERE id = $1
+               AND deleted_at IS NULL
+             LIMIT 1`,
+            [userId]
+        );
+
+        const user = userResult.rowCount
+            ? {
+                id: userResult.rows[0].id,
+                email: userResult.rows[0].email,
+                display_name: userResult.rows[0].display_name,
+                email_verified: userResult.rows[0].email_verified,
+                plan: userResult.rows[0].plan,
+                created_at: userResult.rows[0].created_at
+            }
+            : null;
+
+        return res.json({
+            success: true,
+            email_verified: true,
+            authenticated: true,
+            user
+        });
     } catch (error) {
         console.error("Verify email error:", error);
-        return res.status(500).json({ success: false, error: "Could not verify your email." });
+        return res.status(500).json({
+            success: false,
+            error: "Could not verify your email."
+        });
     }
 }
 
@@ -2864,7 +2953,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-8-email-auth"
+        version: "chad-core-9-auto-login-verify"
     });
 });
 
@@ -2878,7 +2967,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-8-email-auth",
+        version: "chad-core-9-auto-login-verify",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
