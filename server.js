@@ -818,6 +818,26 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_openai_usage (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            request_kind VARCHAR(40) NOT NULL DEFAULT 'unknown',
+            model VARCHAR(100) NOT NULL DEFAULT '',
+            input_tokens BIGINT NOT NULL DEFAULT 0,
+            cached_input_tokens BIGINT NOT NULL DEFAULT 0,
+            output_tokens BIGINT NOT NULL DEFAULT 0,
+            reasoning_tokens BIGINT NOT NULL DEFAULT 0,
+            total_tokens BIGINT NOT NULL DEFAULT 0,
+            web_search_calls INT NOT NULL DEFAULT 0,
+            estimated_token_cost_usd NUMERIC(14,8) NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chad_openai_usage_created_at
+        ON chad_openai_usage(created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_chad_openai_usage_kind_created_at
+        ON chad_openai_usage(request_kind, created_at DESC);
+
         ALTER TABLE chad_analytics
         ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
     `);
@@ -1439,7 +1459,51 @@ function cleanVideos(videos) {
     return output;
 }
 
-async function callOpenAI(body, timeoutMs = 45000) {
+// GPT-5.6 Luna standard text-token rates in USD per 1M tokens.
+// Keep these constants easy to update if OpenAI changes pricing.
+const LUNA_INPUT_USD_PER_M = 0.20;
+const LUNA_CACHED_INPUT_USD_PER_M = 0.02;
+const LUNA_OUTPUT_USD_PER_M = 1.20;
+
+function countWebSearchCalls(openaiResponse) {
+    const output = Array.isArray(openaiResponse?.output) ? openaiResponse.output : [];
+    return output.filter(item => item?.type === "web_search_call").length;
+}
+
+async function recordOpenAIUsage(openaiResponse, requestKind = "unknown") {
+    try {
+        const usage = openaiResponse?.usage || {};
+        const inputTokens = Number(usage.input_tokens || 0);
+        const cachedTokens = Number(usage.input_tokens_details?.cached_tokens || 0);
+        const outputTokens = Number(usage.output_tokens || 0);
+        const reasoningTokens = Number(usage.output_tokens_details?.reasoning_tokens || 0);
+        const totalTokens = Number(usage.total_tokens || (inputTokens + outputTokens));
+        const uncachedInputTokens = Math.max(0, inputTokens - cachedTokens);
+        const estimatedTokenCostUsd =
+            (uncachedInputTokens / 1000000) * LUNA_INPUT_USD_PER_M +
+            (cachedTokens / 1000000) * LUNA_CACHED_INPUT_USD_PER_M +
+            (outputTokens / 1000000) * LUNA_OUTPUT_USD_PER_M;
+        const webSearchCalls = countWebSearchCalls(openaiResponse);
+
+        await pool.query(
+            `INSERT INTO chad_openai_usage
+                (request_kind, model, input_tokens, cached_input_tokens, output_tokens,
+                 reasoning_tokens, total_tokens, web_search_calls, estimated_token_cost_usd)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+                String(requestKind || "unknown").slice(0, 40),
+                String(openaiResponse?.model || MODEL || "").slice(0, 100),
+                inputTokens, cachedTokens, outputTokens, reasoningTokens, totalTokens,
+                webSearchCalls, estimatedTokenCostUsd
+            ]
+        );
+    } catch (error) {
+        // Cost telemetry must never break Chad.
+        console.warn("OpenAI usage telemetry failed:", error.message);
+    }
+}
+
+async function callOpenAI(body, timeoutMs = 45000, requestKind = "unknown") {
     const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
@@ -1459,10 +1523,11 @@ async function callOpenAI(body, timeoutMs = 45000) {
         throw error;
     }
 
+    await recordOpenAIUsage(data, requestKind);
     return data;
 }
 
-async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_search" }]) {
+async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_search" }], requestKind = name) {
     return callOpenAI({
         model: MODEL,
         tools,
@@ -1475,7 +1540,7 @@ async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_s
                 schema
             }
         }
-    });
+    }, 45000, requestKind);
 }
 
 async function getProductPicks(question, answer) {
@@ -1738,7 +1803,7 @@ async function handleTranslate(req, res) {
         };
 
         try {
-            const data = await callOpenAI(payload, 12000);
+            const data = await callOpenAI(payload, 12000, "translate");
             let display = getResponseText(data)
                 .replace(/<[^>]*>/g, "")
                 .trim()
@@ -2333,6 +2398,33 @@ async function handleAnalyticsDashboard(req, res) {
             LIMIT 10
         `;
 
+        const costSql = `
+            SELECT
+                COUNT(*)::int AS api_requests,
+                COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
+                COALESCE(SUM(cached_input_tokens),0)::bigint AS cached_input_tokens,
+                COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
+                COALESCE(SUM(reasoning_tokens),0)::bigint AS reasoning_tokens,
+                COALESCE(SUM(total_tokens),0)::bigint AS total_tokens,
+                COALESCE(SUM(web_search_calls),0)::int AS web_search_calls,
+                COALESCE(SUM(estimated_token_cost_usd),0)::numeric AS estimated_token_cost_usd
+            FROM chad_openai_usage
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        `;
+
+        const costByKindSql = `
+            SELECT
+                request_kind,
+                COUNT(*)::int AS api_requests,
+                COALESCE(SUM(total_tokens),0)::bigint AS total_tokens,
+                COALESCE(SUM(web_search_calls),0)::int AS web_search_calls,
+                COALESCE(SUM(estimated_token_cost_usd),0)::numeric AS estimated_token_cost_usd
+            FROM chad_openai_usage
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+            GROUP BY request_kind
+            ORDER BY estimated_token_cost_usd DESC, api_requests DESC
+        `;
+
         const returningSql = `
             WITH visitor_days AS (
                 SELECT visitor_hash,
@@ -2349,14 +2441,16 @@ async function handleAnalyticsDashboard(req, res) {
             FROM visitor_days
         `;
 
-        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult] =
+        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult, costResult, costByKindResult] =
             await Promise.all([
                 pool.query(summarySql, [days]),
                 pool.query(todaySql),
                 pool.query(dailySql, [days]),
                 pool.query(productsSql, [days]),
                 pool.query(sourcesSql, [days]),
-                pool.query(returningSql, [days])
+                pool.query(returningSql, [days]),
+                pool.query(costSql, [days]),
+                pool.query(costByKindSql, [days])
             ]);
 
         const summary = summaryResult.rows[0] || {};
@@ -2387,7 +2481,19 @@ async function handleAnalyticsDashboard(req, res) {
             },
             daily: dailyResult.rows,
             top_products: productsResult.rows,
-            traffic_sources: sourcesResult.rows
+            traffic_sources: sourcesResult.rows,
+            openai_costs: {
+                ...(costResult.rows[0] || {}),
+                estimated_token_cost_usd: Number(costResult.rows[0]?.estimated_token_cost_usd || 0),
+                avg_token_cost_per_api_request_usd: Number(costResult.rows[0]?.api_requests || 0)
+                    ? Number((Number(costResult.rows[0]?.estimated_token_cost_usd || 0) / Number(costResult.rows[0]?.api_requests || 1)).toFixed(8))
+                    : 0,
+                note: "Token estimate only. Web-search/tool fees, hosting, email, payment fees and taxes are not included."
+            },
+            openai_costs_by_kind: costByKindResult.rows.map(row => ({
+                ...row,
+                estimated_token_cost_usd: Number(row.estimated_token_cost_usd || 0)
+            }))
         });
     } catch (error) {
         console.error("Analytics dashboard error:", error);
@@ -3468,7 +3574,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-13-share-fix"
+        version: "chad-core-16-cost-telemetry"
     });
 });
 
@@ -3482,7 +3588,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-13-share-fix",
+        version: "chad-core-16-cost-telemetry",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -3534,7 +3640,7 @@ app.get("/openai-test", async (req, res) => {
             model: MODEL,
             input: "Reply with exactly: CHAD ONLINE",
             max_output_tokens: 20
-        }, 15000);
+        }, 15000, "openai_test");
 
         return res.json({
             success: true,
