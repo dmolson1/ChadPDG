@@ -20,6 +20,8 @@ const SHOPPING_BURST_LIMIT = 10;
 const MAX_MESSAGE_LENGTH = 3000;
 const MEMORY_DAYS = 30;
 const VISITOR_COOKIE_DAYS = 365;
+const ANALYTICS_RETENTION_DAYS = 395;
+const PSEUDONYMOUS_USAGE_RETENTION_DAYS = 31;
 const SHOPPING_TOKEN_TTL_SECONDS = 1800;
 const AUTH_SESSION_DAYS = 30;
 const PRIVACY_POLICY_VERSION = "2026-09-09";
@@ -922,6 +924,24 @@ async function initializeDatabase() {
     await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_chad_analytics_visitor_created_at
         ON chad_analytics(visitor_hash, created_at DESC)
+    `);
+
+    // Privacy/data-minimization cleanup. Raw analytics are kept for a defined
+    // reporting window, while pseudonymous daily quota records are kept only
+    // briefly after they are operationally useful.
+    await pool.query(`
+        DELETE FROM chad_analytics
+        WHERE created_at < NOW() - INTERVAL '${ANALYTICS_RETENTION_DAYS} days'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_daily_usage
+        WHERE usage_date < CURRENT_DATE - INTERVAL '${PSEUDONYMOUS_USAGE_RETENTION_DAYS} days'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_ip_daily_usage
+        WHERE usage_date < CURRENT_DATE - INTERVAL '${PSEUDONYMOUS_USAGE_RETENTION_DAYS} days'
     `);
 
     await pool.query(`
@@ -3739,9 +3759,13 @@ async function handleAccountDelete(req, res) {
             return res.status(401).json({ success: false, error: "Password is incorrect." });
         }
 
-        // Remove analytics rows tied to this account's conversation IDs before
-        // deleting the conversations themselves. Aggregate/orphan analytics that
-        // cannot identify the account remain outside the account record.
+        // Remove analytics rows tied to this account's conversations and the
+        // current browser's pseudonymous visitor identifier before deleting the
+        // account. Analytics that are already aggregate/orphaned and cannot be
+        // reasonably linked back to the account remain outside the account record.
+        const cookies = parseCookies(req);
+        const currentVisitorId = cookies.chadgpt_visitor || "";
+
         const ownedIds = await pool.query(
             `SELECT id FROM chad_conversations WHERE user_id = $1`,
             [user.id]
@@ -3754,6 +3778,13 @@ async function handleAccountDelete(req, res) {
             );
         }
 
+        if (validVisitorId(currentVisitorId) || validUuid(currentVisitorId)) {
+            await pool.query(
+                `DELETE FROM chad_analytics WHERE visitor_hash = $1`,
+                [hashValue(String(currentVisitorId).toLowerCase())]
+            );
+        }
+
         // User-owned conversations/messages are removed together.
         await pool.query(`DELETE FROM chad_conversations WHERE user_id = $1`, [user.id]);
         await pool.query(`DELETE FROM chad_user_sessions WHERE user_id = $1`, [user.id]);
@@ -3762,6 +3793,7 @@ async function handleAccountDelete(req, res) {
 
         clearCookie(res, "chad_session");
         clearCookie(res, "chadgpt_conversation");
+        clearCookie(res, "chadgpt_visitor");
         return res.json({ success: true, deleted: true });
     } catch (error) {
         console.error("Account delete error:", error);
