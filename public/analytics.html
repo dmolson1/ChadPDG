@@ -3,549 +3,349 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChadPDChee Sponsor Manager</title>
+<meta name="robots" content="noindex,nofollow">
+<title>ChadPDChee Analytics</title>
 <style>
-*{box-sizing:border-box}
-body{
-    margin:0;
-    font-family:Arial,Helvetica,sans-serif;
-    background:#eef3f7;
-    color:#15191d;
-}
-.wrap{width:min(1180px,calc(100% - 28px));margin:28px auto 60px}
-.top{
-    display:flex;justify-content:space-between;align-items:center;gap:16px;
-    margin-bottom:18px
-}
-h1{margin:0;font-size:30px}
-.sub{color:#65717c;margin-top:5px;font-size:14px}
-.panel{
-    background:#fff;border:1px solid #dbe3e9;border-radius:15px;
-    padding:18px;margin-bottom:18px;box-shadow:0 4px 16px rgba(0,0,0,.04)
-}
-.keyrow{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
-label{display:block;font-size:11px;font-weight:800;color:#5f6e7a;text-transform:uppercase;letter-spacing:.6px}
-input,textarea,select{
-    width:100%;margin-top:6px;border:1px solid #cdd8e0;border-radius:8px;
-    padding:10px 11px;font:14px Arial,Helvetica,sans-serif;background:#fff
-}
-textarea{min-height:88px;resize:vertical}
-button{
-    border:0;border-radius:8px;padding:11px 14px;font-weight:800;cursor:pointer
-}
-.primary{background:#1677B8;color:#fff}
-.dark{background:#17191c;color:#fff}
-.light{background:#edf1f4;color:#20262c}
-.danger{background:#fff0f0;color:#a12626;border:1px solid #efc1c1}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.full{grid-column:1/-1}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
-.status{margin-top:10px;min-height:18px;font-size:13px;font-weight:700}
-.note{
-    background:#fff8dd;border:1px solid #efd885;border-radius:10px;padding:11px 13px;
-    color:#5b4b12;font-size:13px;line-height:1.45;margin-bottom:16px
-}
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
-.metric{border:1px solid #e0e6eb;border-radius:11px;padding:13px;background:#fafcfd}
-.metric .k{font-size:10px;font-weight:900;color:#687681;text-transform:uppercase}
-.metric .v{font-size:24px;font-weight:900;margin-top:5px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #e8edf1;vertical-align:top}
-th{font-size:10px;color:#677581;text-transform:uppercase}
-.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:900}
-.on{background:#e7f7ed;color:#18743b}
-.off{background:#eee;color:#666}
-.row-actions{display:flex;gap:6px;flex-wrap:wrap}
-.row-actions button{padding:7px 9px;font-size:11px}
-.empty{color:#78858f;padding:18px 8px}
-.preview{
-    display:flex;align-items:center;gap:14px;border:1px solid #d8dde3;border-radius:12px;
-    padding:12px 14px;background:linear-gradient(135deg,rgba(22,119,184,.05),#fff 42%,rgba(241,189,41,.06))
-}
-.preview img{width:110px;height:58px;object-fit:contain;border-radius:8px;background:#fff}
-.preview-copy{flex:1}
-.preview-title{font-weight:900}
-.preview-body{font-size:12px;color:#5a646d;margin-top:4px}
-.preview-cta{font-size:12px;font-weight:900;color:#0D5F91}
-@media(max-width:760px){
-    .grid,.cards{grid-template-columns:1fr}
-    .full{grid-column:auto}
-    .top{align-items:flex-start;flex-direction:column}
-    table{display:block;overflow-x:auto}
-}
+:root{--blue:#1677B8;--dark:#0b1720;--muted:#667985;--line:#dbe5ec;--bg:#f5f8fa;--card:#fff;--yellow:#f4cc1d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:#111}.wrap{max-width:1180px;margin:auto;padding:20px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}.logo{width:min(520px,100%);height:auto}.auth{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.auth input{min-width:260px;padding:10px 12px;border:1px solid #b8c9d4;border-radius:8px}.btn{border:0;border-radius:8px;padding:11px 14px;font-weight:800;cursor:pointer;background:var(--blue);color:#fff}.btn.secondary{background:#dfe8ee;color:#173545}.status{font-size:13px;font-weight:700;margin:12px 0}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0}.toolbar select{padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff}.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.card .k{font-size:12px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.5px}.card .v{font-size:30px;font-weight:900;margin-top:7px;color:var(--dark)}.card .s{font-size:12px;color:var(--muted);margin-top:4px}.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}.section h2{font-size:18px;margin:0 0 14px}.chart{display:grid;grid-template-columns:repeat(30,minmax(8px,1fr));gap:4px;height:210px;align-items:end;border-bottom:1px solid #ccd8df;padding:0 0 6px}.barwrap{height:100%;display:flex;align-items:end;gap:1px;justify-content:center}.bar{width:42%;min-height:2px;border-radius:3px 3px 0 0;background:var(--blue)}.bar.q{background:var(--yellow)}.legend{display:flex;gap:16px;font-size:12px;margin-top:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--blue);margin-right:5px}.dot.q{background:var(--yellow)}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #edf1f4}th{font-size:11px;text-transform:uppercase;color:var(--muted)}.empty{color:var(--muted);font-style:italic}.today{background:#0d5f91;color:#fff;border-radius:14px;padding:16px;margin-top:16px}.today strong{font-size:20px}.today-grid{display:flex;gap:24px;flex-wrap:wrap;margin-top:10px}.today-grid div{font-size:13px}.today-grid b{font-size:22px;display:block}.privacy{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.45}
+.costgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.costcard{background:#f7fbff;border:1px solid #cfe2f3;border-radius:12px;padding:14px}
+.costcard .k{font-size:11px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.45px}
+.costcard .v{font-size:24px;font-weight:900;margin-top:7px;color:var(--dark)}
+.costcard .s{font-size:12px;color:var(--muted);margin-top:4px}
+.barrow{display:grid;grid-template-columns:minmax(145px,1fr) 3fr 58px;gap:10px;align-items:center;margin:10px 0;font-size:13px}
+.bartrack{height:13px;background:#edf1f5;border-radius:999px;overflow:hidden}
+.barfill{height:100%;background:var(--blue);border-radius:999px}
+.rank{font-weight:900;color:var(--blue)}
+.money-section{border:2px solid #c7dfeF;background:linear-gradient(180deg,#fff 0%,#f7fbff 100%)}
+.money-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.money-head p{margin:4px 0 0;color:var(--muted);font-size:13px;max-width:760px;line-height:1.45}
+.money-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+.money-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+.money-card .k{font-size:11px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.45px}
+.money-card .v{font-size:25px;font-weight:900;margin-top:7px;color:var(--dark)}
+.money-card .s{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35}
+.assumptions{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.assumptions h3{font-size:14px;margin:0 0 10px}
+.assumption-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+.assumption{display:flex;flex-direction:column;gap:5px}
+.assumption label{font-size:11px;font-weight:900;text-transform:uppercase;color:var(--muted)}
+.assumption input{width:100%;padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff;font-weight:700}
+.money-note{margin-top:12px;font-size:11px;line-height:1.45;color:var(--muted)}
+.good{color:#147a43!important}.bad{color:#b42318!important}
+@media(max-width:1050px){.costgrid{grid-template-columns:repeat(3,1fr)}.money-grid{grid-template-columns:repeat(2,1fr)}.assumption-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.chart{overflow:hidden}.top{align-items:flex-start}}@media(max-width:520px){.wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}.costgrid,.money-grid,.assumption-grid{grid-template-columns:1fr}.barrow{grid-template-columns:1fr 2fr 48px}.card .v{font-size:24px}.auth input{min-width:100%;width:100%}}
 </style>
 </head>
 <body>
+<a href="/admin.html" style="position:fixed;top:14px;right:14px;z-index:9999;background:#17191c;color:#fff;text-decoration:none;font:800 12px Arial,Helvetica,sans-serif;padding:9px 12px;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,.18)">Admin Home →</a>
 <div class="wrap">
-    <div class="top">
+  <div class="top">
+    <img class="logo" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/New-Chad-Logo.png" alt="ChadPDChee">
+    <div class="auth">
+      <input id="key" type="password" placeholder="Developer analytics key" autocomplete="off">
+      <button class="btn" id="login">OPEN DASHBOARD</button>
+      <button class="btn secondary" id="logout">CLEAR KEY</button>
+    </div>
+  </div>
+  <div id="status" class="status">Enter your existing CHAD_ADMIN_TEST_KEY to view private analytics.</div>
+
+  <div class="toolbar">
+    <strong>Analytics window:</strong>
+    <select id="days">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
+    <button class="btn" id="refresh">REFRESH</button>
+  </div>
+
+  <div id="content" hidden>
+    <div class="today">
+      <strong>Today</strong>
+      <div class="today-grid">
+        <div><b id="todayVisitors">0</b>unique visitors</div>
+        <div><b id="todayViews">0</b>page views</div>
+        <div><b id="todayQuestions">0</b>questions</div>
+        <div><b id="todayClicks">0</b>Amazon clicks</div>
+        <div><b id="todayLimits">0</b>limit hits</div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="k">Unique Visitors</div><div class="v" id="visitors">0</div><div class="s">people who loaded Chad</div></div>
+      <div class="card"><div class="k">Questions</div><div class="v" id="questions">0</div><div class="s" id="avgQuestions">0 avg per questioner</div></div>
+      <div class="card"><div class="k">Shopping Lists</div><div class="v" id="shopping">0</div><div class="s">successfully generated</div></div>
+      <div class="card"><div class="k">Amazon Clicks</div><div class="v" id="clicks">0</div><div class="s" id="ctr">0% product CTR</div></div>
+      <div class="card"><div class="k">Returning Visitors</div><div class="v" id="returning">0</div><div class="s" id="returnRate">0% returned on 2+ days</div></div>
+      <div class="card"><div class="k">Page Views</div><div class="v" id="views">0</div><div class="s">public page loads</div></div>
+      <div class="card"><div class="k">Product Impressions</div><div class="v" id="impressions">0</div><div class="s">Chad's Picks shown</div></div>
+      <div class="card"><div class="k">Video Clicks</div><div class="v" id="videos">0</div><div class="s">YouTube how-to clicks</div></div>
+      <div class="card"><div class="k">New Conversations</div><div class="v" id="conversations">0</div><div class="s">manual resets</div></div>
+      <div class="card"><div class="k">5-Question Limit Hits</div><div class="v" id="limits">0</div><div class="s">potential Pro demand</div></div>
+    </div>
+
+    <div class="section">
+      <h2>Daily Traffic & Questions</h2>
+      <div class="chart" id="chart"></div>
+      <div class="legend"><span><i class="dot"></i>Page views</span><span><i class="dot q"></i>Questions</span></div>
+    </div>
+
+    <div class="section">
+      <h2>AI Cost Intelligence</h2>
+      <div class="costgrid">
+        <div class="costcard"><div class="k">Estimated AI Cost</div><div class="v" id="aiCost">$0.0000</div><div class="s" id="aiCostWindow">selected period</div></div>
+        <div class="costcard"><div class="k">Avg Cost / Question</div><div class="v" id="costPerQuestion">$0.0000</div><div class="s">token estimate</div></div>
+        <div class="costcard"><div class="k">Est. Cost / 5 Questions</div><div class="v" id="costFive">$0.0000</div><div class="s">rewarded-ad break-even clue</div></div>
+        <div class="costcard"><div class="k">Total Tokens</div><div class="v" id="totalTokens">0</div><div class="s" id="cachedTokens">0 cached</div></div>
+        <div class="costcard"><div class="k">Web Searches</div><div class="v" id="webSearches">0</div><div class="s" id="apiRequests">0 API requests</div></div>
+      </div>
+      <table><thead><tr><th>OpenAI Request Type</th><th>Requests</th><th>Tokens</th><th>Est. Cost USD</th></tr></thead><tbody id="costKinds"></tbody></table>
+    </div>
+
+    <div class="section money-section">
+      <div class="money-head">
         <div>
-            <h1>Chad Sponsor Manager</h1>
-            <div class="sub">Control the direct ad that appears above Chad's chat.</div>
+          <h2>Monetization Intelligence</h2>
+          <p>Turns Chad's real usage into break-even targets for rewarded ads and a working Pro subscription model. Change the assumptions below any time — they are saved only in this browser.</p>
         </div>
-        <a href="/analytics.html" style="font-weight:800;color:#1677B8;text-decoration:none">Analytics →</a>
+      </div>
+
+      <div class="money-grid">
+        <div class="money-card"><div class="k">Projected Monthly Questions</div><div class="v" id="monthlyQuestions">0</div><div class="s">at the selected-period run rate</div></div>
+        <div class="money-card"><div class="k">Projected Monthly AI Cost</div><div class="v" id="monthlyAiCost">$0.00</div><div class="s">USD, token estimate at current run rate</div></div>
+        <div class="money-card"><div class="k">Break-even Rewarded Ad eCPM</div><div class="v" id="breakEvenEcpm">$0.00</div><div class="s" id="rewardBundleLabel">to fund 5 extra questions</div></div>
+        <div class="money-card"><div class="k">Rewarded Ad Margin</div><div class="v" id="rewardMargin">$0.0000</div><div class="s" id="rewardMarginNote">per completed reward at assumed eCPM</div></div>
+
+        <div class="money-card"><div class="k">Pro Net After PayPal</div><div class="v" id="proNet">$0.00</div><div class="s">CAD per subscriber before AI cost</div></div>
+        <div class="money-card"><div class="k">Est. Pro AI Cost</div><div class="v" id="proAiCost">$0.00</div><div class="s" id="proUsageLabel">CAD at assumed monthly usage</div></div>
+        <div class="money-card"><div class="k">Est. Profit / Pro User</div><div class="v" id="proProfit">$0.00</div><div class="s">CAD before hosting, tax and other overhead</div></div>
+        <div class="money-card"><div class="k">Est. Pro Gross Margin</div><div class="v" id="proMarginPct">0%</div><div class="s">after PayPal + estimated AI usage only</div></div>
+      </div>
+
+      <div class="assumptions">
+        <h3>Editable assumptions</h3>
+        <div class="assumption-grid">
+          <div class="assumption"><label for="assumeRewardQuestions">Questions / rewarded ad</label><input id="assumeRewardQuestions" type="number" min="1" step="1" value="5"></div>
+          <div class="assumption"><label for="assumeAdEcpm">Rewarded ad eCPM (USD)</label><input id="assumeAdEcpm" type="number" min="0" step="0.01" value="10.00"></div>
+          <div class="assumption"><label for="assumeProPrice">Pro price (CAD/mo)</label><input id="assumeProPrice" type="number" min="0" step="0.01" value="4.99"></div>
+          <div class="assumption"><label for="assumeProQuestions">Pro questions / month</label><input id="assumeProQuestions" type="number" min="0" step="1" value="1000"></div>
+          <div class="assumption"><label for="assumeCadUsd">1 CAD in USD</label><input id="assumeCadUsd" type="number" min="0.01" step="0.001" value="0.72"></div>
+          <div class="assumption"><label for="assumePayPalPct">PayPal fee (%)</label><input id="assumePayPalPct" type="number" min="0" step="0.01" value="2.90"></div>
+          <div class="assumption"><label for="assumePayPalFixed">PayPal fixed fee (CAD)</label><input id="assumePayPalFixed" type="number" min="0" step="0.01" value="0.30"></div>
+        </div>
+      </div>
+
+      <div class="money-note">
+        These are planning estimates, not accounting figures. AI cost currently uses Chad's recorded token telemetry; web-search/tool fees, DigitalOcean hosting, Resend, taxes, chargebacks and other business costs are not included. Break-even ad eCPM therefore represents the token-cost floor, not the final all-in break-even point.
+      </div>
     </div>
 
-    <div class="panel">
-        <div class="keyrow">
-            <div style="flex:1;min-width:260px">
-                <label>Admin Key
-                    <input type="password" id="adminKey" placeholder="Your CHAD_ADMIN_TEST_KEY">
-                </label>
-            </div>
-            <button class="dark" id="saveKey">Unlock Sponsor Manager</button>
-        </div>
-        <div id="authStatus" class="status"></div>
+
+    <div class="section">
+      <h2>Sponsor Inventory</h2>
+      <div class="cards">
+        <div class="card"><div class="k">Sponsor Impressions</div><div class="v" id="sponsorImpressions">0</div><div class="s">premium above-chat placement</div></div>
+        <div class="card"><div class="k">Sponsor Clicks</div><div class="v" id="sponsorClicks">0</div><div class="s">outbound sponsor clicks</div></div>
+        <div class="card"><div class="k">Sponsor CTR</div><div class="v" id="sponsorCtr">0%</div><div class="s">clicks ÷ impressions</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Campaign</th><th>Advertiser</th><th>Mode</th><th>Impressions</th><th>Clicks</th><th>CTR</th></tr></thead>
+        <tbody id="sponsors"></tbody>
+      </table>
     </div>
 
-    <div class="note">
-        Chad serves active direct sponsors first. Sponsors with the same priority rotate automatically, favoring the campaign with fewer impressions so delivery stays balanced. If no direct sponsor is eligible, Google AdSense can run; if Google has no fill, the Chad house ad appears.
+    <div class="two">
+      <div class="section">
+        <h2>Conversation Types</h2>
+        <div id="categories"></div>
+      </div>
+      <div class="section">
+        <h2>Top 10 Topics</h2>
+        <table><thead><tr><th>#</th><th>Topic</th><th>Questions</th></tr></thead><tbody id="topics"></tbody></table>
+      </div>
     </div>
 
-    <div class="panel">
-        <h2 id="formTitle" style="margin-top:0">Create Sponsor Campaign</h2>
-
-        <div class="grid">
-            <label>Campaign ID
-                <input id="campaignId" placeholder="example-kaiweets-sept-2026">
-            </label>
-
-            <label>Advertiser
-                <input id="advertiser" placeholder="KAIWEETS">
-            </label>
-
-            <label class="full">Headline
-                <input id="headline" placeholder="Find the right breaker without playing electrical roulette.">
-            </label>
-
-            <label class="full">Body
-                <textarea id="bodyText" placeholder="Short sponsor message shown under the headline."></textarea>
-            </label>
-
-            <label>CTA
-                <input id="cta" value="Learn more →">
-            </label>
-
-            <label>Priority
-                <input id="priority" type="number" min="0" max="10000" value="100">
-            </label>
-
-            <label class="full">Destination URL
-                <input id="destinationUrl" type="url" placeholder="https://...">
-            </label>
-
-            <label class="full">Image / Logo URL
-                <input id="imageUrl" type="url" placeholder="https://...">
-            </label>
-
-            <label>Start Date / Time
-                <input id="startsAt" type="datetime-local">
-            </label>
-
-            <label>End Date / Time
-                <input id="endsAt" type="datetime-local">
-            </label>
-
-            <label class="full" style="text-transform:none;letter-spacing:0;font-size:13px;color:#222">
-                <input id="isActive" type="checkbox" checked style="width:auto;margin-right:7px">
-                Campaign active
-            </label>
-        </div>
-
-        <div class="actions">
-            <button class="primary" id="saveSponsor">Create Campaign</button>
-            <button class="light" id="clearForm">Clear</button>
-        </div>
-
-        <div id="formStatus" class="status"></div>
+    <div class="two">
+      <div class="section">
+        <h2>Top Chad's Picks</h2>
+        <table><thead><tr><th>Product</th><th>Impressions</th><th>Clicks</th></tr></thead><tbody id="products"></tbody></table>
+      </div>
+      <div class="section">
+        <h2>Traffic Sources</h2>
+        <table><thead><tr><th>Source</th><th>Views</th><th>Visitors</th></tr></thead><tbody id="sources"></tbody></table>
+      </div>
     </div>
 
-    <div class="panel">
-        <h2 style="margin-top:0">Google AdSense Fallback</h2>
-        <p style="margin-top:-4px;color:#687681;font-size:13px;line-height:1.45">
-            When there is no eligible direct sponsor, Chad can load this AdSense unit.
-            If Google returns no fill, the Chad house ad comes back automatically.
-        </p>
-
-        <div class="grid">
-            <label>AdSense Client
-                <input id="googleClient" placeholder="ca-pub-1234567890123456">
-            </label>
-
-            <label>Ad Slot
-                <input id="googleSlot" placeholder="1234567890">
-            </label>
-
-            <label class="full" style="text-transform:none;letter-spacing:0;font-size:13px;color:#222">
-                <input id="googleEnabled" type="checkbox" style="width:auto;margin-right:7px">
-                Use Google AdSense when no direct sponsor is available
-            </label>
-        </div>
-
-        <div class="actions">
-            <button class="primary" id="saveGoogleSettings">Save Google Fallback</button>
-        </div>
-
-        <div id="googleStatus" class="status"></div>
-
-        <div style="margin-top:10px;color:#7b8790;font-size:12px;line-height:1.45">
-            Enter only the <strong>data-ad-client</strong> and <strong>data-ad-slot</strong> values from your AdSense display ad unit.
-            Do not paste a full script block here.
-        </div>
-    </div>
-
-    <div class="panel">
-        <h2 style="margin-top:0">Live Preview</h2>
-        <div class="preview">
-            <img id="previewImage" hidden alt="">
-            <div class="preview-copy">
-                <div class="preview-title" id="previewHeadline">Put your sponsor headline here.</div>
-                <div class="preview-body" id="previewBody">Your short sponsor message appears here.</div>
-            </div>
-            <div class="preview-cta" id="previewCta">Learn more →</div>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-            <h2 style="margin:0">Sponsor Campaigns</h2>
-            <button class="light" id="refreshSponsors">Refresh</button>
-        </div>
-
-        <div class="cards">
-            <div class="metric"><div class="k">Campaigns</div><div class="v" id="totalCampaigns">0</div></div>
-            <div class="metric"><div class="k">Total Impressions</div><div class="v" id="totalImpressions">0</div></div>
-            <div class="metric"><div class="k">Total Clicks</div><div class="v" id="totalClicks">0</div></div>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Campaign</th>
-                    <th>Advertiser</th>
-                    <th>Status</th>
-                    <th>Schedule</th>
-                    <th>Impressions</th>
-                    <th>Clicks</th>
-                    <th>CTR</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="sponsorRows">
-                <tr><td colspan="8" class="empty">Enter your admin key to load campaigns.</td></tr>
-            </tbody>
-        </table>
-    </div>
+    <div class="privacy">Privacy note: Analytics stores anonymous visitor hashes and limited event metadata such as traffic source, product ASIN, click type, broad conversation category/topic and sponsor campaign metadata. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
+  </div>
 </div>
-
 <script>
 (function(){
-    const $=id=>document.getElementById(id);
-    let sponsors=[];
-    let editingId='';
+'use strict';
+const STORAGE='chadpdchee_analytics_admin_key';
+const keyInput=document.getElementById('key');
+const status=document.getElementById('status');
+const content=document.getElementById('content');
+const days=document.getElementById('days');
+const saved=sessionStorage.getItem(STORAGE)||'';
+if(saved) keyInput.value=saved;
+const n=v=>Number(v||0).toLocaleString();
+function setText(id,value){document.getElementById(id).textContent=value;}
+function esc(v){const d=document.createElement('div');d.textContent=String(v||'');return d.innerHTML;}
+const MONEY_STORAGE='chadpdchee_monetization_assumptions_v1';
+let lastAnalyticsData=null;
+const moneyDefaults={
+  rewardQuestions:5,
+  adEcpm:10.00,
+  proPrice:4.99,
+  proQuestions:1000,
+  cadUsd:0.72,
+  paypalPct:2.90,
+  paypalFixed:0.30
+};
+function moneyNumber(id,fallback){
+  const el=document.getElementById(id);
+  const v=Number(el&&el.value);
+  return Number.isFinite(v)&&v>=0?v:fallback;
+}
+function loadMoneyAssumptions(){
+  let savedMoney={};
+  try{savedMoney=JSON.parse(localStorage.getItem(MONEY_STORAGE)||'{}')||{};}catch(_){}
+  const vals={...moneyDefaults,...savedMoney};
+  document.getElementById('assumeRewardQuestions').value=vals.rewardQuestions;
+  document.getElementById('assumeAdEcpm').value=vals.adEcpm;
+  document.getElementById('assumeProPrice').value=vals.proPrice;
+  document.getElementById('assumeProQuestions').value=vals.proQuestions;
+  document.getElementById('assumeCadUsd').value=vals.cadUsd;
+  document.getElementById('assumePayPalPct').value=vals.paypalPct;
+  document.getElementById('assumePayPalFixed').value=vals.paypalFixed;
+}
+function saveMoneyAssumptions(){
+  const vals={
+    rewardQuestions:moneyNumber('assumeRewardQuestions',moneyDefaults.rewardQuestions),
+    adEcpm:moneyNumber('assumeAdEcpm',moneyDefaults.adEcpm),
+    proPrice:moneyNumber('assumeProPrice',moneyDefaults.proPrice),
+    proQuestions:moneyNumber('assumeProQuestions',moneyDefaults.proQuestions),
+    cadUsd:Math.max(0.01,moneyNumber('assumeCadUsd',moneyDefaults.cadUsd)),
+    paypalPct:moneyNumber('assumePayPalPct',moneyDefaults.paypalPct),
+    paypalFixed:moneyNumber('assumePayPalFixed',moneyDefaults.paypalFixed)
+  };
+  localStorage.setItem(MONEY_STORAGE,JSON.stringify(vals));
+  return vals;
+}
+function renderMonetization(data){
+  if(!data)return;
+  const vals=saveMoneyAssumptions();
+  const summary=data.summary||{};
+  const costs=data.openai_costs||{};
+  const selectedDays=Math.max(1,Number(data.days||days.value||30));
+  const questions=Number(summary.questions||0);
+  const tokenCostUsd=Number(costs.estimated_token_cost_usd||0);
+  const costPerQuestionUsd=questions>0?tokenCostUsd/questions:0;
 
-    const stored=sessionStorage.getItem('chad_admin_key')||'';
-    $('adminKey').value=stored;
+  const projectedMonthlyQuestions=(questions/selectedDays)*30.4375;
+  const projectedMonthlyAiUsd=(tokenCostUsd/selectedDays)*30.4375;
 
-    function key(){
-        return $('adminKey').value.trim();
-    }
+  const rewardBundleCostUsd=costPerQuestionUsd*vals.rewardQuestions;
+  const breakEvenEcpmUsd=rewardBundleCostUsd*1000;
+  const assumedRevenuePerRewardUsd=vals.adEcpm/1000;
+  const rewardMarginUsd=assumedRevenuePerRewardUsd-rewardBundleCostUsd;
 
-    function headers(){
-        return {
-            'Content-Type':'application/json',
-            'X-Chad-Admin-Key':key()
-        };
-    }
+  const paypalFeeCad=(vals.proPrice*(vals.paypalPct/100))+vals.paypalFixed;
+  const proNetCad=Math.max(0,vals.proPrice-paypalFeeCad);
+  const proAiUsd=costPerQuestionUsd*vals.proQuestions;
+  const proAiCad=vals.cadUsd>0?proAiUsd/vals.cadUsd:0;
+  const proProfitCad=proNetCad-proAiCad;
+  const proMarginPct=proNetCad>0?(proProfitCad/proNetCad)*100:0;
 
-    function esc(value){
-        return String(value??'')
-            .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;')
-            .replace(/'/g,'&#039;');
-    }
+  setText('monthlyQuestions',Math.round(projectedMonthlyQuestions).toLocaleString());
+  setText('monthlyAiCost','$'+projectedMonthlyAiUsd.toFixed(4));
+  setText('breakEvenEcpm','$'+breakEvenEcpmUsd.toFixed(2));
+  setText('rewardBundleLabel','token-cost floor to fund '+Math.round(vals.rewardQuestions)+' extra questions');
+  setText('rewardMargin',(rewardMarginUsd>=0?'+':'')+'$'+rewardMarginUsd.toFixed(4));
+  setText('rewardMarginNote','per completed reward at $'+vals.adEcpm.toFixed(2)+' assumed eCPM');
+  setText('proNet','$'+proNetCad.toFixed(2));
+  setText('proAiCost','$'+proAiCad.toFixed(2));
+  setText('proUsageLabel','CAD at '+Math.round(vals.proQuestions).toLocaleString()+' questions/month');
+  setText('proProfit',(proProfitCad>=0?'+':'-')+'$'+Math.abs(proProfitCad).toFixed(2));
+  setText('proMarginPct',proMarginPct.toFixed(1)+'%');
 
-    function fmtDate(value){
-        if(!value)return 'Open';
-        const d=new Date(value);
-        return Number.isNaN(d.getTime())?'—':d.toLocaleString();
-    }
+  const rewardEl=document.getElementById('rewardMargin');
+  const profitEl=document.getElementById('proProfit');
+  const marginEl=document.getElementById('proMarginPct');
+  rewardEl.classList.toggle('good',rewardMarginUsd>=0);rewardEl.classList.toggle('bad',rewardMarginUsd<0);
+  profitEl.classList.toggle('good',proProfitCad>=0);profitEl.classList.toggle('bad',proProfitCad<0);
+  marginEl.classList.toggle('good',proProfitCad>=0);marginEl.classList.toggle('bad',proProfitCad<0);
+}
+loadMoneyAssumptions();
+['assumeRewardQuestions','assumeAdEcpm','assumeProPrice','assumeProQuestions','assumeCadUsd','assumePayPalPct','assumePayPalFixed'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>renderMonetization(lastAnalyticsData));
+});
 
-    function localInputValue(value){
-        if(!value)return '';
-        const d=new Date(value);
-        if(Number.isNaN(d.getTime()))return '';
-        const pad=n=>String(n).padStart(2,'0');
-        return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
-    }
+async function load(){
+ const key=keyInput.value.trim()||sessionStorage.getItem(STORAGE)||'';
+ if(!key){status.textContent='Enter your developer analytics key first.';content.hidden=true;return;}
+ sessionStorage.setItem(STORAGE,key);
+ status.textContent='Loading Chad analytics...';
+ try{
+  const r=await fetch('/wp-json/chadpgt/v1/analytics/dashboard?days='+encodeURIComponent(days.value),{headers:{'X-Chad-Admin-Key':key}});
+  const data=await r.json();
+  if(!r.ok||!data.success) throw new Error(data.error||'Analytics access failed.');
+  const s=data.summary||{},t=data.today||{};
+  setText('todayVisitors',n(t.unique_visitors));setText('todayViews',n(t.page_views));setText('todayQuestions',n(t.questions));setText('todayClicks',n(t.product_clicks));setText('todayLimits',n(t.limit_hits));
+  setText('visitors',n(s.unique_visitors));setText('questions',n(s.questions));setText('shopping',n(s.shopping_lists));setText('clicks',n(s.product_clicks));setText('returning',n(s.returning_visitors));setText('views',n(s.page_views));setText('impressions',n(s.product_impressions));setText('videos',n(s.video_clicks));setText('conversations',n(s.new_conversations));setText('limits',n(s.limit_hits));
+  setText('avgQuestions',(s.avg_questions_per_questioner||0)+' avg per questioner');setText('ctr',(s.product_ctr_percent||0)+'% product CTR');setText('returnRate',(s.returning_visitor_percent||0)+'% returned on 2+ days');
+  const daily=data.daily||[];const max=Math.max(1,...daily.map(x=>Math.max(Number(x.page_views||0),Number(x.questions||0))));
+  const chart=document.getElementById('chart');chart.style.gridTemplateColumns='repeat('+Math.max(1,daily.length)+',minmax(4px,1fr))';
+  chart.innerHTML=daily.map(x=>'<div class="barwrap" title="'+esc(x.day)+' — '+n(x.page_views)+' views, '+n(x.questions)+' questions"><div class="bar" style="height:'+Math.max(2,(Number(x.page_views||0)/max)*100)+'%"></div><div class="bar q" style="height:'+Math.max(2,(Number(x.questions||0)/max)*100)+'%"></div></div>').join('');
+  const products=data.top_products||[];document.getElementById('products').innerHTML=products.length?products.map(x=>'<tr><td>'+esc(x.product)+(x.asin?'<br><small>'+esc(x.asin)+'</small>':'')+'</td><td>'+n(x.impressions)+'</td><td><b>'+n(x.clicks)+'</b></td></tr>').join(''):'<tr><td colspan="3" class="empty">No product activity yet.</td></tr>';
+  const sources=data.traffic_sources||[];document.getElementById('sources').innerHTML=sources.length?sources.map(x=>'<tr><td>'+esc(x.source)+'</td><td>'+n(x.page_views)+'</td><td>'+n(x.visitors)+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">No traffic data yet.</td></tr>';
+  const costs=data.openai_costs||{};
+  const totalCost=Number(costs.estimated_token_cost_usd||0);
+  const questionCount=Number((data.summary||{}).questions||0);
+  const perQuestion=questionCount ? totalCost/questionCount : 0;
+  setText('aiCost','$'+totalCost.toFixed(6));
+  setText('aiCostWindow',(data.days||30)+' day token estimate');
+  setText('costPerQuestion','$'+perQuestion.toFixed(6));
+  setText('costFive','$'+(perQuestion*5).toFixed(6));
+  setText('totalTokens',n(costs.total_tokens));
+  setText('cachedTokens',n(costs.cached_input_tokens)+' cached input tokens');
+  setText('webSearches',n(costs.web_search_calls));
+  setText('apiRequests',n(costs.api_requests)+' API requests');
 
-    function payload(){
-        return {
-            id:editingId||undefined,
-            campaign_id:$('campaignId').value,
-            advertiser:$('advertiser').value,
-            headline:$('headline').value,
-            body:$('bodyText').value,
-            cta:$('cta').value,
-            destination_url:$('destinationUrl').value,
-            image_url:$('imageUrl').value,
-            starts_at:$('startsAt').value||null,
-            ends_at:$('endsAt').value||null,
-            is_active:$('isActive').checked,
-            priority:Number($('priority').value||100)
-        };
-    }
+  document.getElementById('costKinds').innerHTML=(data.openai_costs_by_kind||[]).map(r=>
+    '<tr><td>'+esc(r.request_kind||'unknown')+'</td><td>'+n(r.api_requests)+'</td><td>'+n(r.total_tokens)+'</td><td>$'+Number(r.estimated_token_cost_usd||0).toFixed(6)+'</td></tr>'
+  ).join('') || '<tr><td colspan="4" class="empty">No cost telemetry yet.</td></tr>';
 
-    function updatePreview(){
-        $('previewHeadline').textContent=$('headline').value||'Put your sponsor headline here.';
-        $('previewBody').textContent=$('bodyText').value||'Your short sponsor message appears here.';
-        $('previewCta').textContent=$('cta').value||'Learn more →';
-        const img=$('previewImage');
-        if($('imageUrl').value.trim()){
-            img.src=$('imageUrl').value.trim();
-            img.hidden=false;
-        }else{
-            img.hidden=true;
-            img.removeAttribute('src');
-        }
-    }
+  
+   setText('sponsorImpressions',n(s.sponsor_impressions));
+   setText('sponsorClicks',n(s.sponsor_clicks));
+   setText('sponsorCtr',(s.sponsor_ctr_percent||0)+'%');
+   document.getElementById('sponsors').innerHTML=(data.sponsor_campaigns||[]).map(r=>
+     '<tr><td>'+esc(r.campaign_id||'Unknown')+'</td><td>'+esc(r.advertiser||'Unknown')+'</td><td>'+esc(r.sponsor_mode||'unknown')+'</td><td>'+n(r.impressions)+'</td><td><b>'+n(r.clicks)+'</b></td><td>'+Number(r.ctr_percent||0).toFixed(2)+'%</td></tr>'
+   ).join('') || '<tr><td colspan="6" class="empty">Sponsor activity will appear here after Core 20 goes live.</td></tr>';
 
-    ['headline','bodyText','cta','imageUrl'].forEach(id=>{
-        $(id).addEventListener('input',updatePreview);
-    });
+   const cats=data.conversation_categories||[];
+  const catTotal=cats.reduce((s,r)=>s+Number(r.questions||0),0);
+  const catMax=Math.max(1,...cats.map(r=>Number(r.questions||0)));
+  document.getElementById('categories').innerHTML=cats.map(r=>{
+    const count=Number(r.questions||0);
+    const pct=catTotal ? ((count/catTotal)*100).toFixed(1) : '0.0';
+    const width=Math.max(2,(count/catMax)*100);
+    return '<div class="barrow"><div>'+esc(r.category||'Unclassified')+'</div><div class="bartrack"><div class="barfill" style="width:'+width+'%"></div></div><div>'+pct+'%</div></div>';
+  }).join('') || '<div class="empty">New questions will begin populating conversation types.</div>';
 
-    function clearForm(){
-        editingId='';
-        $('formTitle').textContent='Create Sponsor Campaign';
-        $('saveSponsor').textContent='Create Campaign';
-        $('campaignId').value='';
-        $('advertiser').value='';
-        $('headline').value='';
-        $('bodyText').value='';
-        $('cta').value='Learn more →';
-        $('priority').value='100';
-        $('destinationUrl').value='';
-        $('imageUrl').value='';
-        $('startsAt').value='';
-        $('endsAt').value='';
-        $('isActive').checked=true;
-        $('formStatus').textContent='';
-        updatePreview();
-    }
+  document.getElementById('topics').innerHTML=(data.top_topics||[]).map((r,i)=>
+    '<tr><td><span class="rank">'+(i+1)+'</span></td><td>'+esc(r.topic||'Unclassified')+'</td><td>'+n(r.questions)+'</td></tr>'
+  ).join('') || '<tr><td colspan="3" class="empty">New questions will begin populating top topics.</td></tr>';
 
-    async function loadSponsors(){
-        if(!key()){
-            $('authStatus').textContent='Enter the admin key first.';
-            return;
-        }
-
-        $('authStatus').textContent='Loading…';
-
-        try{
-            const r=await fetch('/wp-json/chadpgt/v1/admin/sponsors',{
-                headers:{'X-Chad-Admin-Key':key()},
-                cache:'no-store'
-            });
-            const data=await r.json();
-
-            if(!r.ok||!data.success){
-                throw new Error(data.error||'Could not load sponsors.');
-            }
-
-            sessionStorage.setItem('chad_admin_key',key());
-            sponsors=data.sponsors||[];
-            $('authStatus').textContent='Sponsor Manager unlocked.';
-            renderRows();
-        }catch(error){
-            $('authStatus').textContent=error.message;
-        }
-    }
-
-    function renderRows(){
-        $('totalCampaigns').textContent=sponsors.length;
-        $('totalImpressions').textContent=sponsors.reduce((sum,s)=>sum+Number(s.impressions||0),0);
-        $('totalClicks').textContent=sponsors.reduce((sum,s)=>sum+Number(s.clicks||0),0);
-
-        if(!sponsors.length){
-            $('sponsorRows').innerHTML='<tr><td colspan="8" class="empty">No direct sponsors yet. The house ad is currently doing the heavy lifting.</td></tr>';
-            return;
-        }
-
-        $('sponsorRows').innerHTML=sponsors.map(s=>{
-            const schedule=esc(fmtDate(s.starts_at))+' → '+esc(fmtDate(s.ends_at));
-            return '<tr>'+
-                '<td><b>'+esc(s.campaign_id)+'</b><br><small>'+esc(s.headline)+'</small></td>'+
-                '<td>'+esc(s.advertiser)+'</td>'+
-                '<td><span class="badge '+(s.is_active?'on':'off')+'">'+(s.is_active?'ACTIVE':'OFF')+'</span><br><small>Priority '+Number(s.priority||0)+'</small></td>'+
-                '<td>'+schedule+'</td>'+
-                '<td>'+Number(s.impressions||0).toLocaleString()+'</td>'+
-                '<td>'+Number(s.clicks||0).toLocaleString()+'</td>'+
-                '<td>'+Number(s.ctr_percent||0).toFixed(2)+'%</td>'+
-                '<td><div class="row-actions">'+
-                    '<button class="light" data-edit="'+esc(s.id)+'">Edit</button>'+
-                    '<button class="danger" data-delete="'+esc(s.id)+'">Delete</button>'+
-                '</div></td>'+
-            '</tr>';
-        }).join('');
-
-        document.querySelectorAll('[data-edit]').forEach(btn=>{
-            btn.addEventListener('click',()=>editSponsor(btn.dataset.edit));
-        });
-
-        document.querySelectorAll('[data-delete]').forEach(btn=>{
-            btn.addEventListener('click',()=>deleteSponsor(btn.dataset.delete));
-        });
-    }
-
-    function editSponsor(id){
-        const s=sponsors.find(x=>x.id===id);
-        if(!s)return;
-
-        editingId=s.id;
-        $('formTitle').textContent='Edit Sponsor Campaign';
-        $('saveSponsor').textContent='Save Changes';
-        $('campaignId').value=s.campaign_id||'';
-        $('advertiser').value=s.advertiser||'';
-        $('headline').value=s.headline||'';
-        $('bodyText').value=s.body||'';
-        $('cta').value=s.cta||'Learn more →';
-        $('priority').value=Number(s.priority||100);
-        $('destinationUrl').value=s.destination_url||'';
-        $('imageUrl').value=s.image_url||'';
-        $('startsAt').value=localInputValue(s.starts_at);
-        $('endsAt').value=localInputValue(s.ends_at);
-        $('isActive').checked=Boolean(s.is_active);
-        updatePreview();
-        window.scrollTo({top:0,behavior:'smooth'});
-    }
-
-    async function saveSponsor(){
-        if(!key()){
-            $('formStatus').textContent='Enter the admin key first.';
-            return;
-        }
-
-        $('formStatus').textContent='Saving…';
-        const endpoint=editingId
-            ? '/wp-json/chadpgt/v1/admin/sponsors/update'
-            : '/wp-json/chadpgt/v1/admin/sponsors/create';
-
-        try{
-            const r=await fetch(endpoint,{
-                method:'POST',
-                headers:headers(),
-                body:JSON.stringify(payload())
-            });
-            const data=await r.json();
-
-            if(!r.ok||!data.success){
-                throw new Error(data.error||'Could not save sponsor.');
-            }
-
-            $('formStatus').textContent=editingId?'Campaign updated.':'Campaign created.';
-            clearForm();
-            await loadSponsors();
-        }catch(error){
-            $('formStatus').textContent=error.message;
-        }
-    }
-
-    async function deleteSponsor(id){
-        const s=sponsors.find(x=>x.id===id);
-        if(!s)return;
-
-        if(!confirm('Delete sponsor campaign "'+s.campaign_id+'"?'))return;
-
-        try{
-            const r=await fetch('/wp-json/chadpgt/v1/admin/sponsors/delete',{
-                method:'POST',
-                headers:headers(),
-                body:JSON.stringify({id})
-            });
-            const data=await r.json();
-
-            if(!r.ok||!data.success){
-                throw new Error(data.error||'Could not delete sponsor.');
-            }
-
-            if(editingId===id)clearForm();
-            await loadSponsors();
-        }catch(error){
-            alert(error.message);
-        }
-    }
-
-
-    async function loadGoogleSettings(){
-        if(!key())return;
-
-        try{
-            const r=await fetch('/wp-json/chadpgt/v1/admin/ad-settings',{
-                headers:{'X-Chad-Admin-Key':key()},
-                cache:'no-store'
-            });
-            const data=await r.json();
-
-            if(!r.ok||!data.success){
-                throw new Error(data.error||'Could not load Google settings.');
-            }
-
-            const s=data.settings||{};
-            $('googleEnabled').checked=Boolean(s.google_enabled);
-            $('googleClient').value=s.google_client||'';
-            $('googleSlot').value=s.google_slot||'';
-            $('googleStatus').textContent='';
-        }catch(error){
-            $('googleStatus').textContent=error.message;
-        }
-    }
-
-    async function saveGoogleSettings(){
-        if(!key()){
-            $('googleStatus').textContent='Enter the admin key first.';
-            return;
-        }
-
-        $('googleStatus').textContent='Saving…';
-
-        try{
-            const r=await fetch('/wp-json/chadpgt/v1/admin/ad-settings',{
-                method:'POST',
-                headers:headers(),
-                body:JSON.stringify({
-                    google_enabled:$('googleEnabled').checked,
-                    google_client:$('googleClient').value.trim(),
-                    google_slot:$('googleSlot').value.trim()
-                })
-            });
-
-            const data=await r.json();
-
-            if(!r.ok||!data.success){
-                throw new Error(data.error||'Could not save Google settings.');
-            }
-
-            $('googleStatus').textContent='Google fallback saved.';
-        }catch(error){
-            $('googleStatus').textContent=error.message;
-        }
-    }
-
-    $('saveKey').addEventListener('click',async function(){
-        await loadSponsors();
-        await loadGoogleSettings();
-    });
-    $('refreshSponsors').addEventListener('click',loadSponsors);
-    $('saveGoogleSettings').addEventListener('click',saveGoogleSettings);
-    $('saveSponsor').addEventListener('click',saveSponsor);
-    $('clearForm').addEventListener('click',clearForm);
-
-    if(stored){
-        loadSponsors();
-        loadGoogleSettings();
-    }
-    updatePreview();
+  lastAnalyticsData=data;
+  renderMonetization(data);
+  content.hidden=false;status.textContent='Private analytics loaded • '+new Date(data.generated_at).toLocaleString();
+ }catch(e){content.hidden=true;status.textContent=e.message||'Could not load analytics.';}
+}
+document.getElementById('login').addEventListener('click',load);document.getElementById('refresh').addEventListener('click',load);days.addEventListener('change',load);document.getElementById('logout').addEventListener('click',()=>{sessionStorage.removeItem(STORAGE);keyInput.value='';content.hidden=true;status.textContent='Developer analytics key cleared.';});keyInput.addEventListener('keydown',e=>{if(e.key==='Enter')load();});if(saved)load();
 })();
 </script>
 </body>
