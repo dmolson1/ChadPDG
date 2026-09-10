@@ -246,6 +246,18 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
             </tbody>
         </table>
     </div>
+
+    <div class="panel">
+        <div class="top" style="margin-bottom:10px">
+            <div><h2 style="margin:0">Paid Sponsor Orders</h2><div class="sub">PayPal purchases, contract acceptance, and approval queue.</div></div>
+            <button class="light" id="refreshPaidOrders">Refresh Orders</button>
+        </div>
+        <table>
+            <thead><tr><th>Month</th><th>Sponsor</th><th>Payment</th><th>Status</th><th>Creative</th><th>Agreement</th><th>Action</th></tr></thead>
+            <tbody id="paidOrderRows"><tr><td colspan="7" class="empty">Enter your admin key to load paid orders.</td></tr></tbody>
+        </table>
+        <div id="paidOrderStatus" class="status"></div>
+    </div>
 </div>
 
 <script>
@@ -579,6 +591,33 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         loadGoogleSettings();
     }
     updatePreview();
+})();
+</script>
+\n<script>
+(function(){
+ const $=id=>document.getElementById(id);
+ function adminHeaders(){return {'Content-Type':'application/json','X-Chad-Admin-Key':$('adminKey').value.trim()}}
+ function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+ function label(s){return ({payment_pending:'Payment Pending',paid_pending_approval:'Paid — Awaiting Approval',approved:'Approved / Scheduled',live:'Live',completed:'Completed',refunded:'Refunded'})[s]||s}
+ async function loadOrders(){
+   const tbody=$('paidOrderRows'),status=$('paidOrderStatus');
+   if(!$('adminKey').value.trim()){tbody.innerHTML='<tr><td colspan="7" class="empty">Enter your admin key first.</td></tr>';return}
+   status.textContent='Loading paid sponsor orders…';
+   try{
+     const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders',{headers:adminHeaders()});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not load orders.');
+     tbody.innerHTML=d.orders.length?d.orders.map(o=>`<tr><td>${esc(String(o.slot_month).slice(0,7))}</td><td><strong>${esc(o.company_name)}</strong><br>${esc(o.contact_name)}<br><small>${esc(o.email)}</small></td><td>$${Number(o.price_usd).toFixed(2)} ${esc(o.currency)}<br><small>${o.paid_at?'Paid '+esc(new Date(o.paid_at).toLocaleString()):'Not paid'}</small></td><td><span class="badge ${['approved','live'].includes(o.status)?'on':'off'}">${esc(label(o.status))}</span></td><td><strong>${esc(o.headline||'Headline missing')}</strong><br><small>${esc(o.destination_url||'Destination missing')}</small>${o.discount_code?'<br><small>Offer: '+esc(o.discount_percent||'')+'% · '+esc(o.discount_code)+'</small>':''}</td><td>v${esc(o.agreement_version)}<br><small>Signed by ${esc(o.agreement_name)}<br>${esc(o.agreement_accepted_at?new Date(o.agreement_accepted_at).toLocaleString():'')}</small></td><td>${o.status==='paid_pending_approval'?`<button class="primary" data-approve="${esc(o.id)}">Approve & Publish</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No sponsor orders yet.</td></tr>';
+     status.textContent=`${d.orders.length} sponsor order${d.orders.length===1?'':'s'} loaded.`;
+     tbody.querySelectorAll('[data-approve]').forEach(btn=>btn.addEventListener('click',()=>approve(btn.dataset.approve)));
+   }catch(e){status.textContent=e.message;tbody.innerHTML='<tr><td colspan="7" class="empty">Could not load orders.</td></tr>'}
+ }
+ async function approve(id){
+   if(!confirm('Approve this paid sponsor and publish it into the scheduled rotation?'))return;
+   const status=$('paidOrderStatus');status.textContent='Approving sponsor…';
+   try{const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/approve',{method:'POST',headers:adminHeaders(),body:JSON.stringify({order_id:id})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Approval failed.');status.textContent='Approved. Campaign '+d.campaign_id+' is scheduled.';await loadOrders();document.getElementById('refreshSponsors').click()}catch(e){status.textContent=e.message}
+ }
+ $('refreshPaidOrders').addEventListener('click',loadOrders);
+ $('saveKey').addEventListener('click',()=>setTimeout(loadOrders,50));
+ if($('adminKey').value.trim())loadOrders();
 })();
 </script>
 </body>
