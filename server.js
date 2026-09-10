@@ -2241,6 +2241,9 @@ async function handleAsk(req, res) {
                         daily_limit: quotaDailyLimit,
                         remaining: 0,
                         admin_test_mode: false,
+                        authenticated: Boolean(authenticatedUser),
+                        account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+                        guest_daily_limit: DAILY_LIMIT,
                         ...reset
                     });
                 }
@@ -2356,6 +2359,9 @@ async function handleAsk(req, res) {
             admin_test_mode: admin,
             daily_limit: quotaDailyLimit,
             remaining,
+            authenticated: Boolean(authenticatedUser),
+            account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+            guest_daily_limit: DAILY_LIMIT,
             analytics_token: analyticsToken(visitorHash, conversationId)
         });
     } catch (error) {
