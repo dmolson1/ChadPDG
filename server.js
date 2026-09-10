@@ -22,6 +22,11 @@ const PRIVACY_POLICY_VERSION = "2026-09-09";
 const TERMS_VERSION = "2026-09-09";
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 128;
+const EMAIL_VERIFY_TTL_HOURS = 24;
+const PASSWORD_RESET_TTL_MINUTES = 60;
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const CHAD_EMAIL_FROM = process.env.CHAD_EMAIL_FROM || "Chad P.D. Chee <noreply@chadpdchee.com>";
+const APP_BASE_URL = "https://chadpdchee.com";
 
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CHAD_ADMIN_TEST_KEY = process.env.CHAD_ADMIN_TEST_KEY || "";
@@ -75,6 +80,17 @@ app.use((req, res, next) => {
     }
 
     next();
+});
+
+
+app.get("/verify-email", (req, res) => {
+    const token = String(req.query.token || "").replace(/[^A-Za-z0-9_-]/g, "");
+    res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verify ChadPDChee</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="max-width:560px;padding:32px;text-align:center"><h1>ChadPDChee</h1><p id="msg">Verifying your email...</p><script>(async()=>{try{const r=await fetch('/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)}})});const d=await r.json();document.getElementById('msg').textContent=d.success?'Email verified. You can close this page and sign in.':(d.error||'Verification failed.');}catch(e){document.getElementById('msg').textContent='Verification failed. Please try again.';}})();</script></main></body></html>`);
+});
+
+app.get("/reset-password", (req, res) => {
+    const token = String(req.query.token || "").replace(/[^A-Za-z0-9_-]/g, "");
+    res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset ChadPDChee Password</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="width:min(92vw,520px);padding:32px"><h1>Reset password</h1><form id="f"><label>New password<br><input id="p" type="password" minlength="12" maxlength="128" required style="width:100%;box-sizing:border-box;padding:12px;margin:8px 0 16px"></label><button style="padding:12px 18px">Set new password</button></form><p id="msg"></p><script>document.getElementById('f').addEventListener('submit',async(e)=>{e.preventDefault();const msg=document.getElementById('msg');msg.textContent='Resetting...';try{const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)},password:document.getElementById('p').value})});const d=await r.json();msg.textContent=d.success?'Password changed. You can return to ChadPDChee and sign in.':(d.error||'Reset failed.');if(d.success)e.target.remove();}catch(err){msg.textContent='Reset failed. Please try again.';}});</script></main></body></html>`);
 });
 
 app.use(express.static("public"));
@@ -447,6 +463,118 @@ function getTorontoResetInfo() {
     };
 }
 
+
+function makeOneTimeToken() {
+    const token = crypto.randomBytes(32).toString("base64url");
+    return { token, tokenHash: hashSessionToken(token) };
+}
+
+async function sendChadEmail({ to, subject, html, text }) {
+    if (!RESEND_API_KEY) {
+        throw new Error("RESEND_API_KEY is not configured.");
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            from: CHAD_EMAIL_FROM,
+            to: [to],
+            subject,
+            html,
+            text
+        })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        console.error("Resend error:", response.status, data?.message || data?.name || "Unknown email error");
+        throw new Error("Email delivery failed.");
+    }
+    return data;
+}
+
+async function createEmailVerification(userId, email) {
+    const { token, tokenHash } = makeOneTimeToken();
+    await pool.query(
+        `UPDATE chad_email_verification_tokens
+         SET used_at = NOW()
+         WHERE user_id = $1 AND used_at IS NULL`,
+        [userId]
+    );
+    await pool.query(
+        `INSERT INTO chad_email_verification_tokens
+            (token_hash, user_id, expires_at)
+         VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 hour'))`,
+        [tokenHash, userId, EMAIL_VERIFY_TTL_HOURS]
+    );
+
+    const verifyUrl = `${APP_BASE_URL}/verify-email?token=${encodeURIComponent(token)}`;
+    await sendChadEmail({
+        to: email,
+        subject: "Verify your ChadPDChee account",
+        text:
+`Welcome to ChadPDChee.
+
+Verify your email by opening this link:
+${verifyUrl}
+
+This link expires in ${EMAIL_VERIFY_TTL_HOURS} hours.
+
+If you did not create this account, you can ignore this email.`,
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;line-height:1.6">
+                <h2>Verify your ChadPDChee account</h2>
+                <p>Apparently you actually want Chad to remember your projects. Bold choice.</p>
+                <p><a href="${verifyUrl}" style="display:inline-block;padding:12px 18px;background:#1677ff;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Verify my email</a></p>
+                <p>This link expires in ${EMAIL_VERIFY_TTL_HOURS} hours.</p>
+                <p style="font-size:13px;color:#666">If you did not create this account, ignore this email.</p>
+            </div>`
+    });
+}
+
+async function createPasswordReset(userId, email) {
+    const { token, tokenHash } = makeOneTimeToken();
+    await pool.query(
+        `UPDATE chad_password_reset_tokens
+         SET used_at = NOW()
+         WHERE user_id = $1 AND used_at IS NULL`,
+        [userId]
+    );
+    await pool.query(
+        `INSERT INTO chad_password_reset_tokens
+            (token_hash, user_id, expires_at)
+         VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 minute'))`,
+        [tokenHash, userId, PASSWORD_RESET_TTL_MINUTES]
+    );
+
+    const resetUrl = `${APP_BASE_URL}/reset-password?token=${encodeURIComponent(token)}`;
+    await sendChadEmail({
+        to: email,
+        subject: "Reset your ChadPDChee password",
+        text:
+`A password reset was requested for your ChadPDChee account.
+
+Reset it here:
+${resetUrl}
+
+This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.
+
+If you did not request this, ignore this email.`,
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;line-height:1.6">
+                <h2>Reset your ChadPDChee password</h2>
+                <p>Somebody forgot a password. Chad is trying very hard not to look smug.</p>
+                <p><a href="${resetUrl}" style="display:inline-block;padding:12px 18px;background:#1677ff;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reset password</a></p>
+                <p>This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes and works once.</p>
+                <p style="font-size:13px;color:#666">If you did not request this, ignore this email. Your password has not been changed.</p>
+            </div>`
+    });
+}
+
 async function initializeDatabase() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS chad_conversations (
@@ -509,6 +637,36 @@ async function initializeDatabase() {
             recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             ip_hash VARCHAR(64)
         )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_email_verification_tokens (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_email_verification_user
+        ON chad_email_verification_tokens(user_id, expires_at DESC)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_password_reset_tokens (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_password_reset_user
+        ON chad_password_reset_tokens(user_id, expires_at DESC)
     `);
 
     await pool.query(`
@@ -632,6 +790,18 @@ async function initializeDatabase() {
         DELETE FROM chad_user_sessions
         WHERE expires_at < NOW() - INTERVAL '7 days'
            OR revoked_at < NOW() - INTERVAL '7 days'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_email_verification_tokens
+        WHERE expires_at < NOW() - INTERVAL '7 days'
+           OR used_at < NOW() - INTERVAL '7 days'
+    `);
+
+    await pool.query(`
+        DELETE FROM chad_password_reset_tokens
+        WHERE expires_at < NOW() - INTERVAL '7 days'
+           OR used_at < NOW() - INTERVAL '7 days'
     `);
 
     await pool.query(`
@@ -2209,6 +2379,14 @@ async function handleSignup(req, res) {
 
         await createAuthSession(userId, req, res);
 
+        let verificationEmailSent = false;
+        try {
+            await createEmailVerification(userId, email);
+            verificationEmailSent = true;
+        } catch (emailError) {
+            console.error("Verification email error:", emailError);
+        }
+
         return res.status(201).json({
             success: true,
             user: {
@@ -2219,11 +2397,216 @@ async function handleSignup(req, res) {
                 plan: "free",
                 marketing_consent: marketingConsent
             },
-            email_verification_pending: true
+            email_verification_pending: true,
+            verification_email_sent: verificationEmailSent
         });
     } catch (error) {
         console.error("Signup error:", error);
         return res.status(500).json({ success: false, error: "Could not create your account." });
+    }
+}
+
+
+async function handleVerifyEmail(req, res) {
+    try {
+        const token = String(req.body?.token || req.query?.token || "").trim();
+        if (token.length < 20 || token.length > 200) {
+            return res.status(400).json({ success: false, error: "That verification link is invalid." });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query(
+                `SELECT t.user_id, u.email_verified
+                 FROM chad_email_verification_tokens t
+                 JOIN chad_users u ON u.id = t.user_id
+                 WHERE t.token_hash = $1
+                   AND t.expires_at > NOW()
+                   AND t.used_at IS NULL
+                   AND u.deleted_at IS NULL
+                 FOR UPDATE`,
+                [hashSessionToken(token)]
+            );
+
+            if (!result.rowCount) {
+                await client.query("ROLLBACK");
+                return res.status(400).json({ success: false, error: "That verification link is invalid or expired." });
+            }
+
+            const userId = result.rows[0].user_id;
+            await client.query(
+                `UPDATE chad_users SET email_verified = TRUE, updated_at = NOW() WHERE id = $1`,
+                [userId]
+            );
+            await client.query(
+                `UPDATE chad_email_verification_tokens
+                 SET used_at = NOW()
+                 WHERE user_id = $1 AND used_at IS NULL`,
+                [userId]
+            );
+            await client.query("COMMIT");
+            return res.json({ success: true, email_verified: true });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Verify email error:", error);
+        return res.status(500).json({ success: false, error: "Could not verify your email." });
+    }
+}
+
+async function handleResendVerification(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        if (user.email_verified) {
+            return res.json({ success: true, already_verified: true });
+        }
+
+        const allowed = await claimBurst("auth_verify_resend", `${user.id}|${getClientIp(req)}`, 3, 60 * 60);
+        if (!allowed) {
+            res.setHeader("Retry-After", "3600");
+            return res.status(429).json({ success: false, error: "Too many verification emails. Try again later." });
+        }
+
+        await createEmailVerification(user.id, user.email);
+        return res.json({ success: true, sent: true });
+    } catch (error) {
+        console.error("Resend verification error:", error);
+        return res.status(500).json({ success: false, error: "Could not send the verification email." });
+    }
+}
+
+async function handleForgotPassword(req, res) {
+    const generic = {
+        success: true,
+        message: "If that email belongs to a ChadPDChee account, a reset link has been sent."
+    };
+    try {
+        const ip = getClientIp(req);
+        const email = normalizeEmail(req.body?.email);
+        const allowed = await claimBurst("auth_forgot", `${ip}|${email}`, 5, 60 * 60);
+        if (!allowed) {
+            return res.json(generic);
+        }
+        if (!validEmail(email)) {
+            return res.json(generic);
+        }
+
+        const result = await pool.query(
+            `SELECT id, email FROM chad_users
+             WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL
+             LIMIT 1`,
+            [email]
+        );
+
+        if (result.rowCount) {
+            try {
+                await createPasswordReset(result.rows[0].id, result.rows[0].email);
+            } catch (emailError) {
+                console.error("Password reset email error:", emailError);
+            }
+        }
+        return res.json(generic);
+    } catch (error) {
+        console.error("Forgot password error:", error);
+        return res.json(generic);
+    }
+}
+
+async function handleResetPassword(req, res) {
+    try {
+        const token = String(req.body?.token || "").trim();
+        const password = req.body?.password;
+        if (token.length < 20 || token.length > 200) {
+            return res.status(400).json({ success: false, error: "That password reset link is invalid." });
+        }
+        if (!passwordLooksAcceptable(password)) {
+            return res.status(400).json({
+                success: false,
+                error: `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`
+            });
+        }
+
+        const passwordHash = await hashPassword(password);
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query(
+                `SELECT t.user_id
+                 FROM chad_password_reset_tokens t
+                 JOIN chad_users u ON u.id = t.user_id
+                 WHERE t.token_hash = $1
+                   AND t.expires_at > NOW()
+                   AND t.used_at IS NULL
+                   AND u.deleted_at IS NULL
+                 FOR UPDATE`,
+                [hashSessionToken(token)]
+            );
+            if (!result.rowCount) {
+                await client.query("ROLLBACK");
+                return res.status(400).json({ success: false, error: "That password reset link is invalid or expired." });
+            }
+
+            const userId = result.rows[0].user_id;
+            await client.query(
+                `UPDATE chad_users SET password_hash = $2, updated_at = NOW() WHERE id = $1`,
+                [userId, passwordHash]
+            );
+            await client.query(
+                `UPDATE chad_password_reset_tokens SET used_at = NOW()
+                 WHERE user_id = $1 AND used_at IS NULL`,
+                [userId]
+            );
+            await client.query(
+                `UPDATE chad_user_sessions SET revoked_at = NOW()
+                 WHERE user_id = $1 AND revoked_at IS NULL`,
+                [userId]
+            );
+            await client.query("COMMIT");
+        } finally {
+            client.release();
+        }
+
+        clearCookie(res, "chad_session");
+        return res.json({ success: true, password_reset: true });
+    } catch (error) {
+        console.error("Reset password error:", error);
+        return res.status(500).json({ success: false, error: "Could not reset your password." });
+    }
+}
+
+async function handleAdminResetQuota(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Developer access required." });
+        }
+
+        const visitorId = getOrCreateVisitorId(req, res);
+        const visitorHash = hashValue(visitorId);
+        const ipHash = hashValue(getClientIp(req));
+        const day = torontoDateKey();
+
+        await pool.query(
+            `DELETE FROM chad_daily_usage WHERE visitor_hash = $1 AND usage_date = $2`,
+            [visitorHash, day]
+        );
+        await pool.query(
+            `DELETE FROM chad_ip_daily_usage WHERE ip_hash = $1 AND usage_date = $2`,
+            [ipHash, day]
+        );
+
+        return res.json({
+            success: true,
+            reset: true,
+            daily_limit: DAILY_LIMIT,
+            remaining: DAILY_LIMIT,
+            usage_date: day
+        });
+    } catch (error) {
+        console.error("Admin quota reset error:", error);
+        return res.status(500).json({ success: false, error: "Could not reset the test quota." });
     }
 }
 
@@ -2481,7 +2864,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-7-accounts"
+        version: "chad-core-8-email-auth"
     });
 });
 
@@ -2495,14 +2878,14 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-7-accounts",
+        version: "chad-core-8-email-auth",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
         databaseConnected,
         adminTestConfigured: Boolean(CHAD_ADMIN_TEST_KEY),
         accountsConfigured: true,
-        emailDeliveryConfigured: false,
+        emailDeliveryConfigured: Boolean(RESEND_API_KEY && CHAD_EMAIL_FROM),
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
         termsVersion: TERMS_VERSION,
         dailyLimit: DAILY_LIMIT
@@ -2510,6 +2893,12 @@ app.get("/health", async (req, res) => {
 });
 
 registerBoth("post", "/auth/signup", handleSignup);
+registerBoth("post", "/auth/verify-email", handleVerifyEmail);
+registerBoth("get", "/auth/verify-email", handleVerifyEmail);
+registerBoth("post", "/auth/resend-verification", handleResendVerification);
+registerBoth("post", "/auth/forgot-password", handleForgotPassword);
+registerBoth("post", "/auth/reset-password", handleResetPassword);
+registerBoth("post", "/admin/reset-quota", handleAdminResetQuota);
 registerBoth("post", "/auth/login", handleLogin);
 registerBoth("post", "/auth/logout", handleLogout);
 registerBoth("get", "/auth/me", handleMe);
