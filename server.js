@@ -1523,7 +1523,9 @@ async function callOpenAI(body, timeoutMs = 45000, requestKind = "unknown") {
         throw error;
     }
 
-    await recordOpenAIUsage(data, requestKind);
+    // Telemetry must never sit in Chad's response path.
+    // Record it in the background so a slow database write cannot delay the user.
+    void recordOpenAIUsage(data, requestKind);
     return data;
 }
 
@@ -3574,7 +3576,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-16-cost-telemetry"
+        version: "chad-core-17-nonblocking-telemetry"
     });
 });
 
@@ -3588,7 +3590,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-16-cost-telemetry",
+        version: "chad-core-17-nonblocking-telemetry",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
