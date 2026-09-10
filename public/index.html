@@ -2935,8 +2935,30 @@ body {
         };
     }
 
+    async function loadChadSponsor(){
+        try{
+            const response=await fetch('/wp-json/chadpgt/v1/sponsor/current',{
+                method:'GET',
+                headers:{'Accept':'application/json'},
+                cache:'no-store'
+            });
+
+            const data=await response.json().catch(()=>null);
+
+            if(response.ok&&data&&data.success&&data.sponsor){
+                window.CHADPDG_SPONSOR_CONFIG=data.sponsor;
+            }else{
+                window.CHADPDG_SPONSOR_CONFIG=Object.assign({},CHAD_SPONSOR_DEFAULT);
+            }
+        }catch(error){
+            window.CHADPDG_SPONSOR_CONFIG=Object.assign({},CHAD_SPONSOR_DEFAULT);
+        }
+
+        renderChadSponsor();
+    }
+
     trackSimpleAnalyticsEvent('page_view');
-    renderChadSponsor();
+    loadChadSponsor();
 
 
     /* =====================================================
