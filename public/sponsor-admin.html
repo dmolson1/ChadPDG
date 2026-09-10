@@ -66,6 +66,8 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
 .preview-copy{flex:1}
 .preview-title{font-weight:900}
 .preview-body{font-size:12px;color:#5a646d;margin-top:4px}
+.preview-discount{display:inline-block;margin-top:6px;padding:4px 7px;border-radius:6px;background:#f1bd29;color:#111;font-size:11px;font-weight:900;letter-spacing:.25px}
+.preview-discount[hidden]{display:none!important}
 .preview-cta{font-size:12px;font-weight:900;color:#0D5F91}
 @media(max-width:760px){
     .grid,.cards{grid-template-columns:1fr}
@@ -98,7 +100,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
     </div>
 
     <div class="note">
-        Chad serves active direct sponsors first. Sponsors with the same priority rotate automatically, favoring the campaign with fewer impressions so delivery stays balanced. If no direct sponsor is eligible, Google AdSense can run; if Google has no fill, the Chad house ad appears.
+        Active direct sponsors rotate in Chad's sponsor slideshow. Add an optional discount code and savings percentage when a sponsor gives Chad users a deal.
     </div>
 
     <div class="panel">
@@ -127,6 +129,14 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
 
             <label>Priority
                 <input id="priority" type="number" min="0" max="10000" value="100">
+            </label>
+
+            <label>Discount Code (optional)
+                <input id="discountCode" placeholder="BILLY">
+            </label>
+
+            <label>Customer Saves % (optional)
+                <input id="discountPercent" type="number" min="0.01" max="100" step="0.01" placeholder="30">
             </label>
 
             <label class="full">Destination URL
@@ -162,8 +172,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
     <div class="panel">
         <h2 style="margin-top:0">Google AdSense Fallback</h2>
         <p style="margin-top:-4px;color:#687681;font-size:13px;line-height:1.45">
-            When there is no eligible direct sponsor, Chad can load this AdSense unit.
-            If Google returns no fill, the Chad house ad comes back automatically.
+            This AdSense unit is configured separately from the rotating direct-sponsor slideshow.
         </p>
 
         <div class="grid">
@@ -200,6 +209,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
             <div class="preview-copy">
                 <div class="preview-title" id="previewHeadline">Put your sponsor headline here.</div>
                 <div class="preview-body" id="previewBody">Your short sponsor message appears here.</div>
+                <div class="preview-discount" id="previewDiscount" hidden></div>
             </div>
             <div class="preview-cta" id="previewCta">Learn more →</div>
         </div>
@@ -222,6 +232,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
                 <tr>
                     <th>Campaign</th>
                     <th>Advertiser</th>
+                    <th>Offer</th>
                     <th>Status</th>
                     <th>Schedule</th>
                     <th>Impressions</th>
@@ -231,7 +242,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
                 </tr>
             </thead>
             <tbody id="sponsorRows">
-                <tr><td colspan="8" class="empty">Enter your admin key to load campaigns.</td></tr>
+                <tr><td colspan="9" class="empty">Enter your admin key to load campaigns.</td></tr>
             </tbody>
         </table>
     </div>
@@ -290,6 +301,8 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
             cta:$('cta').value,
             destination_url:$('destinationUrl').value,
             image_url:$('imageUrl').value,
+            discount_code:$('discountCode').value,
+            discount_percent:$('discountPercent').value===''?null:Number($('discountPercent').value),
             starts_at:$('startsAt').value||null,
             ends_at:$('endsAt').value||null,
             is_active:$('isActive').checked,
@@ -301,6 +314,16 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         $('previewHeadline').textContent=$('headline').value||'Put your sponsor headline here.';
         $('previewBody').textContent=$('bodyText').value||'Your short sponsor message appears here.';
         $('previewCta').textContent=$('cta').value||'Learn more →';
+
+        const offer=[];
+        const pct=Number($('discountPercent').value);
+        const code=$('discountCode').value.trim();
+        if(Number.isFinite(pct)&&pct>0)offer.push('SAVE '+pct+'%');
+        if(code)offer.push('CODE: '+code);
+
+        $('previewDiscount').textContent=offer.join(' • ');
+        $('previewDiscount').hidden=!offer.length;
+
         const img=$('previewImage');
         if($('imageUrl').value.trim()){
             img.src=$('imageUrl').value.trim();
@@ -311,7 +334,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         }
     }
 
-    ['headline','bodyText','cta','imageUrl'].forEach(id=>{
+    ['headline','bodyText','cta','imageUrl','discountCode','discountPercent'].forEach(id=>{
         $(id).addEventListener('input',updatePreview);
     });
 
@@ -327,6 +350,8 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         $('priority').value='100';
         $('destinationUrl').value='';
         $('imageUrl').value='';
+        $('discountCode').value='';
+        $('discountPercent').value='';
         $('startsAt').value='';
         $('endsAt').value='';
         $('isActive').checked=true;
@@ -368,7 +393,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         $('totalClicks').textContent=sponsors.reduce((sum,s)=>sum+Number(s.clicks||0),0);
 
         if(!sponsors.length){
-            $('sponsorRows').innerHTML='<tr><td colspan="8" class="empty">No direct sponsors yet. The house ad is currently doing the heavy lifting.</td></tr>';
+            $('sponsorRows').innerHTML='<tr><td colspan="9" class="empty">No direct sponsors yet. The house ad is currently doing the heavy lifting.</td></tr>';
             return;
         }
 
@@ -377,6 +402,12 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
             return '<tr>'+
                 '<td><b>'+esc(s.campaign_id)+'</b><br><small>'+esc(s.headline)+'</small></td>'+
                 '<td>'+esc(s.advertiser)+'</td>'+
+                '<td>'+(
+                    (Number(s.discount_percent||0)>0||s.discount_code)
+                        ? (Number(s.discount_percent||0)>0?'<b>Save '+esc(Number(s.discount_percent))+'%</b>':'')+
+                          (s.discount_code?'<br><small>Code: '+esc(s.discount_code)+'</small>':'')
+                        : '<small>—</small>'
+                )+'</td>'+
                 '<td><span class="badge '+(s.is_active?'on':'off')+'">'+(s.is_active?'ACTIVE':'OFF')+'</span><br><small>Priority '+Number(s.priority||0)+'</small></td>'+
                 '<td>'+schedule+'</td>'+
                 '<td>'+Number(s.impressions||0).toLocaleString()+'</td>'+
@@ -413,6 +444,8 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         $('priority').value=Number(s.priority||100);
         $('destinationUrl').value=s.destination_url||'';
         $('imageUrl').value=s.image_url||'';
+        $('discountCode').value=s.discount_code||'';
+        $('discountPercent').value=s.discount_percent==null?'':Number(s.discount_percent);
         $('startsAt').value=localInputValue(s.starts_at);
         $('endsAt').value=localInputValue(s.ends_at);
         $('isActive').checked=Boolean(s.is_active);
