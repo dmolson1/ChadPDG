@@ -63,6 +63,29 @@
       <div class="legend"><span><i class="dot"></i>Page views</span><span><i class="dot q"></i>Questions</span></div>
     </div>
 
+    <div class="section">
+      <h2>AI Cost Intelligence</h2>
+      <div class="costgrid">
+        <div class="costcard"><div class="k">Estimated AI Cost</div><div class="v" id="aiCost">$0.0000</div><div class="s" id="aiCostWindow">selected period</div></div>
+        <div class="costcard"><div class="k">Avg Cost / Question</div><div class="v" id="costPerQuestion">$0.0000</div><div class="s">token estimate</div></div>
+        <div class="costcard"><div class="k">Est. Cost / 5 Questions</div><div class="v" id="costFive">$0.0000</div><div class="s">rewarded-ad break-even clue</div></div>
+        <div class="costcard"><div class="k">Total Tokens</div><div class="v" id="totalTokens">0</div><div class="s" id="cachedTokens">0 cached</div></div>
+        <div class="costcard"><div class="k">Web Searches</div><div class="v" id="webSearches">0</div><div class="s" id="apiRequests">0 API requests</div></div>
+      </div>
+      <table><thead><tr><th>OpenAI Request Type</th><th>Requests</th><th>Tokens</th><th>Est. Cost USD</th></tr></thead><tbody id="costKinds"></tbody></table>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Conversation Types</h2>
+        <div id="categories"></div>
+      </div>
+      <div class="section">
+        <h2>Top 10 Topics</h2>
+        <table><thead><tr><th>#</th><th>Topic</th><th>Questions</th></tr></thead><tbody id="topics"></tbody></table>
+      </div>
+    </div>
+
     <div class="two">
       <div class="section">
         <h2>Top Chad's Picks</h2>
@@ -74,7 +97,7 @@
       </div>
     </div>
 
-    <div class="privacy">Privacy note: Analytics 2.0 stores anonymous visitor hashes and event metadata such as traffic source, product ASIN and click type. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
+    <div class="privacy">Privacy note: Analytics stores anonymous visitor hashes and limited event metadata such as traffic source, product ASIN, click type, broad conversation category and topic. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
   </div>
 </div>
 <script>
@@ -108,6 +131,37 @@ async function load(){
   chart.innerHTML=daily.map(x=>'<div class="barwrap" title="'+esc(x.day)+' — '+n(x.page_views)+' views, '+n(x.questions)+' questions"><div class="bar" style="height:'+Math.max(2,(Number(x.page_views||0)/max)*100)+'%"></div><div class="bar q" style="height:'+Math.max(2,(Number(x.questions||0)/max)*100)+'%"></div></div>').join('');
   const products=data.top_products||[];document.getElementById('products').innerHTML=products.length?products.map(x=>'<tr><td>'+esc(x.product)+(x.asin?'<br><small>'+esc(x.asin)+'</small>':'')+'</td><td>'+n(x.impressions)+'</td><td><b>'+n(x.clicks)+'</b></td></tr>').join(''):'<tr><td colspan="3" class="empty">No product activity yet.</td></tr>';
   const sources=data.traffic_sources||[];document.getElementById('sources').innerHTML=sources.length?sources.map(x=>'<tr><td>'+esc(x.source)+'</td><td>'+n(x.page_views)+'</td><td>'+n(x.visitors)+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">No traffic data yet.</td></tr>';
+  const costs=data.openai_costs||{};
+  const totalCost=Number(costs.estimated_token_cost_usd||0);
+  const questionCount=Number((data.summary||{}).questions||0);
+  const perQuestion=questionCount ? totalCost/questionCount : 0;
+  setText('aiCost','$'+totalCost.toFixed(6));
+  setText('aiCostWindow',(data.days||30)+' day token estimate');
+  setText('costPerQuestion','$'+perQuestion.toFixed(6));
+  setText('costFive','$'+(perQuestion*5).toFixed(6));
+  setText('totalTokens',n(costs.total_tokens));
+  setText('cachedTokens',n(costs.cached_input_tokens)+' cached input tokens');
+  setText('webSearches',n(costs.web_search_calls));
+  setText('apiRequests',n(costs.api_requests)+' API requests');
+
+  document.getElementById('costKinds').innerHTML=(data.openai_costs_by_kind||[]).map(r=>
+    '<tr><td>'+esc(r.request_kind||'unknown')+'</td><td>'+n(r.api_requests)+'</td><td>'+n(r.total_tokens)+'</td><td>$'+Number(r.estimated_token_cost_usd||0).toFixed(6)+'</td></tr>'
+  ).join('') || '<tr><td colspan="4" class="empty">No cost telemetry yet.</td></tr>';
+
+  const cats=data.conversation_categories||[];
+  const catTotal=cats.reduce((s,r)=>s+Number(r.questions||0),0);
+  const catMax=Math.max(1,...cats.map(r=>Number(r.questions||0)));
+  document.getElementById('categories').innerHTML=cats.map(r=>{
+    const count=Number(r.questions||0);
+    const pct=catTotal ? ((count/catTotal)*100).toFixed(1) : '0.0';
+    const width=Math.max(2,(count/catMax)*100);
+    return '<div class="barrow"><div>'+esc(r.category||'Unclassified')+'</div><div class="bartrack"><div class="barfill" style="width:'+width+'%"></div></div><div>'+pct+'%</div></div>';
+  }).join('') || '<div class="empty">New questions will begin populating conversation types.</div>';
+
+  document.getElementById('topics').innerHTML=(data.top_topics||[]).map((r,i)=>
+    '<tr><td><span class="rank">'+(i+1)+'</span></td><td>'+esc(r.topic||'Unclassified')+'</td><td>'+n(r.questions)+'</td></tr>'
+  ).join('') || '<tr><td colspan="3" class="empty">New questions will begin populating top topics.</td></tr>';
+
   content.hidden=false;status.textContent='Private analytics loaded • '+new Date(data.generated_at).toLocaleString();
  }catch(e){content.hidden=true;status.textContent=e.message||'Could not load analytics.';}
 }
