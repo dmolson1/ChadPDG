@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chad Sponsor Leads</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#eef3f7;color:#171b1f}
+.wrap{width:min(1180px,calc(100% - 28px));margin:28px auto 60px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}
+.panel{background:#fff;border:1px solid #dbe3e9;border-radius:15px;padding:18px;margin-bottom:18px;box-shadow:0 4px 16px rgba(0,0,0,.04)}
+.keyrow{display:flex;gap:9px;align-items:end;flex-wrap:wrap}
+label{display:block;font-size:11px;font-weight:800;color:#5f6e7a;text-transform:uppercase}
+input,select{width:100%;margin-top:6px;border:1px solid #cdd8e0;border-radius:8px;padding:10px 11px}
+button{border:0;border-radius:8px;padding:10px 12px;font-weight:800;cursor:pointer}
+.primary{background:#1677B8;color:#fff}
+.light{background:#edf1f4;color:#20262c}
+.danger{background:#fff0f0;color:#a12626;border:1px solid #efc1c1}
+.status{margin-top:10px;min-height:18px;font-size:13px;font-weight:700}
+.lead{border:1px solid #e1e7eb;border-radius:13px;padding:16px;margin-top:12px;background:#fbfcfd}
+.lead-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.lead h3{margin:0 0 4px}
+.meta{font-size:12px;color:#697681}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.box{background:#fff;border:1px solid #e3e8ec;border-radius:9px;padding:10px;font-size:13px;line-height:1.45}
+.box b{display:block;font-size:10px;text-transform:uppercase;color:#73808a;margin-bottom:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:900;text-transform:uppercase}
+.new{background:#fff4cf;color:#745d00}.contacted{background:#e7f0ff;color:#1f5a99}.approved{background:#e5f7eb;color:#18743b}.declined{background:#f4e8e8;color:#843131}
+a{color:#1677B8;font-weight:700}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 style="margin:0">Sponsor Leads</h1>
+      <div style="color:#687681;margin-top:4px">Review requests submitted from /advertise.</div>
+    </div>
+    <div><a href="/sponsor-admin.html">Sponsor Manager →</a></div>
+  </div>
+
+  <div class="panel">
+    <div class="keyrow">
+      <div style="flex:1;min-width:260px">
+        <label>Admin Key
+          <input type="password" id="adminKey" placeholder="Your CHAD_ADMIN_TEST_KEY">
+        </label>
+      </div>
+      <button class="primary" id="unlock">Load Sponsor Leads</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+      <h2 style="margin:0">Submissions</h2>
+      <button class="light" id="refresh">Refresh</button>
+    </div>
+    <div id="leadList"><div style="color:#7a8791;padding:18px 0">Enter your admin key to load submissions.</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let leads=[];
+  const stored=sessionStorage.getItem('chad_admin_key')||'';
+  $('adminKey').value=stored;
+
+  function key(){return $('adminKey').value.trim()}
+  function headers(){return {'Content-Type':'application/json','X-Chad-Admin-Key':key()}}
+  function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
+  function date(v){if(!v)return '—'; const d=new Date(v); return Number.isNaN(d.getTime())?'—':d.toLocaleString()}
+  function link(url,label){return url?'<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(label)+'</a>':'—'}
+
+  async function load(){
+    if(!key()){ $('status').textContent='Enter the admin key first.'; return; }
+    $('status').textContent='Loading…';
+
+    try{
+      const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-leads',{
+        headers:{'X-Chad-Admin-Key':key()},
+        cache:'no-store'
+      });
+      const data=await r.json();
+
+      if(!r.ok||!data.success)throw new Error(data.error||'Could not load leads.');
+
+      sessionStorage.setItem('chad_admin_key',key());
+      leads=data.leads||[];
+      $('status').textContent=leads.length+' sponsor lead'+(leads.length===1?'':'s')+' loaded.';
+      render();
+    }catch(error){
+      $('status').textContent=error.message;
+    }
+  }
+
+  function render(){
+    if(!leads.length){
+      $('leadList').innerHTML='<div style="color:#7a8791;padding:18px 0">No sponsor submissions yet.</div>';
+      return;
+    }
+
+    $('leadList').innerHTML=leads.map(l=>`
+      <div class="lead">
+        <div class="lead-head">
+          <div>
+            <h3>${esc(l.company_name)}</h3>
+            <div class="meta">${esc(l.contact_name)} · ${esc(l.email)} · ${date(l.created_at)}</div>
+          </div>
+          <span class="badge ${esc(l.status)}">${esc(l.status)}</span>
+        </div>
+
+        <div class="grid">
+          <div class="box"><b>Website</b>${link(l.website,l.website)}</div>
+          <div class="box"><b>Destination URL</b>${link(l.destination_url,l.destination_url)}</div>
+          <div class="box"><b>Headline</b>${esc(l.headline||'—')}</div>
+          <div class="box"><b>CTA</b>${esc(l.cta_text||'—')}</div>
+          <div class="box"><b>Budget</b>${esc(l.budget||'—')}</div>
+          <div class="box"><b>Preferred Dates</b>${date(l.preferred_start)} → ${date(l.preferred_end)}</div>
+          <div class="box"><b>Campaign Goal</b>${esc(l.campaign_goal||'—')}</div>
+          <div class="box"><b>Ad Copy</b>${esc(l.ad_copy||'—')}</div>
+          <div class="box"><b>Logo / Image</b>${link(l.logo_url,'Open uploaded file')}</div>
+          <div class="box"><b>Additional Creative</b>${link(l.creative_url,'Open uploaded file')}</div>
+          <div class="box" style="grid-column:1/-1"><b>Notes</b>${esc(l.notes||'—')}</div>
+        </div>
+
+        <div class="actions">
+          <select data-status="${esc(l.id)}" style="width:auto;margin:0">
+            <option value="new" ${l.status==='new'?'selected':''}>New</option>
+            <option value="contacted" ${l.status==='contacted'?'selected':''}>Contacted</option>
+            <option value="approved" ${l.status==='approved'?'selected':''}>Approved</option>
+            <option value="declined" ${l.status==='declined'?'selected':''}>Declined</option>
+          </select>
+          <button class="danger" data-delete="${esc(l.id)}">Delete</button>
+        </div>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('[data-status]').forEach(sel=>{
+      sel.addEventListener('change',()=>updateStatus(sel.dataset.status,sel.value));
+    });
+
+    document.querySelectorAll('[data-delete]').forEach(btn=>{
+      btn.addEventListener('click',()=>deleteLead(btn.dataset.delete));
+    });
+  }
+
+  async function updateStatus(id,status){
+    try{
+      const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-leads/status',{
+        method:'POST',headers:headers(),body:JSON.stringify({id,status})
+      });
+      const data=await r.json();
+      if(!r.ok||!data.success)throw new Error(data.error||'Could not update status.');
+      await load();
+    }catch(error){alert(error.message)}
+  }
+
+  async function deleteLead(id){
+    if(!confirm('Delete this sponsor lead?'))return;
+    try{
+      const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-leads/delete',{
+        method:'POST',headers:headers(),body:JSON.stringify({id})
+      });
+      const data=await r.json();
+      if(!r.ok||!data.success)throw new Error(data.error||'Could not delete lead.');
+      await load();
+    }catch(error){alert(error.message)}
+  }
+
+  $('unlock').addEventListener('click',load);
+  $('refresh').addEventListener('click',load);
+  if(stored)load();
+})();
+</script>
+</body>
+</html>
