@@ -3661,31 +3661,19 @@ body {
         shoppingToken
     ) {
 
-        const button =
-            wrapper.querySelector(
-                '.chad-shopping-button'
-            );
-
         const resultBox =
             wrapper.querySelector(
                 '.chad-shopping-result'
             );
 
-        if (
-            !button ||
-            !resultBox
-        ) {
+        if (!resultBox) {
             return;
         }
 
-        const originalText =
-            button.textContent;
-
-        button.disabled = true;
-        button.textContent =
-            'CHAD IS MAKING THE LIST...';
-
-        resultBox.innerHTML = '';
+        resultBox.innerHTML =
+            '<div class="chad-shopping-loading">' +
+            'Chad is checking the tool aisle... try to look busy.' +
+            '</div>';
 
         let turnstileToken = '';
 
@@ -3764,6 +3752,11 @@ body {
                 );
 
             output +=
+                buildVideos(
+                    data.videos || []
+                );
+
+            output +=
                 buildSources(
                     data.citations || []
                 );
@@ -3801,28 +3794,12 @@ body {
                 }
             );
 
-            button.textContent =
-                'SHOPPING LIST BUILT';
-
-            const firstResult =
-                resultBox.querySelector(
-                    '.chad-shopping-title'
-                );
-
-            if (firstResult) {
-                scrollToChadAnswer(
-                    firstResult
-                );
-            }
-
         } catch (error) {
 
-            button.disabled = false;
-            button.textContent =
-                originalText;
-
+            // Chad's core answer is already on screen. Research failure is non-fatal.
             resultBox.innerHTML =
                 '<div class="chad-shopping-error">' +
+                'Chad answered the important part. The tool-aisle research wandered off: ' +
                 escapeHtml(
                     error.message
                 ) +
@@ -4215,7 +4192,7 @@ body {
             afterHtml +=
                 '<div class="chad-shopping-wrap">' +
                 '<div class="chad-shopping-subtext">' +
-                'Fine. Chad already made the shopping list because apparently waiting for you to ask was too much work.' +
+                'Fine. Chad is building the shopping list, checking the tool aisle, and finding a couple videos while you read the answer.' +
                 '</div>' +
                 '<div class="chad-shopping-result" aria-live="polite"></div>' +
                 '</div>';
