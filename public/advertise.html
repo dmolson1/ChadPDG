@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advertise with Chad P.D. Chee</title>
+<meta name="description" content="Put your brand in Chad's shop. Sponsor Chad P.D. Chee and reach DIYers, homeowners, tradespeople, and tool buyers.">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f2f5f7;color:#171b1f}
+.hero{background:#101820;color:#fff;padding:46px 20px 54px;text-align:center}
+.hero img{width:min(620px,92vw);height:auto}
+.hero h1{font-size:42px;line-height:1.05;margin:14px 0 10px}
+.hero p{font-size:18px;line-height:1.5;max-width:760px;margin:0 auto;color:#d9e2e9}
+.wrap{width:min(1080px,calc(100% - 28px));margin:-28px auto 60px}
+.card{background:#fff;border:1px solid #dbe2e7;border-radius:18px;padding:24px;margin-bottom:18px;box-shadow:0 8px 24px rgba(0,0,0,.05)}
+h2{margin:0 0 12px}
+p{line-height:1.55}
+.features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.feature{border:1px solid #e1e7eb;border-radius:13px;padding:17px;background:#fafcfd}
+.feature b{display:block;font-size:16px;margin-bottom:6px}
+.preview{display:flex;align-items:center;gap:14px;border:1px solid #d8dde3;border-radius:12px;padding:15px;background:linear-gradient(135deg,rgba(22,119,184,.05),#fff 42%,rgba(241,189,41,.06))}
+.preview-badge{background:#111;color:#f7c928;border-radius:999px;padding:7px 10px;font-size:10px;font-weight:900;white-space:nowrap}
+.preview-copy{flex:1}
+.preview-title{font-weight:900;font-size:17px}
+.preview-body{font-size:13px;color:#5b6670;margin-top:4px}
+.preview-cta{font-weight:900;color:#0b69a8;font-size:13px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.full{grid-column:1/-1}
+label{display:block;font-size:11px;font-weight:900;color:#5d6972;text-transform:uppercase;letter-spacing:.6px}
+input,textarea,select{width:100%;margin-top:6px;border:1px solid #cdd8e0;border-radius:9px;padding:11px 12px;font:14px Arial,Helvetica,sans-serif;background:#fff}
+textarea{min-height:110px;resize:vertical}
+small{color:#74808a;line-height:1.4;display:block;margin-top:5px}
+button{border:0;border-radius:9px;padding:13px 18px;background:#1479bb;color:#fff;font-weight:900;cursor:pointer;font-size:15px}
+button:disabled{opacity:.55;cursor:not-allowed}
+.status{margin-top:12px;font-weight:800;font-size:13px;min-height:18px}
+.success{color:#176b38}
+.error{color:#a12626}
+.footer{text-align:center;color:#737e87;font-size:12px;padding:0 20px 36px}
+.footer a{color:#52616d}
+@media(max-width:760px){
+  .features,.grid{grid-template-columns:1fr}
+  .full{grid-column:auto}
+  .hero h1{font-size:34px}
+  .preview{align-items:flex-start;flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<section class="hero">
+  <img src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chad-Transparent.png" alt="Chad P.D. Chee">
+  <h1>Put your brand in Chad's shop.</h1>
+  <p>Reach DIYers, homeowners, tradespeople, weekend warriors, and people who definitely own too many tools.</p>
+</section>
+
+<main class="wrap">
+  <section class="card">
+    <div class="features">
+      <div class="feature"><b>Premium placement</b>Your sponsor appears immediately above Chad's conversation area.</div>
+      <div class="feature"><b>Measurable</b>Direct sponsor impressions, clicks, and CTR are tracked separately by campaign.</div>
+      <div class="feature"><b>Built for DIY brands</b>Tools, home improvement, automotive, outdoor, workshop, and blue-collar products fit naturally.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What the placement looks like</h2>
+    <div class="preview">
+      <div class="preview-badge">SPONSORED</div>
+      <div class="preview-copy">
+        <div class="preview-title">Your sponsor headline goes here.</div>
+        <div class="preview-body">A short message that gives Chad's audience a reason to care.</div>
+      </div>
+      <div class="preview-cta">Learn more →</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Send us your campaign</h2>
+    <p>Fill this out and send the creative you already have. Nothing goes live automatically — every sponsor is reviewed first.</p>
+
+    <form id="sponsorForm" enctype="multipart/form-data">
+      <div class="grid">
+        <label>Company / Brand *
+          <input name="company_name" required maxlength="160">
+        </label>
+
+        <label>Contact Name *
+          <input name="contact_name" required maxlength="160">
+        </label>
+
+        <label>Email *
+          <input name="email" type="email" required maxlength="240">
+        </label>
+
+        <label>Website
+          <input name="website" type="url" placeholder="https://...">
+        </label>
+
+        <label class="full">Campaign Goal
+          <textarea name="campaign_goal" placeholder="What are you promoting and what would a successful campaign look like?"></textarea>
+        </label>
+
+        <label class="full">Destination URL
+          <input name="destination_url" type="url" placeholder="https://...">
+        </label>
+
+        <label class="full">Preferred Headline
+          <input name="headline" maxlength="220" placeholder="Optional — we can help tighten this up.">
+        </label>
+
+        <label class="full">Short Ad Copy
+          <textarea name="ad_copy" placeholder="Optional sponsor message."></textarea>
+        </label>
+
+        <label>CTA Text
+          <input name="cta_text" maxlength="100" placeholder="Learn more →">
+        </label>
+
+        <label>Budget
+          <input name="budget" maxlength="120" placeholder="Optional">
+        </label>
+
+        <label>Preferred Start
+          <input name="preferred_start" type="datetime-local">
+        </label>
+
+        <label>Preferred End
+          <input name="preferred_end" type="datetime-local">
+        </label>
+
+        <label>Logo / Brand Image
+          <input name="logo" type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf">
+          <small>JPG, PNG, WEBP, GIF or PDF. Max 8 MB.</small>
+        </label>
+
+        <label>Additional Creative
+          <input name="creative" type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf">
+          <small>Optional second file. Max 8 MB.</small>
+        </label>
+
+        <label class="full">Notes
+          <textarea name="notes" placeholder="Anything else Chad's people should know?"></textarea>
+        </label>
+      </div>
+
+      <div style="margin-top:18px">
+        <button id="submitButton" type="submit">Send Sponsor Request</button>
+        <div id="formStatus" class="status"></div>
+      </div>
+    </form>
+  </section>
+</main>
+
+<div class="footer">
+  Sponsor submissions are reviewed before publication. Submitting materials does not guarantee acceptance or placement.<br><br>
+  <a href="/terms.html">Terms of Use</a> · <a href="/privacy.html">Privacy Policy</a>
+</div>
+
+<script>
+(function(){
+  const form=document.getElementById('sponsorForm');
+  const status=document.getElementById('formStatus');
+  const button=document.getElementById('submitButton');
+
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();
+
+    status.className='status';
+    status.textContent='Sending…';
+    button.disabled=true;
+
+    try{
+      const response=await fetch('/wp-json/chadpgt/v1/sponsor/lead',{
+        method:'POST',
+        body:new FormData(form)
+      });
+
+      const data=await response.json().catch(()=>null);
+
+      if(!response.ok||!data||!data.success){
+        throw new Error((data&&data.error)||'Could not send sponsor request.');
+      }
+
+      status.className='status success';
+      status.textContent='Sent. Chad’s people have your sponsor request.';
+      form.reset();
+    }catch(error){
+      status.className='status error';
+      status.textContent=error.message;
+    }finally{
+      button.disabled=false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
