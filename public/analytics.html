@@ -140,6 +140,20 @@
       </div>
     </div>
 
+
+    <div class="section">
+      <h2>Sponsor Inventory</h2>
+      <div class="cards">
+        <div class="card"><div class="k">Sponsor Impressions</div><div class="v" id="sponsorImpressions">0</div><div class="s">premium above-chat placement</div></div>
+        <div class="card"><div class="k">Sponsor Clicks</div><div class="v" id="sponsorClicks">0</div><div class="s">outbound sponsor clicks</div></div>
+        <div class="card"><div class="k">Sponsor CTR</div><div class="v" id="sponsorCtr">0%</div><div class="s">clicks ÷ impressions</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Campaign</th><th>Advertiser</th><th>Mode</th><th>Impressions</th><th>Clicks</th><th>CTR</th></tr></thead>
+        <tbody id="sponsors"></tbody>
+      </table>
+    </div>
+
     <div class="two">
       <div class="section">
         <h2>Conversation Types</h2>
@@ -162,7 +176,7 @@
       </div>
     </div>
 
-    <div class="privacy">Privacy note: Analytics stores anonymous visitor hashes and limited event metadata such as traffic source, product ASIN, click type, broad conversation category and topic. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
+    <div class="privacy">Privacy note: Analytics stores anonymous visitor hashes and limited event metadata such as traffic source, product ASIN, click type, broad conversation category/topic and sponsor campaign metadata. It does not store the text of users' questions in the analytics table. Conversation content remains in the separate 30-day conversation-memory system so Chad can remember context.</div>
   </div>
 </div>
 <script>
@@ -303,7 +317,15 @@ async function load(){
     '<tr><td>'+esc(r.request_kind||'unknown')+'</td><td>'+n(r.api_requests)+'</td><td>'+n(r.total_tokens)+'</td><td>$'+Number(r.estimated_token_cost_usd||0).toFixed(6)+'</td></tr>'
   ).join('') || '<tr><td colspan="4" class="empty">No cost telemetry yet.</td></tr>';
 
-  const cats=data.conversation_categories||[];
+  
+   setText('sponsorImpressions',n(s.sponsor_impressions));
+   setText('sponsorClicks',n(s.sponsor_clicks));
+   setText('sponsorCtr',(s.sponsor_ctr_percent||0)+'%');
+   document.getElementById('sponsors').innerHTML=(data.sponsor_campaigns||[]).map(r=>
+     '<tr><td>'+esc(r.campaign_id||'Unknown')+'</td><td>'+esc(r.advertiser||'Unknown')+'</td><td>'+esc(r.sponsor_mode||'unknown')+'</td><td>'+n(r.impressions)+'</td><td><b>'+n(r.clicks)+'</b></td><td>'+Number(r.ctr_percent||0).toFixed(2)+'%</td></tr>'
+   ).join('') || '<tr><td colspan="6" class="empty">Sponsor activity will appear here after Core 20 goes live.</td></tr>';
+
+   const cats=data.conversation_categories||[];
   const catTotal=cats.reduce((s,r)=>s+Number(r.questions||0),0);
   const catMax=Math.max(1,...cats.map(r=>Number(r.questions||0)));
   document.getElementById('categories').innerHTML=cats.map(r=>{
