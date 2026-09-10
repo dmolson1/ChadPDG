@@ -98,7 +98,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
     </div>
 
     <div class="note">
-        Chad serves the active direct sponsor with the lowest priority number. If no paid sponsor is active for the current date, the Chad house ad automatically appears. Google fallback can be added later without changing this manager.
+        Chad serves active direct sponsors first. Sponsors with the same priority rotate automatically, favoring the campaign with fewer impressions so delivery stays balanced. If no direct sponsor is eligible, Google AdSense can run; if Google has no fill, the Chad house ad appears.
     </div>
 
     <div class="panel">
@@ -157,6 +157,40 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         </div>
 
         <div id="formStatus" class="status"></div>
+    </div>
+
+    <div class="panel">
+        <h2 style="margin-top:0">Google AdSense Fallback</h2>
+        <p style="margin-top:-4px;color:#687681;font-size:13px;line-height:1.45">
+            When there is no eligible direct sponsor, Chad can load this AdSense unit.
+            If Google returns no fill, the Chad house ad comes back automatically.
+        </p>
+
+        <div class="grid">
+            <label>AdSense Client
+                <input id="googleClient" placeholder="ca-pub-1234567890123456">
+            </label>
+
+            <label>Ad Slot
+                <input id="googleSlot" placeholder="1234567890">
+            </label>
+
+            <label class="full" style="text-transform:none;letter-spacing:0;font-size:13px;color:#222">
+                <input id="googleEnabled" type="checkbox" style="width:auto;margin-right:7px">
+                Use Google AdSense when no direct sponsor is available
+            </label>
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="saveGoogleSettings">Save Google Fallback</button>
+        </div>
+
+        <div id="googleStatus" class="status"></div>
+
+        <div style="margin-top:10px;color:#7b8790;font-size:12px;line-height:1.45">
+            Enter only the <strong>data-ad-client</strong> and <strong>data-ad-slot</strong> values from your AdSense display ad unit.
+            Do not paste a full script block here.
+        </div>
     </div>
 
     <div class="panel">
@@ -442,12 +476,75 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
         }
     }
 
-    $('saveKey').addEventListener('click',loadSponsors);
+
+    async function loadGoogleSettings(){
+        if(!key())return;
+
+        try{
+            const r=await fetch('/wp-json/chadpgt/v1/admin/ad-settings',{
+                headers:{'X-Chad-Admin-Key':key()},
+                cache:'no-store'
+            });
+            const data=await r.json();
+
+            if(!r.ok||!data.success){
+                throw new Error(data.error||'Could not load Google settings.');
+            }
+
+            const s=data.settings||{};
+            $('googleEnabled').checked=Boolean(s.google_enabled);
+            $('googleClient').value=s.google_client||'';
+            $('googleSlot').value=s.google_slot||'';
+            $('googleStatus').textContent='';
+        }catch(error){
+            $('googleStatus').textContent=error.message;
+        }
+    }
+
+    async function saveGoogleSettings(){
+        if(!key()){
+            $('googleStatus').textContent='Enter the admin key first.';
+            return;
+        }
+
+        $('googleStatus').textContent='Saving…';
+
+        try{
+            const r=await fetch('/wp-json/chadpgt/v1/admin/ad-settings',{
+                method:'POST',
+                headers:headers(),
+                body:JSON.stringify({
+                    google_enabled:$('googleEnabled').checked,
+                    google_client:$('googleClient').value.trim(),
+                    google_slot:$('googleSlot').value.trim()
+                })
+            });
+
+            const data=await r.json();
+
+            if(!r.ok||!data.success){
+                throw new Error(data.error||'Could not save Google settings.');
+            }
+
+            $('googleStatus').textContent='Google fallback saved.';
+        }catch(error){
+            $('googleStatus').textContent=error.message;
+        }
+    }
+
+    $('saveKey').addEventListener('click',async function(){
+        await loadSponsors();
+        await loadGoogleSettings();
+    });
     $('refreshSponsors').addEventListener('click',loadSponsors);
+    $('saveGoogleSettings').addEventListener('click',saveGoogleSettings);
     $('saveSponsor').addEventListener('click',saveSponsor);
     $('clearForm').addEventListener('click',clearForm);
 
-    if(stored)loadSponsors();
+    if(stored){
+        loadSponsors();
+        loadGoogleSettings();
+    }
     updatePreview();
 })();
 </script>
