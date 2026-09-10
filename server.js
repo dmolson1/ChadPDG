@@ -1234,6 +1234,56 @@ function amazonCanadaUrl(asin) {
         : "";
 }
 
+function amazonCanadaSearchUrl(query) {
+    const clean = String(query || "")
+        .replace(/[\r\n\t]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+
+    if (!clean) return "";
+
+    return `https://www.amazon.ca/s?k=${encodeURIComponent(clean)}&tag=${encodeURIComponent(AMAZON_TAG)}`;
+}
+
+function prepareQuickAffiliateLinks(value, monetizationMode) {
+    if (monetizationMode === "none" || !Array.isArray(value)) return [];
+
+    const output = [];
+    const seen = new Set();
+
+    for (const item of value) {
+        if (!item || typeof item !== "object") continue;
+
+        const label = String(item.label || "")
+            .replace(/[\r\n\t]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 70);
+
+        const query = String(item.query || "")
+            .replace(/[\r\n\t]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 120);
+
+        if (!label || !query) continue;
+
+        const key = query.toLowerCase();
+        if (seen.has(key)) continue;
+
+        const url = amazonCanadaSearchUrl(query);
+        if (!url) continue;
+
+        output.push({ label, query, url });
+        seen.add(key);
+
+        if (output.length >= 3) break;
+    }
+
+    return output;
+}
+
 function prepareProducts(products, keepItemName = false) {
     if (!Array.isArray(products)) return [];
 
@@ -1422,9 +1472,23 @@ For immediate hazards such as active fire, gas leak, arcing, exposed live
 conductors, carbon monoxide, or burning electrical equipment, choose "none"
 and focus on safety.
 
-Keep the answer useful and reasonably concise. The second-stage research
-system handles verified Amazon picks, project lists, videos and sources after
-the answer is already visible.
+Keep the answer useful and reasonably concise.
+
+Also return quick_affiliate_queries:
+- An array of 0 to 3 objects with "label" and "query".
+- These are FAST Amazon search opportunities shown immediately after the answer.
+- Do not web-search them. They are category/search phrases, not claims that a specific product is verified.
+- Only include them when monetization_opportunity is not "none".
+- Every query must directly help the user's existing goal.
+- Prefer the main purchase first, then at most 1 or 2 genuinely useful supporting purchases.
+- Do not pad the array just to create links.
+- Keep labels short and natural, such as "Home Cinema Projectors", "Ceiling Projector Mounts", or "OBD-II Scan Tools".
+- Keep queries concise and shopping-oriented.
+- For "none", return an empty array.
+- For immediate hazards, return an empty array.
+
+The second-stage research system handles verified exact Amazon picks, project
+lists, videos and sources after the answer is already visible.
 `;
 
 const PRODUCT_RESEARCH_PROMPT = "You are Chad's product researcher.\n\nThe user has asked a physical DIY question.\n\nFind 2 to 5 products that are genuinely useful for completing the job OR diagnosing the physical problem.\n\nIf the problem is not yet diagnosed, prioritize diagnostic tools, testers, cleaners and consumables. Do NOT guess replacement parts.\nIf the conversation evidence identifies a failed component, the appropriate replacement part may be recommended.\n\nUse web search to find REAL Amazon product detail pages.\n\nAmazon ONLY.\n\nDo not use:\n- Home Depot\n- Lowe's\n- RONA\n- Canadian Tire\n- Walmart\n- other retailers\n\nDo not return:\n- search pages\n- category pages\n- fabricated URLs\n- fabricated ASINs\n- review pages\n\nEvery product MUST have a real 10-character ASIN.\n\nEvery source_url MUST be a real Amazon product detail page.\n\nAmazon Canada pages are preferred.\n\nIf you cannot verify a product, leave it out.\n\nDo not write prose.\n\nReturn ONLY the products array.\n\nThink like an experienced handyman deciding what the person actually needs to finish the job.\n\nThe products should complement Chad's answer, not randomly relate to the subject.\n";
@@ -1496,9 +1560,22 @@ const CHAD_SCHEMA = {
                 "replacement_part",
                 "none"
             ]
+        },
+        quick_affiliate_queries: {
+            type: "array",
+            maxItems: 3,
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    label: { type: "string" },
+                    query: { type: "string" }
+                },
+                required: ["label","query"]
+            }
         }
     },
-    required: ["answer","monetization_opportunity"]
+    required: ["answer","monetization_opportunity","quick_affiliate_queries"]
 };
 
 const PRODUCT_SCHEMA = {
@@ -2265,6 +2342,13 @@ async function handleAsk(req, res) {
         const monetizationMode = monetizationDecision.mode;
         const shoppingListRecommended = monetizationDecision.launch;
 
+        const quickAffiliateLinks = shoppingListRecommended
+            ? prepareQuickAffiliateLinks(
+                decoded.quick_affiliate_queries || [],
+                monetizationMode
+            )
+            : [];
+
         const shoppingToken = shoppingListRecommended
             ? await createShoppingToken(conversationId, message)
             : "";
@@ -2293,6 +2377,7 @@ async function handleAsk(req, res) {
             monetization_opportunity: monetizationMode,
             shopping_list_recommended: shoppingListRecommended,
             shopping_token: shoppingToken,
+            quick_affiliate_links: quickAffiliateLinks,
             products,
             videos,
             citations,
