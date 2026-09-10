@@ -721,6 +721,26 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`
+        ALTER TABLE chad_conversations
+        ADD COLUMN IF NOT EXISTS saved_at TIMESTAMPTZ NULL
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_conversation_shares (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            conversation_id UUID NOT NULL REFERENCES chad_conversations(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            revoked_at TIMESTAMPTZ NULL
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_conversation_shares_conversation
+        ON chad_conversation_shares(conversation_id, created_at DESC)
+    `);
+
+    await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_chad_conversations_user_updated
         ON chad_conversations(user_id, updated_at DESC)
     `);
@@ -2846,6 +2866,34 @@ async function handleMe(req, res) {
     });
 }
 
+
+function getConversationIdFromRequest(req) {
+    const bodyId = String(req.body?.conversation_id || "").trim();
+    if (validUuid(bodyId)) return bodyId;
+
+    const cookies = parseCookies(req);
+    const cookieId = String(cookies.chadgpt_conversation || "").trim();
+    if (validUuid(cookieId)) return cookieId;
+
+    return "";
+}
+
+function publicBaseUrl(req) {
+    const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+    const proto = forwardedProto || req.protocol || "https";
+    const host = String(req.get("host") || "chadpdchee.com");
+    return `${proto}://${host}`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 async function handleConversationList(req, res) {
     try {
         const user = await requireAuthenticatedUser(req, res);
@@ -2855,6 +2903,8 @@ async function handleConversationList(req, res) {
                     COALESCE(NULLIF(c.title, ''), 'Untitled project') AS title,
                     c.created_at,
                     c.updated_at,
+                    c.saved_at,
+                    (c.saved_at IS NOT NULL) AS is_saved,
                     COUNT(m.id)::int AS message_count
              FROM chad_conversations c
              LEFT JOIN chad_messages m ON m.conversation_id = c.id
@@ -2926,6 +2976,165 @@ async function handleConversationMessages(req, res) {
     }
 }
 
+
+
+async function handleConversationSave(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const id = getConversationIdFromRequest(req);
+        const title = String(req.body?.title || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80);
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: "Start a conversation before saving it."
+            });
+        }
+
+        if (!title) {
+            return res.status(400).json({
+                success: false,
+                error: "Give the conversation a title first."
+            });
+        }
+
+        const result = await pool.query(
+            `UPDATE chad_conversations
+             SET title = $1,
+                 saved_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2
+               AND user_id = $3
+             RETURNING id, title, saved_at, updated_at`,
+            [title, id, user.id]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({
+                success: false,
+                error: "That conversation could not be found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            conversation: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Conversation save error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not save that conversation."
+        });
+    }
+}
+
+async function handleConversationShare(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const id = getConversationIdFromRequest(req);
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: "Start a conversation before sharing it."
+            });
+        }
+
+        const owned = await pool.query(
+            `SELECT id, COALESCE(NULLIF(title, ''), 'ChadPDChee conversation') AS title
+             FROM chad_conversations
+             WHERE id = $1
+               AND user_id = $2
+             LIMIT 1`,
+            [id, user.id]
+        );
+
+        if (!owned.rowCount) {
+            return res.status(404).json({
+                success: false,
+                error: "That conversation could not be found."
+            });
+        }
+
+        const token = crypto.randomBytes(24).toString("base64url");
+        const tokenHash = hashSessionToken(token);
+
+        await pool.query(
+            `UPDATE chad_conversation_shares
+             SET revoked_at = NOW()
+             WHERE conversation_id = $1
+               AND revoked_at IS NULL`,
+            [id]
+        );
+
+        await pool.query(
+            `INSERT INTO chad_conversation_shares
+             (token_hash, conversation_id, user_id)
+             VALUES ($1, $2, $3)`,
+            [tokenHash, id, user.id]
+        );
+
+        const shareUrl = `${publicBaseUrl(req)}/share/${encodeURIComponent(token)}`;
+
+        return res.json({
+            success: true,
+            title: owned.rows[0].title,
+            share_url: shareUrl
+        });
+    } catch (error) {
+        console.error("Conversation share error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not create a share link."
+        });
+    }
+}
+
+async function handleConversationUnshare(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const id = getConversationIdFromRequest(req);
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: "Conversation required."
+            });
+        }
+
+        await pool.query(
+            `UPDATE chad_conversation_shares s
+             SET revoked_at = NOW()
+             FROM chad_conversations c
+             WHERE s.conversation_id = c.id
+               AND c.id = $1
+               AND c.user_id = $2
+               AND s.revoked_at IS NULL`,
+            [id, user.id]
+        );
+
+        return res.json({
+            success: true,
+            sharing: false
+        });
+    } catch (error) {
+        console.error("Conversation unshare error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not stop sharing that conversation."
+        });
+    }
+}
 
 async function handleConversationRename(req, res) {
     try {
@@ -2999,6 +3208,89 @@ async function handleConversationDelete(req, res) {
     } catch (error) {
         console.error("Conversation delete error:", error);
         return res.status(500).json({ success: false, error: "Could not delete that project." });
+    }
+}
+
+
+async function handlePublicConversationShare(req, res) {
+    try {
+        const token = String(req.params?.token || "").trim();
+
+        if (token.length < 20 || token.length > 200) {
+            return res.status(404).type("html").send("<h1>Share link not found.</h1>");
+        }
+
+        const tokenHash = hashSessionToken(token);
+
+        const share = await pool.query(
+            `SELECT c.id,
+                    COALESCE(NULLIF(c.title, ''), 'ChadPDChee Conversation') AS title
+             FROM chad_conversation_shares s
+             JOIN chad_conversations c ON c.id = s.conversation_id
+             WHERE s.token_hash = $1
+               AND s.revoked_at IS NULL
+             LIMIT 1`,
+            [tokenHash]
+        );
+
+        if (!share.rowCount) {
+            return res.status(404).type("html").send(`<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Share link unavailable</title></head>
+<body style="font-family:Arial,sans-serif;background:#111;color:#eee;margin:0;padding:40px;text-align:center">
+<h1>That share link is no longer available.</h1>
+<p>Chad probably revoked it. Dramatic, but technically effective.</p>
+</body></html>`);
+        }
+
+        const conversation = share.rows[0];
+
+        const messagesResult = await pool.query(
+            `SELECT role, content, created_at
+             FROM chad_messages
+             WHERE conversation_id = $1
+             ORDER BY id ASC
+             LIMIT 500`,
+            [conversation.id]
+        );
+
+        const renderedMessages = messagesResult.rows.map(message => {
+            const who = message.role === "user" ? "Hammered Handyman" : "Chad";
+            const body = escapeHtml(message.content || "").replace(/\n/g, "<br>");
+            return `<section style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:${message.role === "user" ? "#f1f3f5" : "#20262c"};color:${message.role === "user" ? "#111" : "#fff"}">
+                <div style="font-weight:800;margin-bottom:8px">${who}</div>
+                <div style="line-height:1.55">${body}</div>
+            </section>`;
+        }).join("");
+
+        return res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(conversation.title)} — ChadPDChee</title>
+<link rel="icon" type="image/png" href="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png">
+</head>
+<body style="margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif">
+<main style="max-width:850px;margin:0 auto;padding:22px">
+    <header style="display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid #ddd">
+        <img src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="" style="width:54px;height:54px;border-radius:50%">
+        <div>
+            <div style="font-size:13px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.08em">Shared ChadPDChee Conversation</div>
+            <h1 style="margin:4px 0 0;font-size:28px">${escapeHtml(conversation.title)}</h1>
+        </div>
+    </header>
+
+    ${renderedMessages || '<p>No messages in this conversation.</p>'}
+
+    <footer style="margin-top:30px;padding-top:18px;border-top:1px solid #ddd;color:#666;font-size:13px;line-height:1.5">
+        Chad P.D. Chee is for informational purposes only and is not a licensed contractor, electrician, plumber, engineer, or other professional.
+    </footer>
+</main>
+</body>
+</html>`);
+    } catch (error) {
+        console.error("Public share page error:", error);
+        return res.status(500).type("html").send("<h1>Could not load that shared conversation.</h1>");
     }
 }
 
@@ -3108,7 +3400,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-11-conversation-management"
+        version: "chad-core-12-save-share"
     });
 });
 
@@ -3122,7 +3414,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-11-conversation-management",
+        version: "chad-core-12-save-share",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -3149,9 +3441,13 @@ registerBoth("post", "/auth/logout", handleLogout);
 registerBoth("get", "/auth/me", handleMe);
 registerBoth("get", "/account/conversations", handleConversationList);
 registerBoth("post", "/account/conversations/select", handleConversationSelect);
+registerBoth("post", "/account/conversations/save", handleConversationSave);
+registerBoth("post", "/account/conversations/share", handleConversationShare);
+registerBoth("post", "/account/conversations/unshare", handleConversationUnshare);
 registerBoth("post", "/account/conversations/rename", handleConversationRename);
 registerBoth("post", "/account/conversations/delete", handleConversationDelete);
 registerBoth("get", "/account/conversations/messages", handleConversationMessages);
+app.get("/share/:token", handlePublicConversationShare);
 registerBoth("get", "/account/export", handleAccountExport);
 registerBoth("post", "/account/delete", handleAccountDelete);
 
