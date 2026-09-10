@@ -1302,6 +1302,56 @@ body {
     color: #9a2d2d;
 }
 
+.chad-free-account-limit {
+    margin: 16px 0 6px 0;
+    padding: 18px;
+    border: 1px solid #d7e4ee;
+    border-radius: 12px;
+    background: #f7fbfe;
+}
+
+.chad-free-account-limit-title {
+    margin: 0 0 6px 0;
+    font-size: 17px;
+    font-weight: 900;
+    color: #17191c;
+}
+
+.chad-free-account-limit-copy {
+    margin: 0 0 13px 0;
+    color: #5e6870;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.chad-free-account-limit-button {
+    border: 0;
+    border-radius: 9px;
+    padding: 11px 15px;
+    background: #1677B8;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.chad-free-account-limit-button:hover {
+    background: #0f649e;
+}
+
+.chad-free-account-limit-signin {
+    margin-left: 10px;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: #1677B8;
+    text-decoration: underline;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
 
 /* =========================================================
    MOBILE
@@ -2452,7 +2502,15 @@ body {
                 if (questionInput) {
                     questionInput.disabled = true;
                     questionInput.placeholder =
-                        'Sorry Bro… Chad is out until tomorrow.';
+                        data.authenticated === true
+                            ? 'Sorry Bro… Chad is out until tomorrow.'
+                            : 'Create a free account for more Chad questions.';
+                }
+
+                if (
+                    data.authenticated !== true
+                ) {
+                    showFreeAccountLimitPrompt(data);
                 }
 
             } else {
@@ -4500,6 +4558,142 @@ body {
     }
 
 
+    function lockQuestionLimitUI() {
+
+        dailyLimitLocked = true;
+
+        if (askButton) {
+            askButton.disabled = true;
+            askButton.classList.add(
+                'chad-limit-reached'
+            );
+            askButton.textContent =
+                'OUT OF QUESTIONS';
+        }
+
+        if (questionInput) {
+            questionInput.disabled = true;
+            questionInput.placeholder =
+                'Create a free account for more Chad questions.';
+        }
+    }
+
+
+    function showFreeAccountLimitPrompt(data) {
+
+        if (
+            data &&
+            data.authenticated === true
+        ) {
+            return;
+        }
+
+        if (
+            document.getElementById(
+                'chad-free-account-limit'
+            )
+        ) {
+            return;
+        }
+
+        const accountLimit =
+            data &&
+            Number(data.account_daily_limit)
+                ? Number(data.account_daily_limit)
+                : 15;
+
+        const guestLimit =
+            data &&
+            Number(data.guest_daily_limit)
+                ? Number(data.guest_daily_limit)
+                : 5;
+
+        const prompt =
+            document.createElement('div');
+
+        prompt.id =
+            'chad-free-account-limit';
+
+        prompt.className =
+            'chad-free-account-limit';
+
+        prompt.innerHTML =
+            '<div class="chad-free-account-limit-title">' +
+            'Need more Chad?' +
+            '</div>' +
+            '<div class="chad-free-account-limit-copy">' +
+            "You used today's " +
+            guestLimit +
+            ' free questions. Create a free account and get ' +
+            accountLimit +
+            ' Chad questions every day, plus saved projects and conversation history.' +
+            '</div>' +
+            '<button type="button" class="chad-free-account-limit-button">' +
+            'CREATE FREE ACCOUNT — GET ' +
+            accountLimit +
+            ' QUESTIONS/DAY' +
+            '</button>' +
+            '<button type="button" class="chad-free-account-limit-signin">' +
+            'Already have an account? Sign in' +
+            '</button>';
+
+        chat.appendChild(prompt);
+
+        const signupButton =
+            prompt.querySelector(
+                '.chad-free-account-limit-button'
+            );
+
+        const signinButton =
+            prompt.querySelector(
+                '.chad-free-account-limit-signin'
+            );
+
+        signupButton?.addEventListener(
+            'click',
+            function () {
+
+                if (
+                    typeof window.CHADPDG_OPEN_AUTH ===
+                    'function'
+                ) {
+                    window.CHADPDG_OPEN_AUTH(
+                        'signup',
+                        'Create a free account and get ' +
+                        accountLimit +
+                        ' Chad questions every day instead of ' +
+                        guestLimit +
+                        '.'
+                    );
+                }
+            }
+        );
+
+        signinButton?.addEventListener(
+            'click',
+            function () {
+
+                if (
+                    typeof window.CHADPDG_OPEN_AUTH ===
+                    'function'
+                ) {
+                    window.CHADPDG_OPEN_AUTH(
+                        'signin',
+                        'Sign in to continue with your account question limit.'
+                    );
+                }
+            }
+        );
+
+        try {
+            prompt.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        } catch (error) {}
+    }
+
+
     function showDailyLimitMessage(data) {
 
         dailyLimitLocked = true;
@@ -4557,20 +4751,8 @@ body {
                 : 5
         );
 
-        if (askButton) {
-            askButton.disabled = true;
-            askButton.classList.add(
-                'chad-limit-reached'
-            );
-            askButton.textContent =
-                'OUT OF QUESTIONS';
-        }
-
-        if (questionInput) {
-            questionInput.disabled = true;
-            questionInput.placeholder =
-                'Sorry Bro… Chad is out until tomorrow.';
-        }
+        lockQuestionLimitUI();
+        showFreeAccountLimitPrompt(data);
     }
 
 
@@ -4822,6 +5004,18 @@ body {
                 data.remaining,
                 data.daily_limit
             );
+
+            if (
+                Number(data.remaining) <= 0
+            ) {
+                lockQuestionLimitUI();
+
+                if (
+                    data.authenticated !== true
+                ) {
+                    showFreeAccountLimitPrompt(data);
+                }
+            }
 
         } catch (error) {
 
@@ -5180,6 +5374,13 @@ function msg(m,t){if(!authMessage)return;authMessage.textContent=m||'';authMessa
 function setView(name){if(name!=='account')lastAuthView=name;document.querySelectorAll('.chad-auth-view').forEach(v=>v.hidden=v.id!=='chad-auth-'+name);const p=document.getElementById('chad-policy-panel');if(p)p.hidden=true;msg('','')}
 function openAuth(view){setView(view||(currentUser?'account':'signin'));overlay.classList.add('chad-auth-open');overlay.setAttribute('aria-hidden','false');document.body.style.overflow='hidden'}
 function closeAuth(){overlay.classList.remove('chad-auth-open');overlay.setAttribute('aria-hidden','true');document.body.style.overflow=''}
+
+window.CHADPDG_OPEN_AUTH = function(view, message){
+    openAuth(view || 'signup');
+    if(message){
+        msg(message, 'success');
+    }
+};
 
 function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(currentUser.plan||'free')+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
 function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Save your projects';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
