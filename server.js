@@ -1234,6 +1234,166 @@ function amazonCanadaUrl(asin) {
         : "";
 }
 
+
+const AFFILIATE_PARTNERS = Object.freeze({
+    kaiweets: {
+        partner: "KAIWEETS",
+        url: "https://kaiweets.com?sca_ref=11287462.BY7cAwPsGW",
+        button_label: "SHOP KAIWEETS",
+        description: "Electrical and electronic test gear including multimeters, clamp meters, voltage testers, circuit testers and breaker-finding tools."
+    },
+    giraffe: {
+        partner: "Giraffe Tools",
+        url: "https://giraffetools.ca/?ref=DANMOLSON",
+        button_label: "SHOP GIRAFFE TOOLS",
+        description: "Pressure washers, garage vacuums, retractable hose reels, air hose reels, extension cord reels and related garage gear.",
+        promo_code: "BILLY",
+        promo_text: "Use code BILLY for 30% off."
+    }
+});
+
+function hasAffiliateSafetyStop(text) {
+    const q = String(text || "").toLowerCase();
+
+    const urgentHazards = [
+        "smoke coming",
+        "smoking outlet",
+        "smoking receptacle",
+        "sparking outlet",
+        "sparking receptacle",
+        "electrical fire",
+        "gas leak",
+        "smell gas",
+        "carbon monoxide",
+        "live wire",
+        "exposed live",
+        "burning wire",
+        "burnt wiring",
+        "burning plastic",
+        "electrocuted",
+        "shock from",
+        "shocked by"
+    ];
+
+    return urgentHazards.some(term => q.includes(term));
+}
+
+function getAffiliateOffers(question, answer = "") {
+    const q = `${String(question || "")} ${String(answer || "")}`.toLowerCase();
+
+    if (!q.trim() || hasAffiliateSafetyStop(q)) return [];
+
+    const offers = [];
+
+    const kaiweetsStrong = [
+        "multimeter",
+        "clamp meter",
+        "voltage tester",
+        "non-contact voltage",
+        "non contact voltage",
+        "circuit tester",
+        "outlet tester",
+        "receptacle tester",
+        "gfci tester",
+        "breaker finder",
+        "circuit tracer",
+        "trace a circuit",
+        "trace circuit",
+        "find the breaker",
+        "which breaker",
+        "battery tester",
+        "insulation resistance",
+        "megohmmeter",
+        "test voltage",
+        "measure voltage",
+        "test continuity",
+        "continuity test",
+        "test current",
+        "measure current"
+    ];
+
+    const electricalJob = [
+        "outlet",
+        "receptacle",
+        "breaker",
+        "electrical",
+        "wiring",
+        "wire ",
+        "circuit",
+        "switch",
+        "light fixture",
+        "ceiling fan",
+        "panel",
+        "voltage",
+        "amperage",
+        "continuity"
+    ];
+
+    const testIntent = [
+        "test",
+        "check",
+        "diagnos",
+        "troubleshoot",
+        "trace",
+        "find",
+        "identify",
+        "measure",
+        "verify",
+        "install",
+        "replace",
+        "repair"
+    ];
+
+    const giraffeStrong = [
+        "pressure washer",
+        "power washer",
+        "pressure wash",
+        "power wash",
+        "shop vac",
+        "shop vacuum",
+        "garage vacuum",
+        "wet dry vac",
+        "wet/dry vac",
+        "hose reel",
+        "garden hose reel",
+        "air hose reel",
+        "extension cord reel",
+        "cord reel",
+        "retractable hose",
+        "retractable cord",
+        "garage cleaning",
+        "clean the garage",
+        "clean my garage",
+        "wash the driveway",
+        "clean the driveway",
+        "driveway cleaning",
+        "wash siding",
+        "clean siding",
+        "wash the deck",
+        "clean the deck"
+    ];
+
+    const kaiweetsRelevant =
+        kaiweetsStrong.some(term => q.includes(term)) ||
+        (
+            electricalJob.some(term => q.includes(term)) &&
+            testIntent.some(term => q.includes(term))
+        );
+
+    const giraffeRelevant =
+        giraffeStrong.some(term => q.includes(term));
+
+    if (kaiweetsRelevant) {
+        offers.push({ ...AFFILIATE_PARTNERS.kaiweets });
+    }
+
+    if (giraffeRelevant) {
+        offers.push({ ...AFFILIATE_PARTNERS.giraffe });
+    }
+
+    return offers.slice(0, 2);
+}
+
 function prepareProducts(products, keepItemName = false) {
     if (!Array.isArray(products)) return [];
 
@@ -2162,6 +2322,8 @@ async function handleAsk(req, res) {
             ? await createShoppingToken(conversationId, message)
             : "";
 
+        const affiliateOffers = getAffiliateOffers(message, answer);
+
         const remaining = admin
             ? null
             : quota.remaining;
@@ -2186,9 +2348,10 @@ async function handleAsk(req, res) {
             shopping_list_recommended: shoppingListRecommended,
             shopping_token: shoppingToken,
             products,
+            affiliate_offers: affiliateOffers,
             videos,
             citations,
-            affiliate_disclosure: "As an Amazon Associate I earn from qualifying purchases.",
+            affiliate_disclosure: "Affiliate disclosure: ChadPDChee may earn a commission from qualifying purchases made through these links, at no extra cost to you.",
             conversation_id: conversationId,
             admin_test_mode: admin,
             daily_limit: quotaDailyLimit,
@@ -2321,7 +2484,7 @@ async function handleShoppingList(req, res) {
             items,
             products,
             citations: collectSources(data),
-            affiliate_disclosure: "As an Amazon Associate I earn from qualifying purchases."
+            affiliate_disclosure: "Affiliate disclosure: ChadPDChee may earn a commission from qualifying purchases made through these links, at no extra cost to you."
         });
     } catch (error) {
         console.error("Shopping list error:", error);
