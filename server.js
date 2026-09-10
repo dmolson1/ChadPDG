@@ -17,6 +17,11 @@ const MAX_MESSAGE_LENGTH = 3000;
 const MEMORY_DAYS = 30;
 const VISITOR_COOKIE_DAYS = 365;
 const SHOPPING_TOKEN_TTL_SECONDS = 1800;
+const AUTH_SESSION_DAYS = 30;
+const PRIVACY_POLICY_VERSION = "2026-09-09";
+const TERMS_VERSION = "2026-09-09";
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 128;
 
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CHAD_ADMIN_TEST_KEY = process.env.CHAD_ADMIN_TEST_KEY || "";
@@ -121,6 +126,152 @@ function setPersistentCookie(res, name, value, maxAgeSeconds) {
     );
 }
 
+
+function clearCookie(res, name) {
+    appendSetCookie(
+        res,
+        `${name}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`
+    );
+}
+
+function normalizeEmail(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function validEmail(value) {
+    const email = normalizeEmail(value);
+    return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function passwordLooksAcceptable(value) {
+    return typeof value === "string" &&
+        value.length >= PASSWORD_MIN_LENGTH &&
+        value.length <= PASSWORD_MAX_LENGTH;
+}
+
+function scryptAsync(password, salt, options = {}) {
+    return new Promise((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, options, (error, derivedKey) => {
+            if (error) reject(error);
+            else resolve(derivedKey);
+        });
+    });
+}
+
+async function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const N = 16384;
+    const r = 8;
+    const p = 1;
+    const derived = await scryptAsync(password, salt, {
+        N,
+        r,
+        p,
+        maxmem: 64 * 1024 * 1024
+    });
+    return `scrypt$${N}$${r}$${p}$${salt}$${derived.toString("hex")}`;
+}
+
+async function verifyPassword(password, stored) {
+    try {
+        const parts = String(stored || "").split("$");
+        if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+        const N = Number(parts[1]);
+        const r = Number(parts[2]);
+        const p = Number(parts[3]);
+        const salt = parts[4];
+        const expected = Buffer.from(parts[5], "hex");
+        const actual = await scryptAsync(password, salt, {
+            N,
+            r,
+            p,
+            maxmem: 64 * 1024 * 1024
+        });
+        return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+    } catch {
+        return false;
+    }
+}
+
+function hashSessionToken(token) {
+    return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+async function createAuthSession(userId, req, res) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = hashSessionToken(token);
+    const expiresAt = new Date(Date.now() + AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000);
+    const ipHash = hashValue(getClientIp(req));
+    const userAgent = String(req.headers["user-agent"] || "").slice(0, 500);
+
+    await pool.query(
+        `INSERT INTO chad_user_sessions
+            (token_hash, user_id, expires_at, ip_hash, user_agent)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [tokenHash, userId, expiresAt, ipHash, userAgent]
+    );
+
+    setPersistentCookie(
+        res,
+        "chad_session",
+        token,
+        AUTH_SESSION_DAYS * 24 * 60 * 60
+    );
+}
+
+async function getAuthenticatedUser(req) {
+    const cookies = parseCookies(req);
+    const token = cookies.chad_session || "";
+    if (!token || token.length > 200) return null;
+
+    const result = await pool.query(
+        `SELECT u.id, u.email, u.display_name, u.email_verified, u.plan,
+                u.created_at, u.marketing_consent
+         FROM chad_user_sessions s
+         JOIN chad_users u ON u.id = s.user_id
+         WHERE s.token_hash = $1
+           AND s.expires_at > NOW()
+           AND s.revoked_at IS NULL
+           AND u.deleted_at IS NULL
+         LIMIT 1`,
+        [hashSessionToken(token)]
+    );
+
+    if (!result.rowCount) return null;
+
+    await pool.query(
+        `UPDATE chad_user_sessions SET last_seen_at = NOW() WHERE token_hash = $1`,
+        [hashSessionToken(token)]
+    ).catch(() => {});
+
+    return result.rows[0];
+}
+
+async function revokeCurrentSession(req, res) {
+    const cookies = parseCookies(req);
+    const token = cookies.chad_session || "";
+    if (token) {
+        await pool.query(
+            `UPDATE chad_user_sessions SET revoked_at = NOW()
+             WHERE token_hash = $1`,
+            [hashSessionToken(token)]
+        ).catch(() => {});
+    }
+    clearCookie(res, "chad_session");
+}
+
+async function requireAuthenticatedUser(req, res) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+        res.status(401).json({
+            success: false,
+            error: "Please sign in to continue."
+        });
+        return null;
+    }
+    return user;
+}
+
 function validUuid(value) {
     return typeof value === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -159,18 +310,55 @@ async function getOrCreateConversationId(req, res) {
     const cookies = parseCookies(req);
     const bodyId = req.body && req.body.conversation_id;
     let id = cookies.chadgpt_conversation || bodyId || "";
+    const user = await getAuthenticatedUser(req);
+
+    if (validUuid(id)) {
+        const existing = await pool.query(
+            `SELECT id, user_id FROM chad_conversations WHERE id = $1 LIMIT 1`,
+            [id]
+        );
+
+        if (existing.rowCount) {
+            const owner = existing.rows[0].user_id;
+            if (user) {
+                if (!owner) {
+                    await pool.query(
+                        `UPDATE chad_conversations
+                         SET user_id = $2, updated_at = NOW()
+                         WHERE id = $1 AND user_id IS NULL`,
+                        [id, user.id]
+                    );
+                } else if (String(owner) !== String(user.id)) {
+                    id = "";
+                }
+            } else if (owner) {
+                id = "";
+            }
+        }
+    }
 
     if (!validUuid(id)) {
         id = crypto.randomUUID();
     }
 
-    await ensureConversation(id);
+    if (user) {
+        await pool.query(
+            `INSERT INTO chad_conversations (id, user_id)
+             VALUES ($1, $2)
+             ON CONFLICT (id) DO UPDATE
+             SET updated_at = NOW(),
+                 user_id = COALESCE(chad_conversations.user_id, EXCLUDED.user_id)`,
+            [id, user.id]
+        );
+    } else {
+        await ensureConversation(id);
+    }
 
     setPersistentCookie(
         res,
         "chadgpt_conversation",
         id,
-        MEMORY_DAYS * 24 * 60 * 60
+        user ? AUTH_SESSION_DAYS * 24 * 60 * 60 : MEMORY_DAYS * 24 * 60 * 60
     );
 
     return id;
@@ -266,6 +454,76 @@ async function initializeDatabase() {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+    `);
+
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_users (
+            id UUID PRIMARY KEY,
+            email TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name VARCHAR(80),
+            email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+            plan VARCHAR(30) NOT NULL DEFAULT 'free',
+            marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
+            privacy_policy_version VARCHAR(40) NOT NULL,
+            terms_version VARCHAR(40) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_login_at TIMESTAMPTZ NULL,
+            deleted_at TIMESTAMPTZ NULL
+        )
+    `);
+
+    await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_chad_users_email_active
+        ON chad_users (LOWER(email))
+        WHERE deleted_at IS NULL
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_user_sessions (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ NOT NULL,
+            revoked_at TIMESTAMPTZ NULL,
+            ip_hash VARCHAR(64),
+            user_agent TEXT
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_user_sessions_user
+        ON chad_user_sessions(user_id, expires_at DESC)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_user_consents (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            consent_type VARCHAR(50) NOT NULL,
+            version VARCHAR(40) NOT NULL,
+            granted BOOLEAN NOT NULL,
+            recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            ip_hash VARCHAR(64)
+        )
+    `);
+
+    await pool.query(`
+        ALTER TABLE chad_conversations
+        ADD COLUMN IF NOT EXISTS user_id UUID NULL REFERENCES chad_users(id) ON DELETE CASCADE
+    `);
+
+    await pool.query(`
+        ALTER TABLE chad_conversations
+        ADD COLUMN IF NOT EXISTS title VARCHAR(160) NULL
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_conversations_user_updated
+        ON chad_conversations(user_id, updated_at DESC)
     `);
 
     await pool.query(`
@@ -371,8 +629,15 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`
+        DELETE FROM chad_user_sessions
+        WHERE expires_at < NOW() - INTERVAL '7 days'
+           OR revoked_at < NOW() - INTERVAL '7 days'
+    `);
+
+    await pool.query(`
         DELETE FROM chad_conversations
-        WHERE updated_at < NOW() - INTERVAL '${MEMORY_DAYS} days'
+        WHERE user_id IS NULL
+          AND updated_at < NOW() - INTERVAL '${MEMORY_DAYS} days'
     `);
 }
 
@@ -415,8 +680,11 @@ async function saveConversationTurn(id, userText, assistantText) {
             [id, userText, assistantText]
         );
         await client.query(
-            `UPDATE chad_conversations SET updated_at = NOW() WHERE id = $1`,
-            [id]
+            `UPDATE chad_conversations
+             SET updated_at = NOW(),
+                 title = COALESCE(NULLIF(title, ''), LEFT($2, 157))
+             WHERE id = $1`,
+            [id, String(userText || '').replace(/\s+/g, ' ').trim()]
         );
         await client.query("COMMIT");
     } catch (error) {
@@ -1556,6 +1824,7 @@ async function handleReset(req, res) {
     try {
         const visitorId = getOrCreateVisitorId(req, res);
         const ip = getClientIp(req);
+        const user = await getAuthenticatedUser(req);
 
         const allowed = await claimBurst(
             "reset",
@@ -1573,17 +1842,30 @@ async function handleReset(req, res) {
         const cookies = parseCookies(req);
         const oldId = cookies.chadgpt_conversation;
 
-        if (validUuid(oldId)) {
-            await pool.query(`DELETE FROM chad_conversations WHERE id = $1`, [oldId]);
+        // Guests keep the old 30-day behavior. Signed-in users keep old
+        // projects in their conversation history instead of deleting them.
+        if (!user && validUuid(oldId)) {
+            await pool.query(
+                `DELETE FROM chad_conversations WHERE id = $1 AND user_id IS NULL`,
+                [oldId]
+            );
         }
 
         const newId = crypto.randomUUID();
-        await ensureConversation(newId);
+        if (user) {
+            await pool.query(
+                `INSERT INTO chad_conversations (id, user_id) VALUES ($1, $2)`,
+                [newId, user.id]
+            );
+        } else {
+            await ensureConversation(newId);
+        }
+
         setPersistentCookie(
             res,
             "chadgpt_conversation",
             newId,
-            MEMORY_DAYS * 24 * 60 * 60
+            user ? AUTH_SESSION_DAYS * 24 * 60 * 60 : MEMORY_DAYS * 24 * 60 * 60
         );
 
         if (!isTestPageRequest(req)) {
@@ -1831,6 +2113,365 @@ async function handleAnalyticsDashboard(req, res) {
     }
 }
 
+
+async function handleSignup(req, res) {
+    try {
+        const ip = getClientIp(req);
+        const allowed = await claimBurst("auth_signup", ip, 8, 15 * 60);
+        if (!allowed) {
+            res.setHeader("Retry-After", "900");
+            return res.status(429).json({ success: false, error: "Too many signup attempts. Try again later." });
+        }
+
+        const email = normalizeEmail(req.body?.email);
+        const password = req.body?.password;
+        const displayName = String(req.body?.display_name || "").trim().slice(0, 80);
+        const acceptedTerms = req.body?.accept_terms === true;
+        const acceptedPrivacy = req.body?.accept_privacy === true;
+        const marketingConsent = req.body?.marketing_consent === true;
+
+        if (!validEmail(email)) {
+            return res.status(400).json({ success: false, error: "Enter a valid email address." });
+        }
+        if (!passwordLooksAcceptable(password)) {
+            return res.status(400).json({
+                success: false,
+                error: `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`
+            });
+        }
+        if (!acceptedTerms || !acceptedPrivacy) {
+            return res.status(400).json({
+                success: false,
+                error: "You must agree to the Terms of Use and acknowledge the Privacy Policy."
+            });
+        }
+
+        const existing = await pool.query(
+            `SELECT 1 FROM chad_users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+            [email]
+        );
+        if (existing.rowCount) {
+            return res.status(409).json({ success: false, error: "An account already exists for that email." });
+        }
+
+        const userId = crypto.randomUUID();
+        const passwordHash = await hashPassword(password);
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            await client.query(
+                `INSERT INTO chad_users
+                    (id, email, password_hash, display_name, marketing_consent,
+                     privacy_policy_version, terms_version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [
+                    userId,
+                    email,
+                    passwordHash,
+                    displayName || null,
+                    marketingConsent,
+                    PRIVACY_POLICY_VERSION,
+                    TERMS_VERSION
+                ]
+            );
+
+            const ipHash = hashValue(ip);
+            await client.query(
+                `INSERT INTO chad_user_consents (user_id, consent_type, version, granted, ip_hash)
+                 VALUES
+                    ($1, 'privacy_policy', $2, TRUE, $5),
+                    ($1, 'terms_of_use', $3, TRUE, $5),
+                    ($1, 'marketing_email', $2, $4, $5)`,
+                [userId, PRIVACY_POLICY_VERSION, TERMS_VERSION, marketingConsent, ipHash]
+            );
+
+            await client.query("COMMIT");
+        } catch (error) {
+            await client.query("ROLLBACK");
+            if (error && error.code === "23505") {
+                return res.status(409).json({ success: false, error: "An account already exists for that email." });
+            }
+            throw error;
+        } finally {
+            client.release();
+        }
+
+        // Claim the current guest project, if there is one and nobody owns it.
+        const cookies = parseCookies(req);
+        if (validUuid(cookies.chadgpt_conversation)) {
+            await pool.query(
+                `UPDATE chad_conversations
+                 SET user_id = $2, updated_at = NOW()
+                 WHERE id = $1 AND user_id IS NULL`,
+                [cookies.chadgpt_conversation, userId]
+            );
+        }
+
+        await createAuthSession(userId, req, res);
+
+        return res.status(201).json({
+            success: true,
+            user: {
+                id: userId,
+                email,
+                display_name: displayName,
+                email_verified: false,
+                plan: "free",
+                marketing_consent: marketingConsent
+            },
+            email_verification_pending: true
+        });
+    } catch (error) {
+        console.error("Signup error:", error);
+        return res.status(500).json({ success: false, error: "Could not create your account." });
+    }
+}
+
+async function handleLogin(req, res) {
+    try {
+        const ip = getClientIp(req);
+        const email = normalizeEmail(req.body?.email);
+        const password = req.body?.password;
+        const allowed = await claimBurst("auth_login", `${ip}|${email}`, 10, 15 * 60);
+        if (!allowed) {
+            res.setHeader("Retry-After", "900");
+            return res.status(429).json({ success: false, error: "Too many login attempts. Try again later." });
+        }
+
+        const result = await pool.query(
+            `SELECT * FROM chad_users
+             WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL
+             LIMIT 1`,
+            [email]
+        );
+
+        const user = result.rows[0];
+        const goodPassword = user ? await verifyPassword(password, user.password_hash) : false;
+        if (!user || !goodPassword) {
+            return res.status(401).json({ success: false, error: "Email or password is incorrect." });
+        }
+
+        await revokeCurrentSession(req, res);
+        await createAuthSession(user.id, req, res);
+        await pool.query(`UPDATE chad_users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1`, [user.id]);
+
+        return res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                display_name: user.display_name || "",
+                email_verified: Boolean(user.email_verified),
+                plan: user.plan,
+                marketing_consent: Boolean(user.marketing_consent)
+            }
+        });
+    } catch (error) {
+        console.error("Login error:", error);
+        return res.status(500).json({ success: false, error: "Could not sign in." });
+    }
+}
+
+async function handleLogout(req, res) {
+    await revokeCurrentSession(req, res);
+    return res.json({ success: true });
+}
+
+async function handleMe(req, res) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.json({ success: true, authenticated: false });
+    return res.json({
+        success: true,
+        authenticated: true,
+        user: {
+            id: user.id,
+            email: user.email,
+            display_name: user.display_name || "",
+            email_verified: Boolean(user.email_verified),
+            plan: user.plan,
+            created_at: user.created_at,
+            marketing_consent: Boolean(user.marketing_consent)
+        }
+    });
+}
+
+async function handleConversationList(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        const result = await pool.query(
+            `SELECT c.id,
+                    COALESCE(NULLIF(c.title, ''), 'Untitled project') AS title,
+                    c.created_at,
+                    c.updated_at,
+                    COUNT(m.id)::int AS message_count
+             FROM chad_conversations c
+             LEFT JOIN chad_messages m ON m.conversation_id = c.id
+             WHERE c.user_id = $1
+             GROUP BY c.id
+             ORDER BY c.updated_at DESC
+             LIMIT 100`,
+            [user.id]
+        );
+        return res.json({ success: true, conversations: result.rows });
+    } catch (error) {
+        console.error("Conversation list error:", error);
+        return res.status(500).json({ success: false, error: "Could not load your projects." });
+    }
+}
+
+async function handleConversationSelect(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        const id = String(req.body?.conversation_id || "");
+        if (!validUuid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid project." });
+        }
+        const owned = await pool.query(
+            `SELECT 1 FROM chad_conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
+            [id, user.id]
+        );
+        if (!owned.rowCount) {
+            return res.status(404).json({ success: false, error: "Project not found." });
+        }
+        setPersistentCookie(res, "chadgpt_conversation", id, AUTH_SESSION_DAYS * 24 * 60 * 60);
+        return res.json({ success: true, conversation_id: id });
+    } catch (error) {
+        console.error("Conversation select error:", error);
+        return res.status(500).json({ success: false, error: "Could not open that project." });
+    }
+}
+
+async function handleConversationMessages(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        const id = String(req.query?.conversation_id || "");
+        if (!validUuid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid project." });
+        }
+        const owned = await pool.query(
+            `SELECT id, COALESCE(NULLIF(title, ''), 'Untitled project') AS title
+             FROM chad_conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
+            [id, user.id]
+        );
+        if (!owned.rowCount) {
+            return res.status(404).json({ success: false, error: "Project not found." });
+        }
+        const messages = await pool.query(
+            `SELECT role, content, created_at
+             FROM chad_messages WHERE conversation_id = $1 ORDER BY id ASC LIMIT 500`,
+            [id]
+        );
+        return res.json({
+            success: true,
+            conversation: owned.rows[0],
+            messages: messages.rows
+        });
+    } catch (error) {
+        console.error("Conversation messages error:", error);
+        return res.status(500).json({ success: false, error: "Could not load that project." });
+    }
+}
+
+async function handleAccountExport(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        const conversations = await pool.query(
+            `SELECT id, title, created_at, updated_at FROM chad_conversations
+             WHERE user_id = $1 ORDER BY created_at ASC`,
+            [user.id]
+        );
+        const ids = conversations.rows.map(row => row.id);
+        let messages = [];
+        if (ids.length) {
+            const result = await pool.query(
+                `SELECT conversation_id, role, content, created_at
+                 FROM chad_messages
+                 WHERE conversation_id = ANY($1::uuid[])
+                 ORDER BY id ASC`,
+                [ids]
+            );
+            messages = result.rows;
+        }
+        const consents = await pool.query(
+            `SELECT consent_type, version, granted, recorded_at
+             FROM chad_user_consents WHERE user_id = $1 ORDER BY recorded_at ASC`,
+            [user.id]
+        );
+
+        res.setHeader("Content-Disposition", `attachment; filename=chadpdchee-account-export.json`);
+        return res.json({
+            exported_at: new Date().toISOString(),
+            account: {
+                id: user.id,
+                email: user.email,
+                display_name: user.display_name || "",
+                plan: user.plan,
+                created_at: user.created_at,
+                marketing_consent: Boolean(user.marketing_consent)
+            },
+            conversations: conversations.rows,
+            messages,
+            consents: consents.rows
+        });
+    } catch (error) {
+        console.error("Account export error:", error);
+        return res.status(500).json({ success: false, error: "Could not export your account data." });
+    }
+}
+
+async function handleAccountDelete(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+        const password = req.body?.password;
+        const confirm = req.body?.confirm === "DELETE";
+        if (!confirm) {
+            return res.status(400).json({ success: false, error: "Type DELETE to confirm account deletion." });
+        }
+
+        const auth = await pool.query(
+            `SELECT password_hash FROM chad_users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+            [user.id]
+        );
+        const good = auth.rowCount && await verifyPassword(password, auth.rows[0].password_hash);
+        if (!good) {
+            return res.status(401).json({ success: false, error: "Password is incorrect." });
+        }
+
+        // Remove analytics rows tied to this account's conversation IDs before
+        // deleting the conversations themselves. Aggregate/orphan analytics that
+        // cannot identify the account remain outside the account record.
+        const ownedIds = await pool.query(
+            `SELECT id FROM chad_conversations WHERE user_id = $1`,
+            [user.id]
+        );
+        const conversationIds = ownedIds.rows.map(row => row.id);
+        if (conversationIds.length) {
+            await pool.query(
+                `DELETE FROM chad_analytics WHERE conversation_id = ANY($1::uuid[])`,
+                [conversationIds]
+            );
+        }
+
+        // User-owned conversations/messages are removed together.
+        await pool.query(`DELETE FROM chad_conversations WHERE user_id = $1`, [user.id]);
+        await pool.query(`DELETE FROM chad_user_sessions WHERE user_id = $1`, [user.id]);
+        await pool.query(`DELETE FROM chad_user_consents WHERE user_id = $1`, [user.id]);
+        await pool.query(`DELETE FROM chad_users WHERE id = $1`, [user.id]);
+
+        clearCookie(res, "chad_session");
+        clearCookie(res, "chadgpt_conversation");
+        return res.json({ success: true, deleted: true });
+    } catch (error) {
+        console.error("Account delete error:", error);
+        return res.status(500).json({ success: false, error: "Could not delete your account." });
+    }
+}
+
 function registerBoth(method, path, handler) {
     app[method](path, handler);
     app[method](`/wp-json/chadpgt/v1${path}`, handler);
@@ -1840,7 +2481,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-6-analytics"
+        version: "chad-core-7-accounts"
     });
 });
 
@@ -1854,15 +2495,29 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-6-analytics",
+        version: "chad-core-7-accounts",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
         databaseConnected,
         adminTestConfigured: Boolean(CHAD_ADMIN_TEST_KEY),
+        accountsConfigured: true,
+        emailDeliveryConfigured: false,
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+        termsVersion: TERMS_VERSION,
         dailyLimit: DAILY_LIMIT
     });
 });
+
+registerBoth("post", "/auth/signup", handleSignup);
+registerBoth("post", "/auth/login", handleLogin);
+registerBoth("post", "/auth/logout", handleLogout);
+registerBoth("get", "/auth/me", handleMe);
+registerBoth("get", "/account/conversations", handleConversationList);
+registerBoth("post", "/account/conversations/select", handleConversationSelect);
+registerBoth("get", "/account/conversations/messages", handleConversationMessages);
+registerBoth("get", "/account/export", handleAccountExport);
+registerBoth("post", "/account/delete", handleAccountDelete);
 
 registerBoth("get", "/status", handleStatus);
 registerBoth("post", "/translate", handleTranslate);
