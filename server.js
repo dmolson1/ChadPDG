@@ -1607,7 +1607,9 @@ const PUBLIC_ANALYTICS_EVENTS = new Set([
     "product_click",
     "shopping_product_impression",
     "shopping_product_click",
-    "video_click"
+    "video_click",
+    "sponsor_impression",
+    "sponsor_click"
 ]);
 
 const ANALYTICS_EVENT_ALIASES = new Map([
@@ -1635,7 +1637,11 @@ function cleanAnalyticsMetadata(value) {
         "reason",
         "status",
         "category",
-        "topic"
+        "topic",
+        "campaign_id",
+        "advertiser",
+        "placement",
+        "sponsor_mode"
     ];
 
     const output = {};
@@ -2342,7 +2348,11 @@ async function handleAnalytics(req, res) {
             utm_content: req.body?.utm_content || req.body?.metadata?.utm_content,
             utm_term: req.body?.utm_term || req.body?.metadata?.utm_term,
             video_title: req.body?.video_title || req.body?.metadata?.video_title,
-            video_channel: req.body?.video_channel || req.body?.metadata?.video_channel
+            video_channel: req.body?.video_channel || req.body?.metadata?.video_channel,
+            campaign_id: req.body?.campaign_id || req.body?.metadata?.campaign_id,
+            advertiser: req.body?.advertiser || req.body?.metadata?.advertiser,
+            placement: req.body?.placement || req.body?.metadata?.placement,
+            sponsor_mode: req.body?.sponsor_mode || req.body?.metadata?.sponsor_mode
         });
 
         await recordAnalyticsEvent({
@@ -2389,6 +2399,8 @@ async function handleAnalyticsDashboard(req, res) {
                 COUNT(*) FILTER (WHERE event IN ('product_impression','shopping_product_impression'))::int AS product_impressions,
                 COUNT(*) FILTER (WHERE event IN ('product_click','shopping_product_click'))::int AS product_clicks,
                 COUNT(*) FILTER (WHERE event = 'video_click')::int AS video_clicks,
+                COUNT(*) FILTER (WHERE event = 'sponsor_impression')::int AS sponsor_impressions,
+                COUNT(*) FILTER (WHERE event = 'sponsor_click')::int AS sponsor_clicks,
                 COALESCE((SELECT value FROM question_visitors), 0)::int AS question_visitors
             FROM base
         `;
@@ -2517,6 +2529,23 @@ async function handleAnalyticsDashboard(req, res) {
             LIMIT 10
         `;
 
+
+        const sponsorsSql = `
+            SELECT
+                COALESCE(NULLIF(metadata->>'campaign_id',''), 'Unknown campaign') AS campaign_id,
+                COALESCE(NULLIF(metadata->>'advertiser',''), 'Unknown advertiser') AS advertiser,
+                COALESCE(NULLIF(metadata->>'placement',''), 'above_chat') AS placement,
+                COALESCE(NULLIF(metadata->>'sponsor_mode',''), 'unknown') AS sponsor_mode,
+                COUNT(*) FILTER (WHERE event = 'sponsor_impression')::int AS impressions,
+                COUNT(*) FILTER (WHERE event = 'sponsor_click')::int AS clicks
+            FROM chad_analytics
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+              AND event IN ('sponsor_impression','sponsor_click')
+            GROUP BY 1,2,3,4
+            ORDER BY clicks DESC,impressions DESC,advertiser ASC
+            LIMIT 25
+        `;
+
         const returningSql = `
             WITH visitor_days AS (
                 SELECT visitor_hash,
@@ -2533,7 +2562,7 @@ async function handleAnalyticsDashboard(req, res) {
             FROM visitor_days
         `;
 
-        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult, costResult, costByKindResult, categoriesResult, topicsResult] =
+        const [summaryResult, todayResult, dailyResult, productsResult, sourcesResult, returningResult, costResult, costByKindResult, categoriesResult, topicsResult, sponsorsResult] =
             await Promise.all([
                 pool.query(summarySql, [days]),
                 pool.query(todaySql),
@@ -2544,7 +2573,8 @@ async function handleAnalyticsDashboard(req, res) {
                 pool.query(costSql, [days]),
                 pool.query(costByKindSql, [days]),
                 pool.query(categoriesSql, [days]),
-                pool.query(topicsSql, [days])
+                pool.query(topicsSql, [days]),
+                pool.query(sponsorsSql, [days])
             ]);
 
         const summary = summaryResult.rows[0] || {};
@@ -2554,6 +2584,8 @@ async function handleAnalyticsDashboard(req, res) {
         const productClicks = Number(summary.product_clicks || 0);
         const knownVisitors = Number(returningResult.rows[0]?.known_visitors || 0);
         const returningVisitors = Number(returningResult.rows[0]?.returning_visitors || 0);
+        const sponsorImpressions = Number(summary.sponsor_impressions || 0);
+        const sponsorClicks = Number(summary.sponsor_clicks || 0);
 
         return res.json({
             success: true,
@@ -2571,6 +2603,9 @@ async function handleAnalyticsDashboard(req, res) {
                 returning_visitors: returningVisitors,
                 returning_visitor_percent: knownVisitors
                     ? Number(((returningVisitors / knownVisitors) * 100).toFixed(1))
+                    : 0,
+                sponsor_ctr_percent: sponsorImpressions
+                    ? Number(((sponsorClicks / sponsorImpressions) * 100).toFixed(2))
                     : 0
             },
             daily: dailyResult.rows,
@@ -2578,6 +2613,12 @@ async function handleAnalyticsDashboard(req, res) {
             traffic_sources: sourcesResult.rows,
             conversation_categories: categoriesResult.rows,
             top_topics: topicsResult.rows,
+            sponsor_campaigns: sponsorsResult.rows.map(row => ({
+                ...row,
+                ctr_percent: Number(row.impressions || 0)
+                    ? Number(((Number(row.clicks || 0) / Number(row.impressions || 1)) * 100).toFixed(2))
+                    : 0
+            })),
             openai_costs: {
                 ...(costResult.rows[0] || {}),
                 estimated_token_cost_usd: Number(costResult.rows[0]?.estimated_token_cost_usd || 0),
@@ -3670,7 +3711,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-18-analytics-intelligence"
+        version: "chad-core-20-sponsor-inventory"
     });
 });
 
@@ -3684,7 +3725,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-18-analytics-intelligence",
+        version: "chad-core-20-sponsor-inventory",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
