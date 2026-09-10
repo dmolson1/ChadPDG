@@ -8,6 +8,7 @@ app.set("trust proxy", 1);
 const PORT = process.env.PORT || 8080;
 const MODEL = "gpt-5.6-luna";
 const DAILY_LIMIT = 5;
+const SIGNED_IN_DAILY_LIMIT = 15;
 const IP_DAILY_SAFETY_LIMIT = 20;
 const BURST_LIMIT = 15;
 const BURST_WINDOW_SECONDS = 60;
@@ -932,7 +933,7 @@ async function getDailyUsed(visitorHash, day) {
     return Number(result.rows[0]?.question_count || 0);
 }
 
-async function reserveDailyQuestion(visitorHash, ipHash, day) {
+async function reserveDailyQuestion(visitorHash, ipHash, day, dailyLimit = DAILY_LIMIT) {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
@@ -945,7 +946,7 @@ async function reserveDailyQuestion(visitorHash, ipHash, day) {
                            updated_at = NOW()
              WHERE chad_daily_usage.question_count < $3
              RETURNING question_count`,
-            [visitorHash, day, DAILY_LIMIT]
+            [visitorHash, day, dailyLimit]
         );
 
         if (!visitor.rowCount) {
@@ -975,7 +976,7 @@ async function reserveDailyQuestion(visitorHash, ipHash, day) {
         return {
             allowed: true,
             used,
-            remaining: Math.max(0, DAILY_LIMIT - used)
+            remaining: Math.max(0, dailyLimit - used)
         };
     } catch (error) {
         await client.query("ROLLBACK");
@@ -1599,32 +1600,45 @@ async function handleStatus(req, res) {
         const visitorHash = hashValue(visitorId);
         const admin = isAdminTestRequest(req);
         const reset = getTorontoResetInfo();
+        const user = await getAuthenticatedUser(req);
+
+        const dailyLimit = user ? SIGNED_IN_DAILY_LIMIT : DAILY_LIMIT;
+        const quotaHash = user ? hashValue(`user:${user.id}`) : visitorHash;
 
         if (admin) {
             return res.json({
                 success: true,
-                daily_limit: DAILY_LIMIT,
-                remaining: DAILY_LIMIT,
+                daily_limit: dailyLimit,
+                remaining: dailyLimit,
                 limit_reached: false,
                 admin_test_mode: true,
+                authenticated: Boolean(user),
+                account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+                guest_daily_limit: DAILY_LIMIT,
                 ...reset
             });
         }
 
-        const used = await getDailyUsed(visitorHash, torontoDateKey());
-        const remaining = Math.max(0, DAILY_LIMIT - used);
+        const used = await getDailyUsed(quotaHash, torontoDateKey());
+        const remaining = Math.max(0, dailyLimit - used);
 
         return res.json({
             success: true,
-            daily_limit: DAILY_LIMIT,
+            daily_limit: dailyLimit,
             remaining,
             limit_reached: remaining <= 0,
             admin_test_mode: false,
+            authenticated: Boolean(user),
+            account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+            guest_daily_limit: DAILY_LIMIT,
             ...reset
         });
     } catch (error) {
         console.error("Status error:", error);
-        return res.status(500).json({ success: false, error: "Chad couldn't count to five. Impressive." });
+        return res.status(500).json({
+            success: false,
+            error: "Chad couldn't count today. This is going extremely well."
+        });
     }
 }
 
@@ -1702,6 +1716,8 @@ async function handleTranslate(req, res) {
 async function handleAsk(req, res) {
     let quotaReserved = false;
     let visitorHash = "";
+    let quotaHash = "";
+    let quotaDailyLimit = DAILY_LIMIT;
     let ipHash = "";
     let day = torontoDateKey();
 
@@ -1729,6 +1745,15 @@ async function handleAsk(req, res) {
         const ip = getClientIp(req);
         ipHash = hashValue(ip);
         const admin = isAdminTestRequest(req);
+        const authenticatedUser = await getAuthenticatedUser(req);
+
+        quotaDailyLimit = authenticatedUser
+            ? SIGNED_IN_DAILY_LIMIT
+            : DAILY_LIMIT;
+
+        quotaHash = authenticatedUser
+            ? hashValue(`user:${authenticatedUser.id}`)
+            : visitorHash;
 
         if (!admin) {
             const burstAllowed = await claimBurst(
@@ -1764,9 +1789,9 @@ async function handleAsk(req, res) {
             });
         }
 
-        let quota = { allowed: true, remaining: DAILY_LIMIT };
+        let quota = { allowed: true, remaining: quotaDailyLimit };
         if (!admin) {
-            quota = await reserveDailyQuestion(visitorHash, ipHash, day);
+            quota = await reserveDailyQuestion(quotaHash, ipHash, day, quotaDailyLimit);
             if (!quota.allowed) {
                 const reset = getTorontoResetInfo();
                 if (quota.reason === "visitor") {
@@ -1779,9 +1804,11 @@ async function handleAsk(req, res) {
                     }
                     return res.status(429).json({
                         success: false,
-                        error: "That is your 5 free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Come back tomorrow.",
+                        error: authenticatedUser
+                            ? `That is your ${SIGNED_IN_DAILY_LIMIT} Chad questions for today, Bro. Even Chad has workplace standards. Come back tomorrow.`
+                            : `That is your ${DAILY_LIMIT} free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Sign in for ${SIGNED_IN_DAILY_LIMIT} a day or come back tomorrow.`,
                         limit_reached: true,
-                        daily_limit: DAILY_LIMIT,
+                        daily_limit: quotaDailyLimit,
                         remaining: 0,
                         admin_test_mode: false,
                         ...reset
@@ -1889,14 +1916,14 @@ async function handleAsk(req, res) {
             affiliate_disclosure: "As an Amazon Associate I earn from qualifying purchases.",
             conversation_id: conversationId,
             admin_test_mode: admin,
-            daily_limit: DAILY_LIMIT,
+            daily_limit: quotaDailyLimit,
             remaining,
             analytics_token: analyticsToken(visitorHash, conversationId)
         });
     } catch (error) {
         console.error("Ask error:", error);
         if (quotaReserved) {
-            await releaseDailyQuestion(visitorHash, ipHash, day);
+            await releaseDailyQuestion(quotaHash || visitorHash, ipHash, day);
         }
         return res.status(500).json({
             success: false,
@@ -2669,33 +2696,57 @@ async function handleResetPassword(req, res) {
 async function handleAdminResetQuota(req, res) {
     try {
         if (!isAdminTestRequest(req)) {
-            return res.status(401).json({ success: false, error: "Developer access required." });
+            return res.status(401).json({
+                success: false,
+                error: "Developer access required."
+            });
         }
 
         const visitorId = getOrCreateVisitorId(req, res);
         const visitorHash = hashValue(visitorId);
         const ipHash = hashValue(getClientIp(req));
         const day = torontoDateKey();
+        const user = await getAuthenticatedUser(req);
 
         await pool.query(
-            `DELETE FROM chad_daily_usage WHERE visitor_hash = $1 AND usage_date = $2`,
+            `DELETE FROM chad_daily_usage
+             WHERE visitor_hash = $1 AND usage_date = $2`,
             [visitorHash, day]
         );
+
+        if (user) {
+            const userQuotaHash = hashValue(`user:${user.id}`);
+            await pool.query(
+                `DELETE FROM chad_daily_usage
+                 WHERE visitor_hash = $1 AND usage_date = $2`,
+                [userQuotaHash, day]
+            );
+        }
+
         await pool.query(
-            `DELETE FROM chad_ip_daily_usage WHERE ip_hash = $1 AND usage_date = $2`,
+            `DELETE FROM chad_ip_daily_usage
+             WHERE ip_hash = $1 AND usage_date = $2`,
             [ipHash, day]
         );
+
+        const dailyLimit = user ? SIGNED_IN_DAILY_LIMIT : DAILY_LIMIT;
 
         return res.json({
             success: true,
             reset: true,
-            daily_limit: DAILY_LIMIT,
-            remaining: DAILY_LIMIT,
+            authenticated: Boolean(user),
+            daily_limit: dailyLimit,
+            remaining: dailyLimit,
+            guest_daily_limit: DAILY_LIMIT,
+            account_daily_limit: SIGNED_IN_DAILY_LIMIT,
             usage_date: day
         });
     } catch (error) {
         console.error("Admin quota reset error:", error);
-        return res.status(500).json({ success: false, error: "Could not reset the test quota." });
+        return res.status(500).json({
+            success: false,
+            error: "Could not reset the test quota."
+        });
     }
 }
 
@@ -2953,7 +3004,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-9-auto-login-verify"
+        version: "chad-core-10-account-quota"
     });
 });
 
@@ -2967,7 +3018,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-9-auto-login-verify",
+        version: "chad-core-10-account-quota",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -2977,7 +3028,8 @@ app.get("/health", async (req, res) => {
         emailDeliveryConfigured: Boolean(RESEND_API_KEY && CHAD_EMAIL_FROM),
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
         termsVersion: TERMS_VERSION,
-        dailyLimit: DAILY_LIMIT
+        dailyLimit: DAILY_LIMIT,
+        signedInDailyLimit: SIGNED_IN_DAILY_LIMIT
     });
 });
 
