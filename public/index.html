@@ -121,6 +121,48 @@ body {
 @media(max-width:600px){
     .chad-share-actions{grid-template-columns:1fr 1fr}
 }
+
+/* =========================================================
+   CORE 20 — SPONSOR INVENTORY
+   ========================================================= */
+#chad-sponsor-slot{margin:0 0 16px;width:100%}
+#chad-sponsor-slot[hidden]{display:none!important}
+#chad-sponsor-slot .chad-sponsor-link{
+    display:flex;align-items:center;gap:14px;width:100%;min-height:86px;
+    padding:12px 14px;border:1px solid #d8dde3;border-radius:12px;
+    background:linear-gradient(135deg,rgba(22,119,184,.05),rgba(255,255,255,.98) 42%,rgba(241,189,41,.06));
+    color:#17191c;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.055);
+    transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease
+}
+#chad-sponsor-slot .chad-sponsor-link:hover,#chad-sponsor-slot .chad-sponsor-link:focus{
+    transform:translateY(-1px);border-color:#a9bfd0;box-shadow:0 7px 20px rgba(0,0,0,.08)
+}
+.chad-sponsor-badge{
+    flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#17191c;color:#f1bd29;
+    font:900 10px/1 Arial,Helvetica,sans-serif;letter-spacing:.8px;white-space:nowrap
+}
+.chad-sponsor-image{flex:0 0 auto;width:110px;height:58px;object-fit:contain;border-radius:8px;background:#fff}
+.chad-sponsor-copy{flex:1 1 auto;min-width:0}
+.chad-sponsor-headline{font:900 16px/1.2 Arial,Helvetica,sans-serif;color:#111}
+.chad-sponsor-body{margin-top:4px;color:#5a646d;font:500 12px/1.4 Arial,Helvetica,sans-serif}
+.chad-sponsor-cta{flex:0 0 auto;color:#0D5F91;font:900 12px/1.2 Arial,Helvetica,sans-serif;white-space:nowrap}
+#chad-sponsor-slot.chad-sponsor-google{
+    min-height:90px;display:block;border:1px dashed #cbd2d9;border-radius:12px;padding:8px;background:#fafafa
+}
+@media(max-width:700px){
+    #chad-sponsor-slot .chad-sponsor-link{gap:10px;padding:11px 12px;min-height:78px}
+    .chad-sponsor-badge{display:none}
+    .chad-sponsor-image{width:78px;height:48px}
+    .chad-sponsor-headline{font-size:14px}
+    .chad-sponsor-body{font-size:11px}
+    .chad-sponsor-cta{font-size:11px}
+}
+@media(max-width:480px){
+    #chad-sponsor-slot .chad-sponsor-link{align-items:flex-start;flex-wrap:wrap}
+    .chad-sponsor-copy{flex:1 1 calc(100% - 90px)}
+    .chad-sponsor-cta{width:100%;padding-left:88px}
+}
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
@@ -232,6 +274,20 @@ body {
         gas, plumbing, or safety, consult a qualified professional.
         <br><br>
         Now that we've gotten that out of the way... what did you screw up?
+    </div>
+
+
+    <!-- CHADPDCHEE SPONSOR INVENTORY — ABOVE CHAT -->
+    <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
+        <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
+            <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
+            <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
+            <div class="chad-sponsor-copy">
+                <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
+                <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+            </div>
+            <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
+        </a>
     </div>
 
     <!-- HIDDEN UNTIL FIRST QUESTION -->
@@ -2782,7 +2838,105 @@ body {
         } catch (error) {}
     }
 
+
+    /* =====================================================
+       CORE 20 — SPONSOR INVENTORY
+       Direct sponsor → Google hook → house ad.
+       ===================================================== */
+    const CHAD_SPONSOR_DEFAULT={
+        mode:'house',
+        campaign_id:'house-advertise-with-chad',
+        advertiser:'ChadPDChee',
+        placement:'above_chat',
+        badge:'ADVERTISE WITH CHAD',
+        headline:"Put your brand in Chad's shop.",
+        body:'Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.',
+        cta:'Advertise with Chad →',
+        url:'https://hammeredhandyman.com/work-with-me/',
+        image_url:''
+    };
+
+    let chadSponsorImpressionSent=false;
+
+    function chadSponsorMetadata(config){
+        return {
+            campaign_id:String(config.campaign_id||'').slice(0,120),
+            advertiser:String(config.advertiser||'').slice(0,120),
+            placement:String(config.placement||'above_chat').slice(0,80),
+            sponsor_mode:String(config.mode||'house').slice(0,40)
+        };
+    }
+
+    function trackSponsorEvent(eventName,config){
+        trackSimpleAnalyticsEvent(eventName,{
+            metadata:Object.assign({},chadAnalyticsAttribution(),chadSponsorMetadata(config))
+        });
+    }
+
+    function renderChadSponsor(){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link)return;
+
+        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,(window.CHADPDG_SPONSOR_CONFIG||{}));
+
+        if(config.mode==='off'){
+            slot.hidden=true;
+            return;
+        }
+
+        if(config.mode==='google'&&typeof window.CHADPDG_RENDER_GOOGLE_SPONSOR==='function'){
+            slot.hidden=false;
+            slot.classList.add('chad-sponsor-google');
+            link.hidden=true;
+            try{
+                const rendered=window.CHADPDG_RENDER_GOOGLE_SPONSOR(slot);
+                if(rendered!==false){
+                    if(!chadSponsorImpressionSent){
+                        chadSponsorImpressionSent=true;
+                        trackSponsorEvent('sponsor_impression',config);
+                    }
+                    return;
+                }
+            }catch(error){
+                console.warn('Chad sponsor Google fallback failed:',error);
+            }
+            slot.classList.remove('chad-sponsor-google');
+            link.hidden=false;
+            config.mode='house';
+        }
+
+        document.getElementById('chad-sponsor-badge').textContent=
+            config.badge||(config.mode==='direct'?'SPONSORED':'ADVERTISE WITH CHAD');
+        document.getElementById('chad-sponsor-headline').textContent=config.headline||'';
+        document.getElementById('chad-sponsor-body').textContent=config.body||'';
+        document.getElementById('chad-sponsor-cta').textContent=config.cta||'Learn more →';
+        link.href=config.url||'#';
+
+        const image=document.getElementById('chad-sponsor-image');
+        if(config.image_url){
+            image.src=config.image_url;
+            image.alt=config.advertiser?(config.advertiser+' sponsor'):'Sponsor';
+            image.hidden=false;
+        }else{
+            image.removeAttribute('src');
+            image.hidden=true;
+        }
+
+        slot.hidden=false;
+
+        if(!chadSponsorImpressionSent){
+            chadSponsorImpressionSent=true;
+            trackSponsorEvent('sponsor_impression',config);
+        }
+
+        link.onclick=function(){
+            trackSponsorEvent('sponsor_click',config);
+        };
+    }
+
     trackSimpleAnalyticsEvent('page_view');
+    renderChadSponsor();
 
 
     /* =====================================================
