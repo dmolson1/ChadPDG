@@ -18,6 +18,103 @@ body {
         padding: 6px;
     }
 }
+
+#chad-buttons .chad-secondary-action{
+    background:#eef1f4;
+    color:#1b2127;
+    border:1px solid #cbd2d9;
+}
+#chad-buttons .chad-secondary-action:hover{
+    background:#e2e7eb;
+}
+.chad-share-overlay{
+    position:fixed;
+    inset:0;
+    z-index:10000;
+    background:rgba(0,0,0,.58);
+    display:grid;
+    place-items:center;
+    padding:18px;
+}
+.chad-share-overlay[hidden]{
+    display:none!important;
+}
+.chad-share-modal{
+    width:min(520px,100%);
+    position:relative;
+    box-sizing:border-box;
+    background:#fff;
+    color:#111;
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 24px 70px rgba(0,0,0,.35);
+}
+.chad-share-modal h2{
+    margin:0 34px 8px 0;
+    font:800 24px/1.2 Arial,Helvetica,sans-serif;
+}
+.chad-share-copy{
+    margin:0 0 16px;
+    color:#555;
+    font:500 14px/1.45 Arial,Helvetica,sans-serif;
+}
+.chad-share-close{
+    position:absolute;
+    right:14px;
+    top:12px;
+    border:0;
+    background:transparent;
+    font-size:28px;
+    cursor:pointer;
+}
+#chad-share-url{
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid #c8ced4;
+    border-radius:9px;
+    padding:11px 12px;
+    font:500 13px Arial,Helvetica,sans-serif;
+}
+.chad-share-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:9px;
+    margin-top:14px;
+}
+.chad-share-actions button{
+    border:0;
+    border-radius:9px;
+    padding:11px 12px;
+    background:#20262c;
+    color:#fff;
+    font:800 13px Arial,Helvetica,sans-serif;
+    cursor:pointer;
+}
+.chad-share-actions button:hover{
+    opacity:.9;
+}
+.chad-share-actions .chad-stop-share{
+    grid-column:1/-1;
+    background:#fff2f2;
+    color:#a32222;
+    border:1px solid #efb7b7;
+}
+.chad-share-status{
+    min-height:18px;
+    margin-top:10px;
+    color:#555;
+    font:600 12px Arial,Helvetica,sans-serif;
+}
+.chad-recent-saved{
+    display:inline-block;
+    margin-left:6px;
+    font-size:10px;
+    color:#7ad39b;
+    vertical-align:1px;
+}
+@media(max-width:600px){
+    .chad-share-actions{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 <body>
@@ -154,6 +251,24 @@ body {
                 NEW CONVERSATION
             </button>
 
+            <button
+                type="button"
+                id="chad-save-conversation"
+                class="chad-secondary-action"
+                title="Save this conversation with your own title"
+            >
+                SAVE CONVERSATION
+            </button>
+
+            <button
+                type="button"
+                id="chad-share-conversation"
+                class="chad-secondary-action"
+                title="Share this conversation"
+            >
+                SHARE
+            </button>
+
         </div>
 
         <div id="chad-turnstile"></div>
@@ -166,6 +281,24 @@ body {
     </main>
 </div>
 
+
+
+    <div id="chad-share-overlay" class="chad-share-overlay" hidden>
+        <div class="chad-share-modal" role="dialog" aria-modal="true" aria-labelledby="chad-share-title">
+            <button type="button" id="chad-share-close" class="chad-share-close" aria-label="Close">×</button>
+            <h2 id="chad-share-title">Share Conversation</h2>
+            <p class="chad-share-copy">Send Chad's questionable brilliance to yourself or somebody else.</p>
+            <input type="text" id="chad-share-url" readonly aria-label="Share link">
+            <div class="chad-share-actions">
+                <button type="button" id="chad-native-share">Share…</button>
+                <button type="button" id="chad-copy-share">Copy Link</button>
+                <button type="button" id="chad-email-share">Email</button>
+                <button type="button" id="chad-text-share">Text</button>
+                <button type="button" id="chad-stop-share" class="chad-stop-share">Stop Sharing</button>
+            </div>
+            <div id="chad-share-status" class="chad-share-status" aria-live="polite"></div>
+        </div>
+    </div>
 
     <!-- CHADPDCHEE ACCOUNT / AUTH MODAL -->
     <div id="chad-auth-overlay" aria-hidden="true">
@@ -4752,7 +4885,14 @@ async function loadMe(){try{const d=await api('/auth/me');currentUser=d.authenti
 function closeRecentMenus(){document.querySelectorAll('.chad-recent-menu').forEach(m=>m.hidden=true)}
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
-async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
+async function saveConversation(c){const suggested=(c&&c.title)||'My Chad Project';const title=window.prompt('Give this conversation a title',suggested);if(title===null)return null;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return null;try{const d=await api('/account/conversations/save',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||'',title:clean}));currentConversationId=d.conversation?.id||currentConversationId;await loadRecent();return d.conversation}catch(e){window.alert(e.message||'Could not save that conversation.');return null}}
+let activeShareConversationId=null,activeShareTitle='';
+function openShareModal(url,title,id){activeShareConversationId=id||currentConversationId||null;activeShareTitle=title||'ChadPDChee conversation';const overlay=document.getElementById('chad-share-overlay'),input=document.getElementById('chad-share-url'),status=document.getElementById('chad-share-status');if(input)input.value=url||'';if(status)status.textContent='';if(overlay)overlay.hidden=false}
+function closeShareModal(){const overlay=document.getElementById('chad-share-overlay');if(overlay)overlay.hidden=true}
+async function shareConversation(c){try{const d=await api('/account/conversations/share',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||''}));openShareModal(d.share_url,d.title,c?.id||currentConversationId)}catch(e){window.alert(e.message||'Could not share that conversation.')}}
+async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
+async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
+async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
 function historyChad(text){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div>';chat.appendChild(w)}
 async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'');if(m.role==='assistant')historyChad(m.content||'')});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
@@ -4782,6 +4922,70 @@ document.addEventListener('click',e=>{if(!e.target.closest('.chad-recent-menu-wr
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('chad-auth-open'))closeAuth()});
 loadMe();
 })();
+
+document.getElementById('chad-save-conversation')?.addEventListener('click',async()=>{
+    if(!currentUser){document.getElementById('chad-account-button')?.click();return}
+    await saveConversation(null);
+});
+
+document.getElementById('chad-share-conversation')?.addEventListener('click',async()=>{
+    if(!currentUser){document.getElementById('chad-account-button')?.click();return}
+    await shareConversation(null);
+});
+
+document.getElementById('chad-share-close')?.addEventListener('click',closeShareModal);
+document.getElementById('chad-share-overlay')?.addEventListener('click',e=>{
+    if(e.target.id==='chad-share-overlay')closeShareModal();
+});
+
+document.getElementById('chad-copy-share')?.addEventListener('click',async()=>{
+    const input=document.getElementById('chad-share-url');
+    const status=document.getElementById('chad-share-status');
+    try{
+        await navigator.clipboard.writeText(input?.value||'');
+        if(status)status.textContent='Copied. Technology has peaked.';
+    }catch(_){
+        input?.select();
+        document.execCommand('copy');
+        if(status)status.textContent='Copied.';
+    }
+});
+
+document.getElementById('chad-native-share')?.addEventListener('click',async()=>{
+    const url=document.getElementById('chad-share-url')?.value||'';
+    const status=document.getElementById('chad-share-status');
+    if(navigator.share){
+        try{
+            await navigator.share({title:activeShareTitle,text:'ChadPDChee conversation',url});
+        }catch(_){}
+    }else if(status){
+        status.textContent='Native sharing is not available here. Use Copy Link, Email, or Text.';
+    }
+});
+
+document.getElementById('chad-email-share')?.addEventListener('click',()=>{
+    const url=document.getElementById('chad-share-url')?.value||'';
+    const subject=encodeURIComponent(activeShareTitle||'ChadPDChee conversation');
+    const body=encodeURIComponent('Here is the ChadPDChee conversation:\n\n'+url);
+    window.location.href='mailto:?subject='+subject+'&body='+body;
+});
+
+document.getElementById('chad-text-share')?.addEventListener('click',()=>{
+    const url=document.getElementById('chad-share-url')?.value||'';
+    const body=encodeURIComponent('ChadPDChee conversation: '+url);
+    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.location.href=isIOS?'sms:&body='+body:'sms:?body='+body;
+});
+
+document.getElementById('chad-stop-share')?.addEventListener('click',async()=>{
+    const status=document.getElementById('chad-share-status');
+    try{
+        await api('/account/conversations/unshare',jsonOptions('POST',{conversation_id:activeShareConversationId||currentConversationId||''}));
+        if(status)status.textContent='Sharing stopped. That link is now dead.';
+    }catch(e){
+        if(status)status.textContent=e.message||'Could not stop sharing.';
+    }
+});
 </script>
 
 </body>
