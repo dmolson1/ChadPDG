@@ -4435,16 +4435,16 @@ function validateSponsorInput(sponsor) {
 async function handlePublicSponsorCurrent(req, res) {
     try {
         /*
-         * CORE 22 ROTATION:
-         * 1. Only currently eligible direct sponsors participate.
-         * 2. Lowest numeric priority wins.
-         * 3. Within that priority tier, the campaign with the fewest
-         *    recorded impressions is served first. Random breaks ties.
+         * SPONSOR DECK
          *
-         * This keeps direct campaigns rotating much more evenly than
-         * simple RANDOM() while preserving manual priority control.
+         * Direct sponsors are returned as a rotation deck.
+         * The frontend rotates them with the Chad house ad.
+         *
+         * Google AdSense is returned separately and is intentionally
+         * NOT included in the timed rotation. Google policy does not
+         * allow publishers to auto-refresh/rotate AdSense placements.
          */
-        const result = await pool.query(
+        const sponsorsResult = await pool.query(
             `WITH eligible AS (
                 SELECT
                     id,
@@ -4463,10 +4463,6 @@ async function handlePublicSponsorCurrent(req, res) {
                   AND (starts_at IS NULL OR starts_at <= NOW())
                   AND (ends_at IS NULL OR ends_at > NOW())
              ),
-             best_priority AS (
-                SELECT MIN(priority) AS priority
-                FROM eligible
-             ),
              impression_counts AS (
                 SELECT
                     metadata->>'campaign_id' AS campaign_id,
@@ -4482,32 +4478,24 @@ async function handlePublicSponsorCurrent(req, res) {
              FROM eligible e
              LEFT JOIN impression_counts i
                ON i.campaign_id = e.campaign_id
-             CROSS JOIN best_priority p
-             WHERE e.priority = p.priority
-             ORDER BY COALESCE(i.impressions, 0) ASC, RANDOM()
-             LIMIT 1`
+             ORDER BY
+                e.priority ASC,
+                COALESCE(i.impressions, 0) ASC,
+                RANDOM()`
         );
 
-        if (result.rowCount) {
-            const row = result.rows[0];
-
-            return res.json({
-                success: true,
-                source: "direct",
-                sponsor: {
-                    id: row.id,
-                    campaign_id: row.campaign_id,
-                    advertiser: row.advertiser,
-                    headline: row.headline,
-                    body: row.body || "",
-                    cta: row.cta || "Learn more →",
-                    url: row.destination_url,
-                    image_url: row.image_url || "",
-                    placement: "above_chat",
-                    mode: "direct"
-                }
-            });
-        }
+        const sponsors = sponsorsResult.rows.map(row => ({
+            id: row.id,
+            campaign_id: row.campaign_id,
+            advertiser: row.advertiser,
+            headline: row.headline,
+            body: row.body || "",
+            cta: row.cta || "Learn more →",
+            url: row.destination_url,
+            image_url: row.image_url || "",
+            placement: "above_chat",
+            mode: "direct"
+        }));
 
         const settingsResult = await pool.query(
             `SELECT
@@ -4521,37 +4509,41 @@ async function handlePublicSponsorCurrent(req, res) {
 
         const settings = settingsResult.rows[0] || {};
 
+        let google = null;
+
         if (
             settings.google_enabled === true &&
             /^ca-pub-\d{10,30}$/.test(String(settings.google_client || "").trim()) &&
             /^\d{5,30}$/.test(String(settings.google_slot || "").trim())
         ) {
-            return res.json({
-                success: true,
-                source: "google",
-                google: {
-                    client: String(settings.google_client).trim(),
-                    slot: String(settings.google_slot).trim(),
-                    format: "auto",
-                    responsive: true,
-                    placement: "above_chat"
-                }
-            });
+            google = {
+                client: String(settings.google_client).trim(),
+                slot: String(settings.google_slot).trim(),
+                format: "auto",
+                responsive: true,
+                placement: "above_chat"
+            };
         }
 
         return res.json({
             success: true,
-            source: "house",
-            sponsor: null,
-            fallback: "house"
+            source: "deck",
+            sponsors,
+            google,
+            rotation_ms: 8000,
+            include_house: true
         });
+
     } catch (error) {
         console.error("Sponsor current error:", error);
+
         return res.status(500).json({
             success: false,
-            source: "house",
-            sponsor: null,
-            fallback: "house"
+            source: "deck",
+            sponsors: [],
+            google: null,
+            rotation_ms: 8000,
+            include_house: true
         });
     }
 }
