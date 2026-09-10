@@ -605,10 +605,21 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
    status.textContent='Loading paid sponsor orders…';
    try{
      const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders',{headers:adminHeaders()});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not load orders.');
-     tbody.innerHTML=d.orders.length?d.orders.map(o=>`<tr><td>${esc(String(o.slot_month).slice(0,7))}</td><td><strong>${esc(o.company_name)}</strong><br>${esc(o.contact_name)}<br><small>${esc(o.email)}</small></td><td>$${Number(o.price_usd).toFixed(2)} ${esc(o.currency)}<br><small>${o.paid_at?'Paid '+esc(new Date(o.paid_at).toLocaleString()):'Not paid'}</small></td><td><span class="badge ${['approved','live'].includes(o.status)?'on':'off'}">${esc(label(o.status))}</span></td><td><strong>${esc(o.headline||'Headline missing')}</strong><br><small>${esc(o.destination_url||'Destination missing')}</small>${o.discount_code?'<br><small>Offer: '+esc(o.discount_percent||'')+'% · '+esc(o.discount_code)+'</small>':''}</td><td>v${esc(o.agreement_version)}<br><small>Signed by ${esc(o.agreement_name)}<br>${esc(o.agreement_accepted_at?new Date(o.agreement_accepted_at).toLocaleString():'')}</small></td><td>${o.status==='paid_pending_approval'?`<button class="primary" data-approve="${esc(o.id)}">Approve & Publish</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No sponsor orders yet.</td></tr>';
+     tbody.innerHTML=d.orders.length?d.orders.map(o=>`<tr><td>${esc(String(o.slot_month).slice(0,7))}</td><td><strong>${esc(o.company_name)}</strong><br>${esc(o.contact_name)}<br><small>${esc(o.email)}</small></td><td>$${Number(o.price_usd).toFixed(2)} ${esc(o.currency)}<br><small>${o.paid_at?'Paid '+esc(new Date(o.paid_at).toLocaleString()):'Not paid'}</small></td><td><span class="badge ${['approved','live'].includes(o.status)?'on':'off'}">${esc(label(o.status))}</span></td><td><strong>${esc(o.headline||'Headline missing')}</strong><br><small>${esc(o.destination_url||'Destination missing')}</small>${o.discount_code?'<br><small>Offer: '+esc(o.discount_percent||'')+'% · '+esc(o.discount_code)+'</small>':''}</td><td>v${esc(o.agreement_version)}<br><small>Signed by ${esc(o.agreement_name)}<br>${esc(o.agreement_accepted_at?new Date(o.agreement_accepted_at).toLocaleString():'')}</small><br><button class="light" style="margin-top:7px" data-contract="${esc(o.id)}">View Contract</button></td><td>${o.status==='paid_pending_approval'?`<button class="primary" data-approve="${esc(o.id)}">Approve & Publish</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No sponsor orders yet.</td></tr>';
      status.textContent=`${d.orders.length} sponsor order${d.orders.length===1?'':'s'} loaded.`;
      tbody.querySelectorAll('[data-approve]').forEach(btn=>btn.addEventListener('click',()=>approve(btn.dataset.approve)));
+     tbody.querySelectorAll('[data-contract]').forEach(btn=>btn.addEventListener('click',()=>viewContract(btn.dataset.contract)));
    }catch(e){status.textContent=e.message;tbody.innerHTML='<tr><td colspan="7" class="empty">Could not load orders.</td></tr>'}
+ }
+ async function viewContract(id){
+   const status=$('paidOrderStatus');status.textContent='Opening signed agreement…';
+   try{
+     const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/contract?order_id='+encodeURIComponent(id),{headers:{'X-Chad-Admin-Key':$('adminKey').value.trim()}});
+     if(!r.ok)throw new Error((await r.text())||'Could not load contract.');
+     const html=await r.text();const blob=new Blob([html],{type:'text/html'});const url=URL.createObjectURL(blob);const w=window.open(url,'_blank','noopener');
+     if(!w)throw new Error('Your browser blocked the contract window. Allow pop-ups for this page and try again.');
+     setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='Signed agreement opened in a new tab.';
+   }catch(e){status.textContent=e.message}
  }
  async function approve(id){
    if(!confirm('Approve this paid sponsor and publish it into the scheduled rotation?'))return;
