@@ -38,6 +38,27 @@ const APP_BASE_URL = "https://chadpdchee.com";
 const SPONSOR_PRICE_USD = 499;
 const SPONSOR_MAX_ACTIVE_SLOTS = 4;
 const SPONSOR_AGREEMENT_VERSION = "2026-09-11";
+const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11
+
+This agreement is between Hammered Handyman Media ("Publisher") and the company or brand identified in this order ("Sponsor").
+
+Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for the selected calendar month for $499 USD. The placement participates in the site's direct-sponsor rotation with no more than four sold sponsor positions assigned to that month. This is a one-time purchase and does not automatically renew.
+
+Approval. Payment does not cause automatic publication. Publisher may review, edit with Sponsor approval, reject, suspend, or remove creative that is inaccurate, unlawful, unsafe, misleading, technically harmful, incompatible with the audience, or reasonably likely to damage the Publisher or Chad P.D. Chee brand. If Publisher rejects a campaign before it runs and the parties cannot agree on acceptable creative, the sponsorship fee will be refunded.
+
+Sponsor materials and claims. Sponsor represents that it has the rights needed to provide its names, logos, trademarks, images, URLs, offers, discount codes, and advertising claims. Sponsor is responsible for the accuracy and legality of its products, claims, prices, promotions, and discount terms.
+
+License. Sponsor grants Publisher a limited, non-exclusive license during the campaign and reasonable reporting/archive period to display Sponsor-provided brand assets and creative for the purchased placement and related campaign reporting.
+
+Performance. Publisher does not guarantee any minimum number of impressions, clicks, leads, sales, conversions, revenue, or other result. Dashboard statistics are first-party measurements and may be affected by browsers, blockers, connectivity, fraud filtering, and technical conditions.
+
+Timing. Approved campaigns are scheduled for the selected calendar month. Delays caused by Sponsor's late or incomplete creative may reduce available run time and do not automatically extend the campaign.
+
+Cancellation and refunds. Before approval, Sponsor may request cancellation. Once an approved campaign has begun running, fees are generally non-refundable except where Publisher fails to provide the placement for a material portion of the campaign or otherwise agrees in writing.
+
+Platform and law. Sponsor content must comply with applicable law and relevant platform/payment requirements. Publisher may refuse regulated, deceptive, dangerous, infringing, hateful, adult, illegal, or otherwise unsuitable advertising.
+
+Entire order. This agreement, the campaign information submitted with it, and the site's Privacy Policy and Terms form the sponsor order. Material custom terms must be agreed to in writing by both parties.`;
 const SPONSOR_SESSION_DAYS = 30;
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || "";
 const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET || "";
@@ -918,6 +939,7 @@ async function initializeDatabase() {
             agreement_accepted_at TIMESTAMPTZ NOT NULL,
             agreement_name TEXT NOT NULL,
             agreement_ip_hash VARCHAR(64) NOT NULL,
+            agreement_snapshot TEXT NOT NULL DEFAULT '',
             website TEXT NOT NULL DEFAULT '',
             campaign_goal TEXT NOT NULL DEFAULT '',
             destination_url TEXT NOT NULL DEFAULT '',
@@ -939,6 +961,9 @@ async function initializeDatabase() {
 
         CREATE INDEX IF NOT EXISTS chad_sponsor_orders_slot_status_idx
             ON chad_sponsor_orders (slot_month, status, created_at);
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS agreement_snapshot TEXT NOT NULL DEFAULT '';
 
         CREATE TABLE IF NOT EXISTS chad_ad_settings (
             settings_key TEXT PRIMARY KEY,
@@ -4252,13 +4277,13 @@ async function handleSponsorCheckoutCreate(req, res) {
         await client.query(
             `INSERT INTO chad_sponsor_orders (
                 id,sponsor_account_id,slot_month,price_usd,currency,status,
-                agreement_version,agreement_accepted_at,agreement_name,agreement_ip_hash,
+                agreement_version,agreement_accepted_at,agreement_name,agreement_ip_hash,agreement_snapshot,
                 website,campaign_goal,destination_url,headline,ad_copy,cta_text,
                 discount_code,discount_percent,notes
-             ) VALUES ($1,$2,$3,$4,'USD','payment_pending',$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+             ) VALUES ($1,$2,$3,$4,'USD','payment_pending',$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
             [
                 orderId, account.id, slotMonth, SPONSOR_PRICE_USD, SPONSOR_AGREEMENT_VERSION,
-                agreementName, hashValue(getClientIp(req)),
+                agreementName, hashValue(getClientIp(req)), SPONSOR_AGREEMENT_TEXT,
                 cleanSponsorPortalText(body.website,1000), cleanSponsorPortalText(body.campaign_goal,2000),
                 cleanSponsorPortalText(body.destination_url,1000), cleanSponsorPortalText(body.headline,220),
                 cleanSponsorPortalText(body.ad_copy,1200), cleanSponsorPortalText(body.cta_text,100) || "Learn more →",
@@ -4422,6 +4447,30 @@ async function handleAdminSponsorOrders(req,res){
         const result=await pool.query(`SELECT o.*,a.company_name,a.contact_name,a.email FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id ORDER BY o.created_at DESC LIMIT 250`);
         return res.json({success:true,orders:result.rows});
     }catch(error){console.error("Admin sponsor orders error:",error);return res.status(500).json({success:false,error:"Could not load sponsor orders."});}
+}
+
+function sponsorContractEscape(value){
+    return String(value ?? "")
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+async function handleAdminSponsorContract(req,res){
+    try{
+        if(!isAdminTestRequest(req)) return res.status(401).send("Admin key required.");
+        const orderId=cleanSponsorPortalText(req.query?.order_id,80);
+        if(!orderId) return res.status(400).send("Sponsor order ID required.");
+        const result=await pool.query(`SELECT o.*,a.company_name,a.contact_name,a.email FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id WHERE o.id=$1 LIMIT 1`,[orderId]);
+        const o=result.rows[0];
+        if(!o) return res.status(404).send("Sponsor order not found.");
+        const agreement=o.agreement_snapshot || SPONSOR_AGREEMENT_TEXT;
+        const lines=sponsorContractEscape(agreement).replace(/\n/g,"<br>");
+        const paid=o.paid_at ? new Date(o.paid_at).toLocaleString("en-CA",{timeZone:"America/Toronto"}) : "Not paid";
+        const accepted=o.agreement_accepted_at ? new Date(o.agreement_accepted_at).toLocaleString("en-CA",{timeZone:"America/Toronto"}) : "—";
+        res.setHeader("Content-Type","text/html; charset=utf-8");
+        res.setHeader("Cache-Control","no-store");
+        return res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sponsor Agreement — ${sponsorContractEscape(o.company_name)}</title><style>body{font-family:Arial,sans-serif;color:#171b1f;margin:0;background:#f2f5f7}.page{max-width:850px;margin:30px auto;background:#fff;padding:38px;border:1px solid #dbe2e7;border-radius:14px}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #111;padding-bottom:18px;margin-bottom:22px}h1{margin:0;font-size:25px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;font-size:13px;margin:22px 0}.meta b{color:#56616a}.agreement{font-size:14px;line-height:1.6;border-top:1px solid #ddd;padding-top:20px}.actions{margin-bottom:20px}button{padding:10px 15px;border:0;border-radius:8px;background:#1479bb;color:white;font-weight:700;cursor:pointer}@media print{body{background:white}.page{margin:0;border:0;padding:0;max-width:none}.actions{display:none}}@media(max-width:650px){.page{margin:0;border-radius:0;padding:22px}.top{display:block}.meta{grid-template-columns:1fr}}</style></head><body><main class="page"><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><div class="top"><div><h1>Chad P.D. Chee Sponsor Agreement</h1><div>Permanent order record</div></div><strong>Agreement v${sponsorContractEscape(o.agreement_version)}</strong></div><div class="meta"><b>Order ID</b><span>${sponsorContractEscape(o.id)}</span><b>Sponsor</b><span>${sponsorContractEscape(o.company_name)}</span><b>Contact</b><span>${sponsorContractEscape(o.contact_name)} · ${sponsorContractEscape(o.email)}</span><b>Authorized signer</b><span>${sponsorContractEscape(o.agreement_name)}</span><b>Accepted</b><span>${sponsorContractEscape(accepted)} ET</span><b>Campaign month</b><span>${sponsorContractEscape(String(o.slot_month).slice(0,7))}</span><b>Amount</b><span>$${Number(o.price_usd).toFixed(2)} ${sponsorContractEscape(o.currency)}</span><b>Payment</b><span>${sponsorContractEscape(paid)} ET</span><b>PayPal Order</b><span>${sponsorContractEscape(o.paypal_order_id||"—")}</span><b>PayPal Capture</b><span>${sponsorContractEscape(o.paypal_capture_id||"—")}</span></div><div class="agreement">${lines}</div></main></body></html>`);
+    }catch(error){console.error("Admin sponsor contract error:",error);return res.status(500).send("Could not load sponsor agreement.");}
 }
 
 async function handleAdminSponsorOrderApprove(req,res){
@@ -5505,6 +5554,7 @@ registerBoth("get", "/sponsor/auth/me", handleSponsorMe);
 registerBoth("get", "/sponsor/dashboard", handleSponsorDashboard);
 registerBoth("post", "/paypal/webhook", handlePayPalWebhook);
 registerBoth("get", "/admin/sponsor-orders", handleAdminSponsorOrders);
+registerBoth("get", "/admin/sponsor-orders/contract", handleAdminSponsorContract);
 registerBoth("post", "/admin/sponsor-orders/approve", handleAdminSponsorOrderApprove);
 registerBoth("get", "/admin/sponsor-leads", handleAdminSponsorLeads);
 registerBoth("post", "/admin/sponsor-leads/status", handleAdminSponsorLeadStatus);
