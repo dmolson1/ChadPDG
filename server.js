@@ -37,12 +37,13 @@ const APP_BASE_URL = "https://chadpdchee.com";
 // Sponsor platform
 const SPONSOR_PRICE_USD = 499;
 const SPONSOR_MAX_ACTIVE_SLOTS = 4;
-const SPONSOR_AGREEMENT_VERSION = "2026-09-11";
-const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11
+const SPONSOR_AGREEMENT_VERSION = "2026-09-11-30DAY";
+const SPONSOR_DURATION_DAYS = 30;
+const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11-30DAY
 
 This agreement is between Hammered Handyman Media ("Publisher") and the company or brand identified in this order ("Sponsor").
 
-Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for the selected calendar month for $499 USD. The placement participates in the site's direct-sponsor rotation with no more than four sold sponsor positions assigned to that month. This is a one-time purchase and does not automatically renew.
+Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for $499 USD for 30 consecutive days. The placement participates in the site's rotating direct-sponsor inventory, with no more than four active paid sponsor positions scheduled at the same time. This is a one-time purchase and does not automatically renew.
 
 Approval. Payment does not cause automatic publication. Publisher may review, edit with Sponsor approval, reject, suspend, or remove creative that is inaccurate, unlawful, unsafe, misleading, technically harmful, incompatible with the audience, or reasonably likely to damage the Publisher or Chad P.D. Chee brand. If Publisher rejects a campaign before it runs and the parties cannot agree on acceptable creative, the sponsorship fee will be refunded.
 
@@ -52,7 +53,7 @@ License. Sponsor grants Publisher a limited, non-exclusive license during the ca
 
 Performance. Publisher does not guarantee any minimum number of impressions, clicks, leads, sales, conversions, revenue, or other result. Dashboard statistics are first-party measurements and may be affected by browsers, blockers, connectivity, fraud filtering, and technical conditions.
 
-Timing. Approved campaigns are scheduled for the selected calendar month. Delays caused by Sponsor's late or incomplete creative may reduce available run time and do not automatically extend the campaign.
+Timing. Each purchased placement receives 30 consecutive days. Sponsor may request the earliest available start or choose a future start date. A requested date is subject to inventory and approval. If Publisher approval occurs after the reserved start date, the campaign will receive a full 30-day run beginning on approval or the next available start date that does not exceed four simultaneous paid sponsors. Sponsor-caused delays, including late or incomplete creative, may require a later available start date.
 
 Cancellation and refunds. Before approval, Sponsor may request cancellation. Once an approved campaign has begun running, fees are generally non-refundable except where Publisher fails to provide the placement for a material portion of the campaign or otherwise agrees in writing.
 
@@ -964,6 +965,18 @@ async function initializeDatabase() {
 
         ALTER TABLE chad_sponsor_orders
             ADD COLUMN IF NOT EXISTS agreement_snapshot TEXT NOT NULL DEFAULT '';
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS requested_start_at TIMESTAMPTZ;
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS reserved_start_at TIMESTAMPTZ;
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS reserved_end_at TIMESTAMPTZ;
+
+        CREATE INDEX IF NOT EXISTS chad_sponsor_orders_reserved_window_idx
+            ON chad_sponsor_orders (reserved_start_at, reserved_end_at, status);
 
         CREATE TABLE IF NOT EXISTS chad_ad_settings (
             settings_key TEXT PRIMARY KEY,
@@ -4072,23 +4085,74 @@ function cleanSponsorPortalText(value, max = 500) {
     return String(value ?? "").trim().slice(0, max);
 }
 
-function sponsorMonthKey(value) {
+function sponsorDateKey(value) {
     const raw = cleanSponsorPortalText(value, 20);
-    if (!/^\d{4}-\d{2}$/.test(raw)) return null;
-    const date = new Date(`${raw}-01T00:00:00Z`);
-    if (Number.isNaN(date.getTime())) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const date = new Date(`${raw}T00:00:00Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0,10) !== raw) return null;
     return raw;
 }
 
-function sponsorMonthDate(monthKey) {
-    return `${monthKey}-01`;
+function sponsorUtcDay(value = new Date()) {
+    const date = value instanceof Date ? value : new Date(value);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-function sponsorMonthBounds(monthDate) {
-    const raw = monthDate instanceof Date ? monthDate.toISOString().slice(0, 10) : String(monthDate).slice(0, 10);
-    const start = new Date(`${raw}T00:00:00Z`);
-    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-    return { start: start.toISOString(), end: end.toISOString() };
+function sponsorAddDays(value, days) {
+    const date = sponsorUtcDay(value);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date;
+}
+
+function sponsorLegacyStartSql(alias = "o") {
+    return `COALESCE(${alias}.reserved_start_at, ${alias}.slot_month::timestamp AT TIME ZONE 'UTC')`;
+}
+
+function sponsorLegacyEndSql(alias = "o") {
+    return `COALESCE(${alias}.reserved_end_at, (${alias}.slot_month::timestamp + INTERVAL '1 month') AT TIME ZONE 'UTC')`;
+}
+
+async function sponsorWindowMaxOccupancy(client, startAt, endAt, excludeOrderId = null) {
+    const startIso = sponsorUtcDay(startAt).toISOString();
+    const endIso = sponsorUtcDay(endAt).toISOString();
+    const result = await client.query(
+        `WITH days AS (
+            SELECT generate_series($1::timestamptz, $2::timestamptz - INTERVAL '1 day', INTERVAL '1 day') AS day
+         )
+         SELECT COALESCE(MAX((
+             SELECT COUNT(*)::int
+             FROM chad_sponsor_orders o
+             WHERE ($3::uuid IS NULL OR o.id <> $3::uuid)
+               AND (
+                 o.status IN ('paid_pending_approval','approved','live','completed')
+                 OR (o.status='payment_pending' AND o.created_at > NOW() - INTERVAL '3 hours')
+               )
+               AND ${sponsorLegacyStartSql("o")} < days.day + INTERVAL '1 day'
+               AND ${sponsorLegacyEndSql("o")} > days.day
+         )),0)::int AS max_occupancy
+         FROM days`,
+        [startIso, endIso, excludeOrderId]
+    );
+    return Number(result.rows[0]?.max_occupancy || 0);
+}
+
+async function sponsorWindowAvailable(client, startAt, excludeOrderId = null) {
+    const start = sponsorUtcDay(startAt);
+    const end = sponsorAddDays(start, SPONSOR_DURATION_DAYS);
+    const maxOccupancy = await sponsorWindowMaxOccupancy(client, start, end, excludeOrderId);
+    return { available: maxOccupancy < SPONSOR_MAX_ACTIVE_SLOTS, start, end, maxOccupancy };
+}
+
+async function findEarliestSponsorWindow(client, desiredStart = new Date(), excludeOrderId = null, maxDays = 730) {
+    let start = sponsorUtcDay(desiredStart);
+    const today = sponsorUtcDay(new Date());
+    if (start < today) start = today;
+    for (let offset = 0; offset <= maxDays; offset++) {
+        const candidate = sponsorAddDays(start, offset);
+        const check = await sponsorWindowAvailable(client, candidate, excludeOrderId);
+        if (check.available) return check;
+    }
+    return null;
 }
 
 function sponsorCookie(res, token) {
@@ -4159,50 +4223,49 @@ async function paypalRequest(path, options = {}) {
     return data;
 }
 
-async function sponsorSlotCount(slotMonth) {
-    const result = await pool.query(
-        `SELECT COUNT(*)::int AS count
-         FROM chad_sponsor_orders
-         WHERE slot_month = $1::date
-           AND (
-             status IN ('paid_pending_approval','approved','live','completed')
-             OR (status = 'payment_pending' AND created_at > NOW() - INTERVAL '3 hours')
-           )`,
-        [slotMonth]
-    );
-    return Number(result.rows[0]?.count || 0);
-}
-
 async function handleSponsorAvailability(req, res) {
+    const client = await pool.connect();
     try {
-        const now = new Date();
-        const months = [];
-        for (let i = 1; i <= 7; i++) {
-            const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
-            const key = d.toISOString().slice(0, 7);
-            const slotMonth = `${key}-01`;
-            const used = await sponsorSlotCount(slotMonth);
-            months.push({
-                month: key,
-                label: d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
-                used,
-                remaining: Math.max(0, SPONSOR_MAX_ACTIVE_SLOTS - used),
-                sold_out: used >= SPONSOR_MAX_ACTIVE_SLOTS
+        const today = sponsorUtcDay(new Date());
+        const earliest = await findEarliestSponsorWindow(client, today);
+        const suggestions = [];
+        if (earliest) {
+            suggestions.push({
+                start_date: earliest.start.toISOString().slice(0,10),
+                end_date: sponsorAddDays(earliest.start, SPONSOR_DURATION_DAYS - 1).toISOString().slice(0,10)
             });
+            let cursor = sponsorAddDays(earliest.start, 7);
+            for (let i = 0; i < 5; i++) {
+                const next = await findEarliestSponsorWindow(client, cursor);
+                if (!next) break;
+                const key = next.start.toISOString().slice(0,10);
+                if (!suggestions.some(s => s.start_date === key)) {
+                    suggestions.push({
+                        start_date: key,
+                        end_date: sponsorAddDays(next.start, SPONSOR_DURATION_DAYS - 1).toISOString().slice(0,10)
+                    });
+                }
+                cursor = sponsorAddDays(next.start, 7);
+            }
         }
         return res.json({
             success: true,
             price_usd: SPONSOR_PRICE_USD,
             currency: "USD",
             max_slots: SPONSOR_MAX_ACTIVE_SLOTS,
+            duration_days: SPONSOR_DURATION_DAYS,
             agreement_version: SPONSOR_AGREEMENT_VERSION,
             paypal_configured: Boolean(PAYPAL_CLIENT_ID && PAYPAL_CLIENT_SECRET),
             paypal_environment: PAYPAL_ENV,
-            months
+            earliest_start: earliest ? earliest.start.toISOString().slice(0,10) : null,
+            earliest_end: earliest ? sponsorAddDays(earliest.start, SPONSOR_DURATION_DAYS - 1).toISOString().slice(0,10) : null,
+            suggestions
         });
     } catch (error) {
         console.error("Sponsor availability error:", error);
         return res.status(500).json({ success: false, error: "Could not load sponsor availability." });
+    } finally {
+        client.release();
     }
 }
 
@@ -4215,8 +4278,9 @@ async function handleSponsorCheckoutCreate(req, res) {
         const email = cleanSponsorPortalText(body.email, 240).toLowerCase();
         const password = String(body.password || "");
         const agreementName = cleanSponsorPortalText(body.agreement_name, 160);
-        const monthKey = sponsorMonthKey(body.slot_month);
         const accepted = body.agreement_accepted === true;
+        const startMode = body.start_mode === "date" ? "date" : "asap";
+        const requestedDateKey = startMode === "date" ? sponsorDateKey(body.requested_start_date) : null;
         const discountPercent = body.discount_percent === "" || body.discount_percent == null
             ? null : Number(body.discount_percent);
 
@@ -4226,28 +4290,45 @@ async function handleSponsorCheckoutCreate(req, res) {
         if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
             return res.status(400).json({ success: false, error: `Sponsor password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters.` });
         }
-        if (!monthKey) return res.status(400).json({ success: false, error: "Choose a valid sponsor month." });
-        if (!accepted || !agreementName) return res.status(400).json({ success: false, error: "The sponsorship agreement must be accepted and signed." });
+        if (startMode === "date" && !requestedDateKey) {
+            return res.status(400).json({ success: false, error: "Choose a valid campaign start date." });
+        }
+        if (!accepted || !agreementName) {
+            return res.status(400).json({ success: false, error: "The sponsorship agreement must be accepted and signed." });
+        }
         if (discountPercent !== null && (!Number.isFinite(discountPercent) || discountPercent <= 0 || discountPercent > 100)) {
             return res.status(400).json({ success: false, error: "Discount percent must be between 0 and 100." });
         }
 
-        const slotMonth = sponsorMonthDate(monthKey);
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        if (monthKey <= currentMonth) return res.status(400).json({ success: false, error: "Online sponsor bookings begin with the next full calendar month." });
+        const today = sponsorUtcDay(new Date());
+        let desiredStart = requestedDateKey ? new Date(`${requestedDateKey}T00:00:00Z`) : today;
+        if (desiredStart < today) {
+            return res.status(400).json({ success: false, error: "Campaign start date cannot be in the past." });
+        }
 
         await client.query("BEGIN");
-        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`chad-sponsor-slot:${slotMonth}`]);
-        const countResult = await client.query(
-            `SELECT COUNT(*)::int AS count FROM chad_sponsor_orders
-             WHERE slot_month = $1::date
-               AND (status IN ('paid_pending_approval','approved','live','completed')
-                    OR (status='payment_pending' AND created_at > NOW() - INTERVAL '3 hours'))`,
-            [slotMonth]
-        );
-        if (Number(countResult.rows[0]?.count || 0) >= SPONSOR_MAX_ACTIVE_SLOTS) {
-            await client.query("ROLLBACK");
-            return res.status(409).json({ success: false, error: "That month is sold out. Pick another month." });
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ["chad-sponsor-inventory"]);
+
+        let window;
+        if (startMode === "date") {
+            window = await sponsorWindowAvailable(client, desiredStart);
+            if (!window.available) {
+                const next = await findEarliestSponsorWindow(client, sponsorAddDays(desiredStart, 1));
+                await client.query("ROLLBACK");
+                return res.status(409).json({
+                    success: false,
+                    error: next
+                        ? `That 30-day start date is unavailable. The next available start is ${next.start.toISOString().slice(0,10)}.`
+                        : "That start date is unavailable and no future opening was found.",
+                    next_available_start: next ? next.start.toISOString().slice(0,10) : null
+                });
+            }
+        } else {
+            window = await findEarliestSponsorWindow(client, desiredStart);
+            if (!window) {
+                await client.query("ROLLBACK");
+                return res.status(409).json({ success:false, error:"No sponsor opening is currently available." });
+            }
         }
 
         let accountResult = await client.query(`SELECT * FROM chad_sponsor_accounts WHERE email=$1 LIMIT 1`, [email]);
@@ -4274,16 +4355,22 @@ async function handleSponsorCheckoutCreate(req, res) {
         }
 
         const orderId = crypto.randomUUID();
+        const reservedStart = window.start.toISOString();
+        const reservedEnd = window.end.toISOString();
+        const slotMonth = `${window.start.toISOString().slice(0,7)}-01`;
+
         await client.query(
             `INSERT INTO chad_sponsor_orders (
                 id,sponsor_account_id,slot_month,price_usd,currency,status,
                 agreement_version,agreement_accepted_at,agreement_name,agreement_ip_hash,agreement_snapshot,
+                requested_start_at,reserved_start_at,reserved_end_at,
                 website,campaign_goal,destination_url,headline,ad_copy,cta_text,
                 discount_code,discount_percent,notes
-             ) VALUES ($1,$2,$3,$4,'USD','payment_pending',$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+             ) VALUES ($1,$2,$3,$4,'USD','payment_pending',$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
             [
                 orderId, account.id, slotMonth, SPONSOR_PRICE_USD, SPONSOR_AGREEMENT_VERSION,
                 agreementName, hashValue(getClientIp(req)), SPONSOR_AGREEMENT_TEXT,
+                desiredStart.toISOString(), reservedStart, reservedEnd,
                 cleanSponsorPortalText(body.website,1000), cleanSponsorPortalText(body.campaign_goal,2000),
                 cleanSponsorPortalText(body.destination_url,1000), cleanSponsorPortalText(body.headline,220),
                 cleanSponsorPortalText(body.ad_copy,1200), cleanSponsorPortalText(body.cta_text,100) || "Learn more →",
@@ -4291,6 +4378,9 @@ async function handleSponsorCheckoutCreate(req, res) {
             ]
         );
         await client.query("COMMIT");
+
+        const displayStart = window.start.toISOString().slice(0,10);
+        const displayEnd = sponsorAddDays(window.start, SPONSOR_DURATION_DAYS - 1).toISOString().slice(0,10);
 
         const paypal = await paypalRequest("/v2/checkout/orders", {
             method: "POST",
@@ -4300,7 +4390,7 @@ async function handleSponsorCheckoutCreate(req, res) {
                 purchase_units: [{
                     reference_id: orderId,
                     custom_id: orderId,
-                    description: `Chad P.D. Chee sponsor placement — ${monthKey}`,
+                    description: `Chad P.D. Chee sponsor placement — 30 days starting ${displayStart}`,
                     amount: { currency_code: "USD", value: SPONSOR_PRICE_USD.toFixed(2) }
                 }],
                 payment_source: {
@@ -4323,7 +4413,14 @@ async function handleSponsorCheckoutCreate(req, res) {
             || (paypal.links || []).find(link => link.rel === "approve")?.href;
         if (!approveUrl) throw new Error("PayPal did not return a checkout link.");
 
-        return res.json({ success: true, order_id: orderId, paypal_order_id: paypal.id, approval_url: approveUrl });
+        return res.json({
+            success: true,
+            order_id: orderId,
+            paypal_order_id: paypal.id,
+            approval_url: approveUrl,
+            reserved_start: displayStart,
+            reserved_end: displayEnd
+        });
     } catch (error) {
         try { await client.query("ROLLBACK"); } catch {}
         console.error("Sponsor checkout create error:", error);
@@ -4372,8 +4469,8 @@ async function handleSponsorCheckoutCapture(req, res) {
             sendChadEmail({
                 to: order.email,
                 subject: "Chad P.D. Chee sponsorship payment received",
-                text: `Payment received for your ${String(order.slot_month).slice(0,7)} Chad P.D. Chee sponsor placement. Your campaign is now awaiting approval. Sign in at ${APP_BASE_URL}/sponsor-login.html`,
-                html: `<h2>Payment received.</h2><p>Your <strong>${String(order.slot_month).slice(0,7)}</strong> Chad P.D. Chee sponsor placement is now <strong>Paid — Awaiting Approval</strong>.</p><p><a href="${APP_BASE_URL}/sponsor-login.html">Open Sponsor Portal</a></p>`
+                text: `Payment received for your 30-day Chad P.D. Chee sponsor placement. Your campaign is now awaiting approval. Sign in at ${APP_BASE_URL}/sponsor-login.html`,
+                html: `<h2>Payment received.</h2><p>Your <strong>30-day</strong> Chad P.D. Chee sponsor placement is now <strong>Paid — Awaiting Approval</strong>.</p><p><a href="${APP_BASE_URL}/sponsor-login.html">Open Sponsor Portal</a></p>`
             }).catch(err => console.error("Sponsor receipt email error:", err));
         }
         return res.json({ success:true, status:"paid_pending_approval", dashboard_url:"/sponsor-dashboard.html" });
@@ -4430,14 +4527,28 @@ async function handleSponsorDashboard(req,res){
                 GROUP BY metadata->>'campaign_id'
              ) a ON a.campaign_id=o.campaign_id
              WHERE o.sponsor_account_id=$1
-             ORDER BY o.slot_month DESC,o.created_at DESC`, [account.id]
+             ORDER BY COALESCE(o.reserved_start_at,o.slot_month::timestamp AT TIME ZONE 'UTC') DESC,o.created_at DESC`, [account.id]
         );
-        return res.json({success:true,price_usd:SPONSOR_PRICE_USD,max_slots:SPONSOR_MAX_ACTIVE_SLOTS,campaigns:result.rows.map(row=>({
-            id:row.id,slot_month:String(row.slot_month).slice(0,10),status:(()=>{if(row.status!=='approved')return row.status;const b=sponsorMonthBounds(row.slot_month);const now=Date.now();return now>=Date.parse(b.end)?'completed':now>=Date.parse(b.start)?'live':'approved';})(),price_usd:Number(row.price_usd),currency:row.currency,
-            headline:row.headline,ad_copy:row.ad_copy,cta_text:row.cta_text,destination_url:row.destination_url,discount_code:row.discount_code,
-            discount_percent:row.discount_percent==null?null:Number(row.discount_percent),campaign_id:row.campaign_id,paid_at:row.paid_at,approved_at:row.approved_at,
-            impressions:Number(row.impressions||0),clicks:Number(row.clicks||0),ctr_percent:Number(row.impressions||0)?Number((Number(row.clicks||0)/Number(row.impressions)*100).toFixed(2)):0
-        }))});
+        return res.json({success:true,price_usd:SPONSOR_PRICE_USD,max_slots:SPONSOR_MAX_ACTIVE_SLOTS,duration_days:SPONSOR_DURATION_DAYS,campaigns:result.rows.map(row=>{
+            const startAt = row.reserved_start_at || row.slot_month;
+            const endAt = row.reserved_end_at || new Date(new Date(row.slot_month).getTime() + 31*86400000);
+            const now=Date.now();
+            let status=row.status;
+            if(row.status==='approved'){
+                status = now>=Date.parse(endAt) ? 'completed' : now>=Date.parse(startAt) ? 'live' : 'approved';
+            }
+            return {
+                id:row.id,
+                start_at:startAt,
+                end_at:endAt,
+                requested_start_at:row.requested_start_at,
+                status,
+                price_usd:Number(row.price_usd),currency:row.currency,
+                headline:row.headline,ad_copy:row.ad_copy,cta_text:row.cta_text,destination_url:row.destination_url,discount_code:row.discount_code,
+                discount_percent:row.discount_percent==null?null:Number(row.discount_percent),campaign_id:row.campaign_id,paid_at:row.paid_at,approved_at:row.approved_at,
+                impressions:Number(row.impressions||0),clicks:Number(row.clicks||0),ctr_percent:Number(row.impressions||0)?Number((Number(row.clicks||0)/Number(row.impressions)*100).toFixed(2)):0
+            };
+        })});
     }catch(error){console.error("Sponsor dashboard error:",error);return res.status(500).json({success:false,error:"Could not load sponsor dashboard."});}
 }
 
@@ -4469,7 +4580,7 @@ async function handleAdminSponsorContract(req,res){
         const accepted=o.agreement_accepted_at ? new Date(o.agreement_accepted_at).toLocaleString("en-CA",{timeZone:"America/Toronto"}) : "—";
         res.setHeader("Content-Type","text/html; charset=utf-8");
         res.setHeader("Cache-Control","no-store");
-        return res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sponsor Agreement — ${sponsorContractEscape(o.company_name)}</title><style>body{font-family:Arial,sans-serif;color:#171b1f;margin:0;background:#f2f5f7}.page{max-width:850px;margin:30px auto;background:#fff;padding:38px;border:1px solid #dbe2e7;border-radius:14px}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #111;padding-bottom:18px;margin-bottom:22px}h1{margin:0;font-size:25px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;font-size:13px;margin:22px 0}.meta b{color:#56616a}.agreement{font-size:14px;line-height:1.6;border-top:1px solid #ddd;padding-top:20px}.actions{margin-bottom:20px}button{padding:10px 15px;border:0;border-radius:8px;background:#1479bb;color:white;font-weight:700;cursor:pointer}@media print{body{background:white}.page{margin:0;border:0;padding:0;max-width:none}.actions{display:none}}@media(max-width:650px){.page{margin:0;border-radius:0;padding:22px}.top{display:block}.meta{grid-template-columns:1fr}}</style></head><body><main class="page"><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><div class="top"><div><h1>Chad P.D. Chee Sponsor Agreement</h1><div>Permanent order record</div></div><strong>Agreement v${sponsorContractEscape(o.agreement_version)}</strong></div><div class="meta"><b>Order ID</b><span>${sponsorContractEscape(o.id)}</span><b>Sponsor</b><span>${sponsorContractEscape(o.company_name)}</span><b>Contact</b><span>${sponsorContractEscape(o.contact_name)} · ${sponsorContractEscape(o.email)}</span><b>Authorized signer</b><span>${sponsorContractEscape(o.agreement_name)}</span><b>Accepted</b><span>${sponsorContractEscape(accepted)} ET</span><b>Campaign month</b><span>${sponsorContractEscape(String(o.slot_month).slice(0,7))}</span><b>Amount</b><span>$${Number(o.price_usd).toFixed(2)} ${sponsorContractEscape(o.currency)}</span><b>Payment</b><span>${sponsorContractEscape(paid)} ET</span><b>PayPal Order</b><span>${sponsorContractEscape(o.paypal_order_id||"—")}</span><b>PayPal Capture</b><span>${sponsorContractEscape(o.paypal_capture_id||"—")}</span></div><div class="agreement">${lines}</div></main></body></html>`);
+        return res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sponsor Agreement — ${sponsorContractEscape(o.company_name)}</title><style>body{font-family:Arial,sans-serif;color:#171b1f;margin:0;background:#f2f5f7}.page{max-width:850px;margin:30px auto;background:#fff;padding:38px;border:1px solid #dbe2e7;border-radius:14px}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #111;padding-bottom:18px;margin-bottom:22px}h1{margin:0;font-size:25px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;font-size:13px;margin:22px 0}.meta b{color:#56616a}.agreement{font-size:14px;line-height:1.6;border-top:1px solid #ddd;padding-top:20px}.actions{margin-bottom:20px}button{padding:10px 15px;border:0;border-radius:8px;background:#1479bb;color:white;font-weight:700;cursor:pointer}@media print{body{background:white}.page{margin:0;border:0;padding:0;max-width:none}.actions{display:none}}@media(max-width:650px){.page{margin:0;border-radius:0;padding:22px}.top{display:block}.meta{grid-template-columns:1fr}}</style></head><body><main class="page"><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><div class="top"><div><h1>Chad P.D. Chee Sponsor Agreement</h1><div>Permanent order record</div></div><strong>Agreement v${sponsorContractEscape(o.agreement_version)}</strong></div><div class="meta"><b>Order ID</b><span>${sponsorContractEscape(o.id)}</span><b>Sponsor</b><span>${sponsorContractEscape(o.company_name)}</span><b>Contact</b><span>${sponsorContractEscape(o.contact_name)} · ${sponsorContractEscape(o.email)}</span><b>Authorized signer</b><span>${sponsorContractEscape(o.agreement_name)}</span><b>Accepted</b><span>${sponsorContractEscape(accepted)} ET</span><b>Campaign run</b><span>${sponsorContractEscape(o.reserved_start_at ? new Date(o.reserved_start_at).toISOString().slice(0,10) : String(o.slot_month).slice(0,10))} through ${sponsorContractEscape(o.reserved_end_at ? new Date(new Date(o.reserved_end_at).getTime()-86400000).toISOString().slice(0,10) : "legacy schedule")}</span><b>Amount</b><span>$${Number(o.price_usd).toFixed(2)} ${sponsorContractEscape(o.currency)}</span><b>Payment</b><span>${sponsorContractEscape(paid)} ET</span><b>PayPal Order</b><span>${sponsorContractEscape(o.paypal_order_id||"—")}</span><b>PayPal Capture</b><span>${sponsorContractEscape(o.paypal_capture_id||"—")}</span></div><div class="agreement">${lines}</div></main></body></html>`);
     }catch(error){console.error("Admin sponsor contract error:",error);return res.status(500).send("Could not load sponsor agreement.");}
 }
 
@@ -4479,22 +4590,48 @@ async function handleAdminSponsorOrderApprove(req,res){
         if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
         const orderId=cleanSponsorPortalText(req.body?.order_id,80);
         await client.query("BEGIN");
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ["chad-sponsor-inventory"]);
         const r=await client.query(`SELECT o.*,a.company_name FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id WHERE o.id=$1 FOR UPDATE`,[orderId]);
         const order=r.rows[0];
         if(!order) {await client.query("ROLLBACK");return res.status(404).json({success:false,error:"Sponsor order not found."});}
         if(!['paid_pending_approval','approved','live'].includes(order.status)){await client.query("ROLLBACK");return res.status(409).json({success:false,error:"Only paid sponsor orders can be approved."});}
         if(!order.destination_url || !order.headline){await client.query("ROLLBACK");return res.status(400).json({success:false,error:"Headline and destination URL are required before approval."});}
-        const campaignId=order.campaign_id || `paid-${String(order.slot_month).slice(0,7)}-${order.id.slice(0,8)}`;
-        const bounds=sponsorMonthBounds(order.slot_month);
+
+        const today=sponsorUtcDay(new Date());
+        const reserved=order.reserved_start_at ? sponsorUtcDay(order.reserved_start_at) : sponsorUtcDay(order.slot_month);
+        const desiredStart=reserved < today ? today : reserved;
+
+        let window=await sponsorWindowAvailable(client,desiredStart,order.id);
+        if(!window.available){
+            window=await findEarliestSponsorWindow(client,desiredStart,order.id);
+        }
+        if(!window){
+            await client.query("ROLLBACK");
+            return res.status(409).json({success:false,error:"No 30-day sponsor opening is currently available."});
+        }
+
+        const campaignId=order.campaign_id || `paid-${window.start.toISOString().slice(0,10)}-${order.id.slice(0,8)}`;
         await client.query(
             `INSERT INTO chad_sponsors (id,campaign_id,advertiser,headline,body,cta,destination_url,image_url,discount_code,discount_percent,starts_at,ends_at,is_active,priority)
              VALUES ($1,$2,$3,$4,$5,$6,$7,'',$8,$9,$10,$11,TRUE,100)
              ON CONFLICT(campaign_id) DO UPDATE SET advertiser=EXCLUDED.advertiser,headline=EXCLUDED.headline,body=EXCLUDED.body,cta=EXCLUDED.cta,destination_url=EXCLUDED.destination_url,discount_code=EXCLUDED.discount_code,discount_percent=EXCLUDED.discount_percent,starts_at=EXCLUDED.starts_at,ends_at=EXCLUDED.ends_at,is_active=TRUE,updated_at=NOW()`,
-            [crypto.randomUUID(),campaignId,order.company_name,order.headline,order.ad_copy,order.cta_text||'Learn more →',order.destination_url,order.discount_code||'',order.discount_percent,bounds.start,bounds.end]
+            [crypto.randomUUID(),campaignId,order.company_name,order.headline,order.ad_copy,order.cta_text||'Learn more →',order.destination_url,order.discount_code||'',order.discount_percent,window.start.toISOString(),window.end.toISOString()]
         );
-        await client.query(`UPDATE chad_sponsor_orders SET status='approved',campaign_id=$2,approved_at=COALESCE(approved_at,NOW()),updated_at=NOW() WHERE id=$1`,[orderId,campaignId]);
+        await client.query(
+            `UPDATE chad_sponsor_orders
+             SET status='approved',campaign_id=$2,approved_at=COALESCE(approved_at,NOW()),
+                 reserved_start_at=$3,reserved_end_at=$4,slot_month=$5::date,updated_at=NOW()
+             WHERE id=$1`,
+            [orderId,campaignId,window.start.toISOString(),window.end.toISOString(),`${window.start.toISOString().slice(0,7)}-01`]
+        );
         await client.query("COMMIT");
-        return res.json({success:true,campaign_id:campaignId});
+        return res.json({
+            success:true,
+            campaign_id:campaignId,
+            starts_at:window.start.toISOString(),
+            ends_at:window.end.toISOString(),
+            shifted_from_reserved: order.reserved_start_at ? sponsorUtcDay(order.reserved_start_at).getTime() !== window.start.getTime() : false
+        });
     }catch(error){try{await client.query("ROLLBACK")}catch{};console.error("Approve sponsor order error:",error);return res.status(500).json({success:false,error:"Could not approve sponsor order."});}
     finally{client.release();}
 }
