@@ -818,6 +818,27 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`
+
+        CREATE TABLE IF NOT EXISTS chad_sponsors (
+            id TEXT PRIMARY KEY,
+            campaign_id TEXT UNIQUE NOT NULL,
+            advertiser TEXT NOT NULL,
+            headline TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            cta TEXT NOT NULL DEFAULT 'Learn more →',
+            destination_url TEXT NOT NULL,
+            image_url TEXT NOT NULL DEFAULT '',
+            starts_at TIMESTAMPTZ,
+            ends_at TIMESTAMPTZ,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            priority INTEGER NOT NULL DEFAULT 100,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS chad_sponsors_active_schedule_idx
+            ON chad_sponsors (is_active, priority, starts_at, ends_at);
+
         CREATE TABLE IF NOT EXISTS chad_openai_usage (
             id BIGSERIAL PRIMARY KEY,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -3702,6 +3723,344 @@ async function handleAccountDelete(req, res) {
     }
 }
 
+
+function sanitizeSponsorInput(body = {}) {
+    const clean = value => String(value ?? "").trim();
+
+    const campaignId = clean(body.campaign_id)
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 120);
+
+    const advertiser = clean(body.advertiser).slice(0, 120);
+    const headline = clean(body.headline).slice(0, 180);
+    const textBody = clean(body.body).slice(0, 500);
+    const cta = clean(body.cta || "Learn more →").slice(0, 80);
+    const destinationUrl = clean(body.destination_url).slice(0, 1000);
+    const imageUrl = clean(body.image_url).slice(0, 1000);
+
+    const priorityRaw = Number(body.priority);
+    const priority = Number.isFinite(priorityRaw)
+        ? Math.max(0, Math.min(10000, Math.trunc(priorityRaw)))
+        : 100;
+
+    const isActive = body.is_active !== false &&
+        String(body.is_active).toLowerCase() !== "false";
+
+    const parseOptionalDate = value => {
+        const raw = clean(value);
+        if (!raw) return null;
+        const date = new Date(raw);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
+    return {
+        campaign_id: campaignId,
+        advertiser,
+        headline,
+        body: textBody,
+        cta,
+        destination_url: destinationUrl,
+        image_url: imageUrl,
+        starts_at: parseOptionalDate(body.starts_at),
+        ends_at: parseOptionalDate(body.ends_at),
+        is_active: isActive,
+        priority
+    };
+}
+
+function validateSponsorInput(sponsor) {
+    if (!sponsor.campaign_id) return "Campaign ID is required.";
+    if (!sponsor.advertiser) return "Advertiser is required.";
+    if (!sponsor.headline) return "Headline is required.";
+    if (!sponsor.destination_url) return "Destination URL is required.";
+
+    try {
+        const url = new URL(sponsor.destination_url);
+        if (!["http:", "https:"].includes(url.protocol)) {
+            return "Destination URL must use http or https.";
+        }
+    } catch {
+        return "Destination URL is not valid.";
+    }
+
+    if (sponsor.image_url) {
+        try {
+            const image = new URL(sponsor.image_url);
+            if (!["http:", "https:"].includes(image.protocol)) {
+                return "Image URL must use http or https.";
+            }
+        } catch {
+            return "Image URL is not valid.";
+        }
+    }
+
+    if (
+        sponsor.starts_at &&
+        sponsor.ends_at &&
+        new Date(sponsor.ends_at) <= new Date(sponsor.starts_at)
+    ) {
+        return "End date must be after start date.";
+    }
+
+    return "";
+}
+
+async function handlePublicSponsorCurrent(req, res) {
+    try {
+        const result = await pool.query(
+            `SELECT
+                id,
+                campaign_id,
+                advertiser,
+                headline,
+                body,
+                cta,
+                destination_url,
+                image_url,
+                starts_at,
+                ends_at,
+                priority
+             FROM chad_sponsors
+             WHERE is_active = TRUE
+               AND (starts_at IS NULL OR starts_at <= NOW())
+               AND (ends_at IS NULL OR ends_at > NOW())
+             ORDER BY priority ASC, created_at ASC
+             LIMIT 1`
+        );
+
+        if (!result.rowCount) {
+            return res.json({
+                success: true,
+                sponsor: null,
+                fallback: "house"
+            });
+        }
+
+        const row = result.rows[0];
+
+        return res.json({
+            success: true,
+            sponsor: {
+                id: row.id,
+                campaign_id: row.campaign_id,
+                advertiser: row.advertiser,
+                headline: row.headline,
+                body: row.body || "",
+                cta: row.cta || "Learn more →",
+                url: row.destination_url,
+                image_url: row.image_url || "",
+                placement: "above_chat",
+                mode: "direct"
+            }
+        });
+    } catch (error) {
+        console.error("Sponsor current error:", error);
+        return res.status(500).json({
+            success: false,
+            sponsor: null,
+            fallback: "house"
+        });
+    }
+}
+
+async function handleAdminSponsorList(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const result = await pool.query(
+            `SELECT
+                s.*,
+                COALESCE(a.impressions, 0)::int AS impressions,
+                COALESCE(a.clicks, 0)::int AS clicks
+             FROM chad_sponsors s
+             LEFT JOIN (
+                SELECT
+                    metadata->>'campaign_id' AS campaign_id,
+                    COUNT(*) FILTER (WHERE event = 'sponsor_impression') AS impressions,
+                    COUNT(*) FILTER (WHERE event = 'sponsor_click') AS clicks
+                FROM chad_analytics
+                WHERE event IN ('sponsor_impression','sponsor_click')
+                GROUP BY metadata->>'campaign_id'
+             ) a ON a.campaign_id = s.campaign_id
+             ORDER BY s.is_active DESC, s.priority ASC, s.created_at DESC`
+        );
+
+        return res.json({
+            success: true,
+            sponsors: result.rows.map(row => ({
+                ...row,
+                ctr_percent: Number(row.impressions || 0)
+                    ? Number(((Number(row.clicks || 0) / Number(row.impressions || 1)) * 100).toFixed(2))
+                    : 0
+            }))
+        });
+    } catch (error) {
+        console.error("Sponsor list error:", error);
+        return res.status(500).json({ success: false, error: "Could not load sponsors." });
+    }
+}
+
+async function handleAdminSponsorCreate(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const sponsor = sanitizeSponsorInput(req.body || {});
+        const validationError = validateSponsorInput(sponsor);
+        if (validationError) {
+            return res.status(400).json({ success: false, error: validationError });
+        }
+
+        const id = crypto.randomUUID();
+
+        const result = await pool.query(
+            `INSERT INTO chad_sponsors (
+                id, campaign_id, advertiser, headline, body, cta,
+                destination_url, image_url, starts_at, ends_at,
+                is_active, priority
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             RETURNING *`,
+            [
+                id,
+                sponsor.campaign_id,
+                sponsor.advertiser,
+                sponsor.headline,
+                sponsor.body,
+                sponsor.cta,
+                sponsor.destination_url,
+                sponsor.image_url,
+                sponsor.starts_at,
+                sponsor.ends_at,
+                sponsor.is_active,
+                sponsor.priority
+            ]
+        );
+
+        return res.status(201).json({
+            success: true,
+            sponsor: result.rows[0]
+        });
+    } catch (error) {
+        if (error?.code === "23505") {
+            return res.status(409).json({
+                success: false,
+                error: "That Campaign ID already exists."
+            });
+        }
+
+        console.error("Sponsor create error:", error);
+        return res.status(500).json({ success: false, error: "Could not create sponsor." });
+    }
+}
+
+async function handleAdminSponsorUpdate(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const id = String(req.body?.id || "").trim();
+        if (!id) {
+            return res.status(400).json({ success: false, error: "Sponsor ID is required." });
+        }
+
+        const sponsor = sanitizeSponsorInput(req.body || {});
+        const validationError = validateSponsorInput(sponsor);
+        if (validationError) {
+            return res.status(400).json({ success: false, error: validationError });
+        }
+
+        const result = await pool.query(
+            `UPDATE chad_sponsors
+             SET
+                campaign_id = $2,
+                advertiser = $3,
+                headline = $4,
+                body = $5,
+                cta = $6,
+                destination_url = $7,
+                image_url = $8,
+                starts_at = $9,
+                ends_at = $10,
+                is_active = $11,
+                priority = $12,
+                updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [
+                id,
+                sponsor.campaign_id,
+                sponsor.advertiser,
+                sponsor.headline,
+                sponsor.body,
+                sponsor.cta,
+                sponsor.destination_url,
+                sponsor.image_url,
+                sponsor.starts_at,
+                sponsor.ends_at,
+                sponsor.is_active,
+                sponsor.priority
+            ]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, error: "Sponsor not found." });
+        }
+
+        return res.json({
+            success: true,
+            sponsor: result.rows[0]
+        });
+    } catch (error) {
+        if (error?.code === "23505") {
+            return res.status(409).json({
+                success: false,
+                error: "That Campaign ID already exists."
+            });
+        }
+
+        console.error("Sponsor update error:", error);
+        return res.status(500).json({ success: false, error: "Could not update sponsor." });
+    }
+}
+
+async function handleAdminSponsorDelete(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const id = String(req.body?.id || "").trim();
+        if (!id) {
+            return res.status(400).json({ success: false, error: "Sponsor ID is required." });
+        }
+
+        const result = await pool.query(
+            `DELETE FROM chad_sponsors WHERE id = $1 RETURNING id, campaign_id`,
+            [id]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, error: "Sponsor not found." });
+        }
+
+        return res.json({
+            success: true,
+            deleted: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Sponsor delete error:", error);
+        return res.status(500).json({ success: false, error: "Could not delete sponsor." });
+    }
+}
+
+
 function registerBoth(method, path, handler) {
     app[method](path, handler);
     app[method](`/wp-json/chadpgt/v1${path}`, handler);
@@ -3711,7 +4070,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-20-sponsor-inventory"
+        version: "chad-core-21-sponsor-manager"
     });
 });
 
@@ -3725,7 +4084,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-20-sponsor-inventory",
+        version: "chad-core-21-sponsor-manager",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -3770,6 +4129,11 @@ registerBoth("post", "/shopping-list", handleShoppingList);
 registerBoth("post", "/reset", handleReset);
 registerBoth("post", "/analytics/track", handleAnalytics);
 registerBoth("get", "/analytics/dashboard", handleAnalyticsDashboard);
+registerBoth("get", "/sponsor/current", handlePublicSponsorCurrent);
+registerBoth("get", "/admin/sponsors", handleAdminSponsorList);
+registerBoth("post", "/admin/sponsors/create", handleAdminSponsorCreate);
+registerBoth("post", "/admin/sponsors/update", handleAdminSponsorUpdate);
+registerBoth("post", "/admin/sponsors/delete", handleAdminSponsorDelete);
 
 app.get("/openai-test", async (req, res) => {
     try {
