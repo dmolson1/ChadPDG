@@ -7,7 +7,5363 @@
 <style>
 html {
     scroll-behavior: smooth;
+}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chad P.D. Chee</title>
+<style>
+html {
+    scroll-behavior: smooth;
 }
+body {
+    margin: 0;
+    padding: 12px;
+    background: #fff;
+}
+@media (max-width: 600px) {
+    body {
+        padding: 6px;
+    }
+}
+
+#chad-buttons .chad-secondary-action{
+    background:#eef1f4;
+    color:#1b2127;
+    border:1px solid #cbd2d9;
+}
+#chad-buttons .chad-secondary-action:hover{
+    background:#e2e7eb;
+}
+.chad-share-overlay{
+    position:fixed;
+    inset:0;
+    z-index:10000;
+    background:rgba(0,0,0,.58);
+    display:grid;
+    place-items:center;
+    padding:18px;
+}
+.chad-share-overlay[hidden]{
+    display:none!important;
+}
+.chad-share-modal{
+    width:min(520px,100%);
+    position:relative;
+    box-sizing:border-box;
+    background:#fff;
+    color:#111;
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 24px 70px rgba(0,0,0,.35);
+}
+.chad-share-modal h2{
+    margin:0 34px 8px 0;
+    font:800 24px/1.2 Arial,Helvetica,sans-serif;
+}
+.chad-share-copy{
+    margin:0 0 16px;
+    color:#555;
+    font:500 14px/1.45 Arial,Helvetica,sans-serif;
+}
+.chad-share-close{
+    position:absolute;
+    right:14px;
+    top:12px;
+    z-index:3;
+    width:38px;
+    height:38px;
+    border:0;
+    border-radius:50%;
+    background:#f0f2f4;
+    color:#111;
+    font-size:28px;
+    line-height:34px;
+    cursor:pointer;
+}
+#chad-share-url{
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid #c8ced4;
+    border-radius:9px;
+    padding:11px 12px;
+    font:500 13px Arial,Helvetica,sans-serif;
+}
+.chad-share-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:9px;
+    margin-top:14px;
+}
+.chad-share-actions button{
+    border:0;
+    border-radius:9px;
+    padding:11px 12px;
+    background:#20262c;
+    color:#fff;
+    font:800 13px Arial,Helvetica,sans-serif;
+    cursor:pointer;
+}
+.chad-share-actions button:hover{
+    opacity:.9;
+}
+.chad-share-actions .chad-stop-share{
+    grid-column:1/-1;
+    background:#fff2f2;
+    color:#a32222;
+    border:1px solid #efb7b7;
+}
+.chad-share-status{
+    min-height:18px;
+    margin-top:10px;
+    color:#555;
+    font:600 12px Arial,Helvetica,sans-serif;
+}
+.chad-recent-saved{
+    display:inline-block;
+    margin-left:6px;
+    font-size:10px;
+    color:#7ad39b;
+    vertical-align:1px;
+}
+@media(max-width:600px){
+    .chad-share-actions{grid-template-columns:1fr 1fr}
+}
+
+/* =========================================================
+   CORE 20 — SPONSOR INVENTORY
+   ========================================================= */
+#chad-sponsor-slot{margin:0 0 16px;width:100%}
+#chad-sponsor-slot[hidden]{display:none!important}
+#chad-sponsor-slot .chad-sponsor-link{
+    display:flex;align-items:center;gap:14px;width:100%;min-height:86px;
+    padding:12px 14px;border:1px solid #d8dde3;border-radius:12px;
+    background:linear-gradient(135deg,rgba(22,119,184,.05),rgba(255,255,255,.98) 42%,rgba(241,189,41,.06));
+    color:#17191c;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.055);
+    transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease
+}
+#chad-sponsor-slot .chad-sponsor-link:hover,#chad-sponsor-slot .chad-sponsor-link:focus{
+    transform:translateY(-1px);border-color:#a9bfd0;box-shadow:0 7px 20px rgba(0,0,0,.08)
+}
+.chad-sponsor-badge{
+    flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#17191c;color:#f1bd29;
+    font:900 10px/1 Arial,Helvetica,sans-serif;letter-spacing:.8px;white-space:nowrap
+}
+.chad-sponsor-image{flex:0 0 auto;width:110px;height:58px;object-fit:contain;border-radius:8px;background:#fff}
+.chad-sponsor-copy{flex:1 1 auto;min-width:0}
+.chad-sponsor-headline{font:900 16px/1.2 Arial,Helvetica,sans-serif;color:#111}
+.chad-sponsor-body{margin-top:4px;color:#5a646d;font:500 12px/1.4 Arial,Helvetica,sans-serif}
+.chad-sponsor-cta{flex:0 0 auto;color:#0D5F91;font:900 12px/1.2 Arial,Helvetica,sans-serif;white-space:nowrap}
+.chad-google-ad-label{
+    margin:0 0 5px;
+    color:#818b93;
+    font:800 9px/1 Arial,Helvetica,sans-serif;
+    letter-spacing:.8px;
+    text-align:center
+}
+.chad-google-ad-wrap{
+    width:100%;
+    min-height:70px
+}
+#chad-sponsor-slot.chad-sponsor-google{
+    min-height:90px;display:block;border:1px dashed #cbd2d9;border-radius:12px;padding:8px;background:#fafafa
+}
+@media(max-width:700px){
+    #chad-sponsor-slot .chad-sponsor-link{gap:10px;padding:11px 12px;min-height:78px}
+    .chad-sponsor-badge{display:none}
+    .chad-sponsor-image{width:78px;height:48px}
+    .chad-sponsor-headline{font-size:14px}
+    .chad-sponsor-body{font-size:11px}
+    .chad-sponsor-cta{font-size:11px}
+}
+@media(max-width:480px){
+    #chad-sponsor-slot .chad-sponsor-link{align-items:flex-start;flex-wrap:wrap}
+    .chad-sponsor-copy{flex:1 1 calc(100% - 90px)}
+    .chad-sponsor-cta{width:100%;padding-left:88px}
+}
+
+</style>
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
+     crossorigin="anonymous"></script>
+    
+</head>
+<body>
+
+<div id="chad-shell">
+
+    <aside id="chad-sidebar" aria-label="ChadPDChee navigation">
+        <div class="chad-sidebar-top">
+            <div class="chad-sidebar-brand">
+                <img
+                    src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png"
+                    alt="ChadPDChee"
+                    class="chad-sidebar-avatar"
+                >
+                <div>
+                    <div class="chad-sidebar-name">ChadPDChee</div>
+                    <div class="chad-sidebar-sub">DIY Expert</div>
+                </div>
+            </div>
+
+            <button type="button" id="chad-sidebar-new" class="chad-sidebar-new">
+                <span class="chad-sidebar-plus">＋</span>
+                New Project
+            </button>
+        </div>
+
+        <div class="chad-sidebar-scroll">
+            <div class="chad-sidebar-section-label">RECENT</div>
+            <div id="chad-recent-list">
+                <div class="chad-sidebar-empty">
+                    <div class="chad-sidebar-empty-title">Your projects will live here.</div>
+                    <div class="chad-sidebar-empty-copy">
+                        Sign in to save projects and continue them on another device.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chad-sidebar-bottom">
+            <button type="button" id="chad-account-button" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">♙</span>
+                <span>
+                    <strong id="chad-account-title">Sign in</strong>
+                    <small id="chad-account-subtitle">Save your projects</small>
+                </span>
+            </button>
+
+            <button type="button" class="chad-sidebar-row chad-placeholder-control">
+                <span class="chad-sidebar-icon">★</span>
+                <span>
+                    <strong>Upgrade</strong>
+                    <small>Plans coming soon</small>
+                </span>
+            </button>
+
+            <button type="button" class="chad-sidebar-row chad-placeholder-control">
+                <span class="chad-sidebar-icon">▣</span>
+                <span>
+                    <strong>Billing</strong>
+                    <small>Coming soon</small>
+                </span>
+            </button>
+        </div>
+    </aside>
+
+    <div id="chad-sidebar-backdrop"></div>
+
+    <main id="chad-main">
+        <header id="chad-mobile-bar">
+            <button
+                type="button"
+                id="chad-menu-button"
+                aria-label="Open menu"
+                aria-expanded="false"
+            >☰</button>
+
+            <div class="chad-mobile-title">
+                <img
+                    src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png"
+                    alt=""
+                >
+                <span>ChadPDChee</span>
+            </div>
+
+            <button type="button" id="chad-mobile-new" aria-label="New project">＋</button>
+        </header>
+
+        <div id="chad-app">
+
+    <div id="chad-header">
+        <img
+            class="chad-site-banner"
+            src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chad-Transparent.png"
+            alt="ChadPDChee — DIY Expert"
+        >
+        <div class="chad-tagline">
+            DIY advice from an AI who is annoyingly confident about everything.
+        </div>
+    </div>
+
+    <div id="chad-disclaimer">
+        <strong>CHAD P.D. CHEE IS FOR INFORMATIONAL PURPOSES ONLY.</strong><br>
+        Chad is not a licensed contractor, electrician, plumber, engineer, or other professional.
+        If you're unsure about something, especially anything involving structural work, electrical,
+        gas, plumbing, or safety, consult a qualified professional.
+        <br><br>
+        Now that we've gotten that out of the way... what did you screw up?
+    </div>
+
+
+    <!-- CHADPDCHEE SPONSOR INVENTORY — ABOVE CHAT -->
+    <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
+        <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
+            <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
+            <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
+            <div class="chad-sponsor-copy">
+                <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
+                <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+            </div>
+            <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
+        </a>
+    </div>
+
+    <!-- HIDDEN UNTIL FIRST QUESTION -->
+    <div id="chad-chat"></div>
+
+    <div id="chad-input-area">
+
+        <textarea
+            id="chad-question"
+            placeholder="Ask Chad..."
+            rows="3"
+        ></textarea>
+
+        <div id="chad-buttons">
+
+            <button
+                type="button"
+                id="chad-ask"
+            >
+                ASK CHAD
+            </button>
+
+            <button
+                type="button"
+                id="chad-reset"
+            >
+                NEW CONVERSATION
+            </button>
+
+            <button
+                type="button"
+                id="chad-save-conversation"
+                class="chad-secondary-action"
+                title="Save this conversation with your own title"
+            >
+                SAVE CONVERSATION
+            </button>
+
+            <button
+                type="button"
+                id="chad-share-conversation"
+                class="chad-secondary-action"
+                title="Share this conversation"
+            >
+                SHARE
+            </button>
+
+        </div>
+
+        <div id="chad-turnstile"></div>
+
+        <div id="chad-question-limit" aria-live="polite"></div>
+
+    </div>
+
+</div>
+    </main>
+</div>
+
+
+
+    <div id="chad-share-overlay" class="chad-share-overlay" hidden>
+        <div class="chad-share-modal" role="dialog" aria-modal="true" aria-labelledby="chad-share-title">
+            <button type="button" id="chad-share-close" class="chad-share-close" aria-label="Close">×</button>
+            <h2 id="chad-share-title">Share Conversation</h2>
+            <p class="chad-share-copy">Send it by text or email, post the link, save a copy, or use your phone's share sheet for installed social apps.</p>
+            <input type="text" id="chad-share-url" readonly aria-label="Share link">
+            <div class="chad-share-actions">
+                <button type="button" id="chad-native-share">Share to Apps…</button>
+                <button type="button" id="chad-copy-share">Copy Link</button>
+                <button type="button" id="chad-email-share">Email</button>
+                <button type="button" id="chad-text-share">Text</button>
+                <button type="button" id="chad-whatsapp-share">WhatsApp</button>
+                <button type="button" id="chad-facebook-share">Facebook</button>
+                <button type="button" id="chad-x-share">X / Twitter</button>
+                <button type="button" id="chad-download-share">Save to Device</button>
+                <button type="button" id="chad-stop-share" class="chad-stop-share">Stop Sharing</button>
+            </div>
+            <div id="chad-share-status" class="chad-share-status" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <!-- CHADPDCHEE ACCOUNT / AUTH MODAL -->
+    <div id="chad-auth-overlay" aria-hidden="true">
+        <div id="chad-auth-modal" role="dialog" aria-modal="true" aria-labelledby="chad-auth-heading">
+            <button type="button" id="chad-auth-close" aria-label="Close">×</button>
+
+            <div class="chad-auth-brand">
+                <img src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="">
+                <div>
+                    <div class="chad-auth-brand-name">ChadPDChee</div>
+                    <div class="chad-auth-brand-sub">Save the project before you make it worse.</div>
+                </div>
+            </div>
+
+            <div id="chad-auth-message" class="chad-auth-message" aria-live="polite"></div>
+
+            <section id="chad-auth-signin" class="chad-auth-view">
+                <h2 id="chad-auth-heading">Sign in</h2>
+                <p class="chad-auth-lead">Continue your saved DIY projects on any device.</p>
+                <form id="chad-signin-form">
+                    <label>Email
+                        <input type="email" id="chad-signin-email" autocomplete="email" required>
+                    </label>
+                    <label>Password
+                        <input type="password" id="chad-signin-password" autocomplete="current-password" required>
+                    </label>
+                    <button type="submit" class="chad-auth-primary">Sign in</button>
+                </form>
+                <button type="button" class="chad-auth-link" data-auth-view="forgot">Forgot password?</button>
+                <div class="chad-auth-switch">New around here?
+                    <button type="button" class="chad-auth-link" data-auth-view="signup">Create an account</button>
+                </div>
+            </section>
+
+            <section id="chad-auth-signup" class="chad-auth-view" hidden>
+                <h2>Create account</h2>
+                <p class="chad-auth-lead">Create a free account to save conversations, share projects, keep your history, and get <strong>15 Chad questions every day</strong> instead of 5.</p>
+                <form id="chad-signup-form">
+                    <label>Name <span class="chad-auth-optional">(optional)</span>
+                        <input type="text" id="chad-signup-name" autocomplete="name" maxlength="80">
+                    </label>
+                    <label>Email
+                        <input type="email" id="chad-signup-email" autocomplete="email" required>
+                    </label>
+                    <label>Password
+                        <input type="password" id="chad-signup-password" autocomplete="new-password" minlength="12" maxlength="128" required>
+                        <small>At least 12 characters.</small>
+                    </label>
+
+                    <label class="chad-auth-check">
+                        <input type="checkbox" id="chad-signup-terms" required>
+                        <span>I agree to the <button type="button" class="chad-inline-policy" data-policy="terms">Terms of Use</button>.</span>
+                    </label>
+
+                    <label class="chad-auth-check">
+                        <input type="checkbox" id="chad-signup-privacy" required>
+                        <span>I acknowledge the <button type="button" class="chad-inline-policy" data-policy="privacy">Privacy Notice</button>.</span>
+                    </label>
+
+                    <label class="chad-auth-check">
+                        <input type="checkbox" id="chad-signup-marketing">
+                        <span>Send me occasional ChadPDChee news and updates. <strong>Optional.</strong></span>
+                    </label>
+
+                    <button type="submit" class="chad-auth-primary">Create account</button>
+                </form>
+                <div class="chad-auth-switch">Already have an account?
+                    <button type="button" class="chad-auth-link" data-auth-view="signin">Sign in</button>
+                </div>
+            </section>
+
+            <section id="chad-auth-forgot" class="chad-auth-view" hidden>
+                <h2>Reset password</h2>
+                <p class="chad-auth-lead">Enter your email and we'll send a one-time reset link.</p>
+                <form id="chad-forgot-form">
+                    <label>Email
+                        <input type="email" id="chad-forgot-email" autocomplete="email" required>
+                    </label>
+                    <button type="submit" class="chad-auth-primary">Send reset link</button>
+                </form>
+                <button type="button" class="chad-auth-link" data-auth-view="signin">← Back to sign in</button>
+            </section>
+
+            <section id="chad-auth-account" class="chad-auth-view" hidden>
+                <h2>Your account</h2>
+                <div id="chad-account-card" class="chad-account-card"></div>
+                <div id="chad-verify-box" class="chad-verify-box" hidden>
+                    <strong>Email verification needed</strong>
+                    <span>Check your inbox for Chad's verification email.</span>
+                    <button type="button" id="chad-resend-verify" class="chad-auth-secondary">Resend verification email</button>
+                </div>
+                <div class="chad-account-actions">
+                    <button type="button" id="chad-export-data" class="chad-auth-secondary">Download my data</button>
+                    <button type="button" id="chad-signout" class="chad-auth-secondary">Sign out</button>
+                    <button type="button" id="chad-delete-account" class="chad-auth-danger">Delete account</button>
+                </div>
+            </section>
+
+            <section id="chad-policy-panel" class="chad-policy-panel" hidden>
+                <button type="button" id="chad-policy-back" class="chad-auth-link">← Back</button>
+                <div id="chad-policy-content"></div>
+            </section>
+        </div>
+    </div>
+
+
+<style>
+
+/* =========================================================
+   CHADPDG
+   ========================================================= */
+
+#chad-app {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #111;
+    box-sizing: border-box;
+}
+
+#chad-app * {
+    box-sizing: border-box;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+#chad-header {
+    text-align: center;
+    padding: 10px 15px 8px;
+}
+
+.chad-site-banner {
+    display: block;
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+    margin: 0 auto;
+}
+
+.chad-logo {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    line-height: 1;
+
+    color: #1677B8;
+
+    text-shadow:
+        0 1px 0 #d9d9d9,
+        0 2px 2px rgba(0,0,0,.18);
+}
+
+.chad-tagline {
+    font-size: 15px;
+    margin-top: 7px;
+    color: #555;
+}
+
+
+/* =========================================================
+   DISCLAIMER
+   ========================================================= */
+
+#chad-disclaimer {
+    background: #f3f3f3;
+
+    border: 1px solid #d5d5d5;
+    border-radius: 8px;
+
+    padding: 12px 15px;
+    margin: 0 0 10px;
+
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+
+/* =========================================================
+   CHAT
+   ========================================================= */
+
+#chad-chat {
+    display: none;
+
+    height: auto;
+    max-height: none;
+    overflow: visible;
+
+    padding: 12px 10px 18px;
+
+    background: #fff;
+
+    border: 2px solid #1677B8;
+    border-radius: 10px;
+
+    box-shadow:
+        0 0 0 1px rgba(22,119,184,.08),
+        0 0 14px rgba(22,119,184,.18);
+
+    scroll-behavior: smooth;
+}
+
+#chad-chat.chad-chat-visible {
+    display: block;
+}
+
+
+/* =========================================================
+   MESSAGES
+   ========================================================= */
+
+.chad-message {
+    width: 100%;
+    margin-bottom: 18px;
+}
+
+.chad-user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.chad-user-bubble {
+    max-width: 80%;
+
+    background: #111;
+    color: #fff;
+
+    padding: 12px 15px;
+
+    border-radius: 14px 14px 4px 14px;
+
+    line-height: 1.5;
+
+    white-space: pre-wrap;
+}
+
+.chad-answer-wrapper {
+    width: 100%;
+}
+
+.chad-name {
+    font-weight: 900;
+    font-size: 15px;
+    margin-bottom: 5px;
+
+    color: #0D5F91;
+}
+
+.chad-answer {
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.chad-answer p {
+    margin: 0 0 10px;
+}
+
+.chad-answer ul {
+    margin: 8px 0 13px 22px;
+    padding: 0;
+}
+
+.chad-answer li {
+    margin-bottom: 5px;
+}
+
+.chad-answer strong {
+    font-weight: 800;
+}
+
+.chad-loading {
+    font-style: italic;
+    color: #777;
+    padding: 5px 0;
+}
+
+
+/* =========================================================
+   PRODUCTS
+   ========================================================= */
+
+.chad-products {
+    margin-top: 18px;
+}
+
+.chad-products-title {
+    font-size: 20px;
+    font-weight: 900;
+    margin-bottom: 10px;
+    letter-spacing: .5px;
+
+    color: #0D5F91;
+}
+
+.chad-product-card {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+
+    border: 1px solid #c9dce8;
+    border-radius: 10px;
+
+    padding: 12px;
+    margin-bottom: 10px;
+
+    background: #fafafa;
+}
+
+.chad-product-image {
+    width: 150px;
+    min-width: 150px;
+    height: 150px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #fff;
+
+    border-radius: 8px;
+
+    overflow: hidden;
+}
+
+.chad-product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.chad-product-info {
+    flex: 1;
+}
+
+.chad-product-option {
+    font-size: 12px;
+    font-weight: 800;
+
+    color: #0D5F91;
+
+    margin-bottom: 3px;
+    text-transform: uppercase;
+}
+
+.chad-product-name {
+    font-size: 17px;
+    font-weight: 900;
+    margin-bottom: 5px;
+}
+
+.chad-product-description {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #444;
+    margin-bottom: 10px;
+}
+
+
+/* =========================================================
+   AMAZON BUTTON
+   FORCE OVERRIDE ELEMENTOR / THEME
+   ========================================================= */
+
+#chad-app a.chad-product-button,
+#chad-app a.chad-product-button:visited {
+
+    display: inline-block !important;
+
+    background: #1677B8 !important;
+    background-color: #1677B8 !important;
+    background-image: none !important;
+
+    color: #ffffff !important;
+
+    border: 2px solid #0D5F91 !important;
+    border-radius: 6px !important;
+
+    padding: 10px 16px !important;
+
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: normal !important;
+
+    text-decoration: none !important;
+
+    cursor: pointer !important;
+
+    box-shadow:
+        0 2px 4px rgba(0,0,0,.15) !important;
+
+    transition:
+        background .15s ease,
+        background-color .15s ease,
+        border-color .15s ease,
+        box-shadow .15s ease,
+        transform .15s ease !important;
+}
+
+#chad-app a.chad-product-button:hover,
+#chad-app a.chad-product-button:focus,
+#chad-app a.chad-product-button:active {
+
+    background: #0D5F91 !important;
+    background-color: #0D5F91 !important;
+    background-image: none !important;
+
+    color: #ffffff !important;
+
+    border-color: #08496F !important;
+
+    text-decoration: none !important;
+
+    box-shadow:
+        0 3px 7px rgba(0,0,0,.20) !important;
+
+    transform: translateY(-1px) !important;
+}
+
+
+/* =========================================================
+   SOURCES
+   ========================================================= */
+
+.chad-sources {
+    margin-top: 14px;
+    font-size: 13px;
+}
+
+.chad-sources summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: #666;
+}
+
+.chad-source-list {
+    margin-top: 8px;
+}
+
+.chad-source-list a {
+    color: #0D5F91;
+    word-break: break-word;
+}
+
+
+/* =========================================================
+   INPUT
+   ========================================================= */
+
+#chad-input-area {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+
+    margin-top: 10px;
+    padding: 10px 0 12px;
+
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 -10px 24px rgba(255,255,255,.96);
+}
+
+#chad-question {
+    width: 100%;
+
+    resize: vertical;
+
+    min-height: 65px;
+
+    padding: 12px;
+
+    border: 2px solid #c7d5dd;
+
+    border-radius: 8px;
+
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+
+    outline: none;
+
+    transition:
+        border-color .15s ease,
+        box-shadow .15s ease;
+}
+
+#chad-question:focus {
+
+    border-color: #1677B8 !important;
+
+    box-shadow:
+        0 0 0 3px rgba(22,119,184,.12);
+}
+
+
+/* =========================================================
+   BUTTON CONTAINER
+   ========================================================= */
+
+#chad-app #chad-buttons {
+
+    display: flex !important;
+
+    gap: 10px !important;
+
+    margin-top: 8px !important;
+}
+
+
+/* =========================================================
+   ALL MAIN BUTTON PROPERTIES
+   FORCE OVERRIDE ELEMENTOR / THEME
+   ========================================================= */
+
+#chad-app #chad-ask,
+#chad-app #chad-reset {
+
+    appearance: none !important;
+    -webkit-appearance: none !important;
+
+    border-radius: 7px !important;
+
+    padding: 12px 18px !important;
+
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+
+    line-height: normal !important;
+
+    cursor: pointer !important;
+
+    text-decoration: none !important;
+
+    transition:
+        background .15s ease,
+        background-color .15s ease,
+        border-color .15s ease,
+        box-shadow .15s ease,
+        transform .15s ease !important;
+}
+
+
+/* =========================================================
+   ASK CHAD
+   ========================================================= */
+
+#chad-app #chad-ask {
+
+    background: #1677B8 !important;
+    background-color: #1677B8 !important;
+    background-image: none !important;
+
+    color: #ffffff !important;
+
+    border: 2px solid #0D5F91 !important;
+
+    box-shadow:
+        0 2px 5px rgba(0,0,0,.16) !important;
+}
+
+#chad-app #chad-ask:hover,
+#chad-app #chad-ask:focus,
+#chad-app #chad-ask:active {
+
+    background: #0D5F91 !important;
+    background-color: #0D5F91 !important;
+    background-image: none !important;
+
+    color: #ffffff !important;
+
+    border-color: #08496F !important;
+
+    box-shadow:
+        0 3px 8px rgba(0,0,0,.20) !important;
+
+    transform: translateY(-1px) !important;
+}
+
+
+/* =========================================================
+   NEW CONVERSATION
+   ========================================================= */
+
+#chad-app #chad-reset {
+
+    background: #E5E8EA !important;
+    background-color: #E5E8EA !important;
+    background-image: none !important;
+
+    color: #18384A !important;
+
+    border: 2px solid #AEBFC9 !important;
+
+    box-shadow: none !important;
+}
+
+#chad-app #chad-reset:hover,
+#chad-app #chad-reset:focus,
+#chad-app #chad-reset:active {
+
+    background: #D5DDE2 !important;
+    background-color: #D5DDE2 !important;
+    background-image: none !important;
+
+    color: #0D5F91 !important;
+
+    border-color: #1677B8 !important;
+
+    box-shadow:
+        0 2px 5px rgba(0,0,0,.12) !important;
+
+    transform: translateY(-1px) !important;
+}
+
+
+/* =========================================================
+   DISABLED ASK BUTTON
+   ========================================================= */
+
+#chad-app #chad-ask:disabled,
+#chad-app #chad-ask:disabled:hover {
+
+    background: #1677B8 !important;
+    background-color: #1677B8 !important;
+    background-image: none !important;
+
+    color: #ffffff !important;
+
+    border-color: #0D5F91 !important;
+
+    opacity: .5 !important;
+
+    cursor: not-allowed !important;
+
+    transform: none !important;
+
+    box-shadow: none !important;
+}
+
+
+/* =========================================================
+   TURNSTILE
+   ========================================================= */
+
+#chad-turnstile {
+    min-height: 0;
+    margin-top: 8px;
+}
+
+
+/* =========================================================
+   DAILY QUESTION LIMIT
+   ========================================================= */
+
+
+
+
+.chad-section-heading {
+    font-weight: 800;
+    margin: 16px 0 6px;
+}
+
+.chad-answer-list {
+    margin: 8px 0 10px 20px;
+    padding: 0;
+}
+
+.chad-answer-list li {
+    margin: 5px 0;
+}
+
+.chad-answer-spacer {
+    height: 8px;
+}
+
+.chad-video-wrap {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+}
+
+.chad-video-heading {
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.chad-video-link {
+    display: block;
+    margin: 8px 0;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.chad-video-channel {
+    display: block;
+    font-size: 0.85em;
+    opacity: 0.72;
+    margin-top: 2px;
+}
+
+}
+
+.chad-shopping-wrap {
+    margin-top: 18px;
+}
+
+#chad-app button.chad-shopping-button {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: .5px;
+    cursor: pointer;
+    background: #111;
+    color: #fff;
+    transition: transform .15s ease, opacity .15s ease;
+}
+
+#chad-app button.chad-shopping-button:hover,
+#chad-app button.chad-shopping-button:focus {
+    transform: translateY(-1px);
+}
+
+#chad-app button.chad-shopping-button:disabled {
+    cursor: default;
+    opacity: .65;
+    transform: none;
+}
+
+.chad-shopping-subtext {
+    margin-top: 7px;
+    font-size: 12px;
+    color: #777;
+    text-align: center;
+}
+
+.chad-shopping-result {
+    margin-top: 16px;
+    padding: 18px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.chad-shopping-title {
+    font-size: 18px;
+    font-weight: 900;
+    margin-bottom: 6px;
+}
+
+.chad-shopping-intro {
+    margin-bottom: 15px;
+}
+
+.chad-shopping-items {
+    margin: 0 0 18px;
+    padding: 0;
+    list-style: none;
+}
+
+.chad-shopping-item {
+    padding: 11px 0;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.chad-shopping-item:last-child {
+    border-bottom: 0;
+}
+
+.chad-shopping-item-top {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+
+.chad-shopping-item-name {
+    font-weight: 900;
+}
+
+.chad-shopping-item-qty {
+    font-size: 12px;
+    font-weight: 800;
+    color: #666;
+}
+
+.chad-shopping-item-type {
+    display: inline-block;
+    margin-top: 5px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: #ececec;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.chad-shopping-item-note {
+    margin-top: 5px;
+    font-size: 13px;
+    color: #555;
+}
+
+
+.chad-shopping-product {
+    margin-top: 10px;
+    padding: 11px 12px;
+    border: 1px solid #c9dce8;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.chad-shopping-product-label {
+    font-size: 11px;
+    font-weight: 900;
+    color: #0D5F91;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.chad-shopping-product-name {
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1.3;
+}
+
+.chad-shopping-product-description {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #555;
+    line-height: 1.4;
+}
+
+#chad-app a.chad-shopping-amazon-button {
+    display: inline-block;
+    margin-top: 9px;
+    padding: 9px 12px;
+    border-radius: 7px;
+    background: #111;
+    color: #fff;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .3px;
+}
+
+.chad-shopping-unmatched {
+    margin-top: 18px;
+}
+
+
+.chad-shopping-error {
+    margin-top: 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+
+
+.chad-quota-lockout {
+    margin-top: 14px;
+    padding: 16px 18px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fafafa;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.chad-quota-lockout strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 15px;
+}
+
+#chad-ask.chad-limit-reached {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+
+#chad-question-limit {
+    margin-top: 8px;
+    min-height: 18px;
+
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+
+    color: #667985;
+
+    text-align: left;
+}
+
+#chad-question-limit.chad-limit-reached {
+    color: #9a2d2d;
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+    #chad-header {
+        padding: 8px 12px 7px;
+    }
+
+    .chad-logo {
+        font-size: 34px;
+    }
+
+    .chad-tagline {
+        font-size: 14px;
+    }
+
+    #chad-disclaimer {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+    }
+
+    #chad-chat {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+        padding: 10px 8px 16px;
+        border-width: 2px;
+    }
+
+    .chad-user-bubble {
+        max-width: 90%;
+    }
+
+    .chad-product-card {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .chad-product-image {
+        width: 95px;
+        min-width: 95px;
+        height: 95px;
+    }
+
+    .chad-product-name {
+        font-size: 15px;
+    }
+
+    .chad-product-description {
+        font-size: 13px;
+    }
+
+    #chad-app #chad-buttons {
+        flex-direction: column !important;
+    }
+
+    #chad-app #chad-ask,
+    #chad-app #chad-reset {
+        width: 100% !important;
+    }
+
+}
+
+
+
+/* =========================================================
+   CHADPDG FINAL 4.0.1 — SITE THEME OVERRIDES
+   ========================================================= */
+
+#chad-app #chad-ask,
+#chad-app #chad-reset {
+    background: #0066cc !important;
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+    border-color: #0066cc !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+#chad-app #chad-ask:hover,
+#chad-app #chad-ask:focus,
+#chad-app #chad-reset:hover,
+#chad-app #chad-reset:focus {
+    background: #0052a3 !important;
+    background-color: #0052a3 !important;
+    color: #ffffff !important;
+    border-color: #0052a3 !important;
+}
+
+#chad-app #chad-ask:disabled {
+    color: #ffffff !important;
+}
+
+#chad-app #chad-chat,
+#chad-app #chad-question {
+    border-color: #0066cc !important;
+}
+
+#chad-app #chad-question:focus {
+    border-color: #0066cc !important;
+    outline-color: #0066cc !important;
+}
+
+
+/* =========================================================
+   CHADPDG FINAL 4.0.2 — CHAD AVATAR
+   ========================================================= */
+
+#chad-app .chad-answer-wrapper {
+    position: relative;
+    padding-left: 54px;
+}
+
+#chad-app .chad-avatar {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+@media (max-width: 600px) {
+    #chad-app .chad-answer-wrapper {
+        padding-left: 46px;
+    }
+
+    #chad-app .chad-avatar {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+/* =========================================================
+   CHADPDG FINAL 4.1 — HAMMERED HANDYMAN DISPLAY QUESTION
+   ========================================================= */
+
+#chad-app .chad-user {
+    position: relative;
+    padding-left: 54px;
+}
+
+#chad-app .chad-user-avatar {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+#chad-app .chad-user-name {
+    font-weight: 800;
+    margin: 0 0 4px;
+}
+
+@media (max-width: 600px) {
+    #chad-app .chad-user {
+        padding-left: 46px;
+    }
+
+    #chad-app .chad-user-avatar {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+
+/* =========================================================
+   CHADPDG FINAL 4.1.1 — HH MESSAGE LAYOUT FIX
+   ========================================================= */
+
+#chad-app .chad-user {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#chad-app .chad-user-avatar {
+    position: static !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    order: 2 !important;
+    margin-top: 2px !important;
+}
+
+#chad-app .chad-user-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    max-width: calc(100% - 54px) !important;
+    order: 1 !important;
+}
+
+#chad-app .chad-user-name {
+    font-weight: 800 !important;
+    margin: 0 0 4px !important;
+    text-align: right !important;
+}
+
+#chad-app .chad-user-bubble {
+    max-width: 100% !important;
+}
+
+@media (max-width: 600px) {
+    #chad-app .chad-user-avatar {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+    }
+
+    #chad-app .chad-user-content {
+        max-width: calc(100% - 46px) !important;
+    }
+}
+
+/* =========================================================
+   CHADPDCHEE APP SHELL — RESPONSIVE SIDEBAR + FULL-PAGE CHAT
+   ========================================================= */
+
+:root {
+    --chad-sidebar-width: 276px;
+    --chad-sidebar-bg: #17191c;
+    --chad-sidebar-panel: #22252a;
+    --chad-sidebar-border: rgba(255,255,255,.08);
+    --chad-blue: #1677B8;
+    --chad-yellow: #f1bd29;
+    --chad-page: #ffffff;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: var(--chad-page) !important;
+    overflow-x: hidden;
+}
+
+#chad-shell {
+    min-height: 100vh;
+    display: flex;
+    width: 100%;
+    background: #fff;
+}
+
+/* ---------- DESKTOP SIDEBAR ---------- */
+
+#chad-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--chad-sidebar-width);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(22,119,184,.22), transparent 34%),
+        var(--chad-sidebar-bg);
+    color: #fff;
+    border-right: 1px solid var(--chad-sidebar-border);
+    z-index: 1000;
+}
+
+.chad-sidebar-top {
+    padding: 18px 14px 12px;
+}
+
+.chad-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 2px 6px 16px;
+}
+
+.chad-sidebar-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,.15);
+    box-shadow: 0 3px 12px rgba(0,0,0,.3);
+}
+
+.chad-sidebar-name {
+    font: 800 17px/1.05 Arial, Helvetica, sans-serif;
+    letter-spacing: .1px;
+}
+
+.chad-sidebar-sub {
+    margin-top: 3px;
+    color: #9da5ad;
+    font: 600 11px/1 Arial, Helvetica, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+}
+
+.chad-sidebar-new {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 13px;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 11px;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    font: 700 14px Arial, Helvetica, sans-serif;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.chad-sidebar-new:hover {
+    background: rgba(255,255,255,.11);
+    border-color: rgba(255,255,255,.24);
+}
+
+.chad-sidebar-plus {
+    color: var(--chad-yellow);
+    font-size: 20px;
+    line-height: 1;
+}
+
+.chad-sidebar-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 14px 18px;
+}
+
+.chad-sidebar-section-label {
+    padding: 7px 8px 9px;
+    color: #747d86;
+    font: 800 10px/1 Arial, Helvetica, sans-serif;
+    letter-spacing: 1.2px;
+}
+
+.chad-sidebar-empty {
+    margin: 0 4px;
+    padding: 13px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.055);
+}
+
+.chad-sidebar-empty-title {
+    color: #e8eaed;
+    font: 700 13px/1.3 Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-empty-copy {
+    margin-top: 6px;
+    color: #8f979f;
+    font: 400 11px/1.45 Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-bottom {
+    padding: 10px;
+    border-top: 1px solid var(--chad-sidebar-border);
+}
+
+.chad-sidebar-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #e5e7ea;
+    text-align: left;
+    cursor: default;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.chad-sidebar-row:hover {
+    background: rgba(255,255,255,.055);
+}
+
+.chad-sidebar-row span:last-child {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.chad-sidebar-row strong {
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.chad-sidebar-row small {
+    margin-top: 2px;
+    color: #7f8891;
+    font-size: 10px;
+}
+
+.chad-sidebar-icon {
+    width: 25px;
+    height: 25px;
+    display: grid;
+    place-items: center;
+    border-radius: 7px;
+    background: rgba(255,255,255,.07);
+    color: var(--chad-yellow);
+    font-size: 14px;
+}
+
+/* ---------- MAIN APP ---------- */
+
+#chad-main {
+    width: calc(100% - var(--chad-sidebar-width));
+    min-height: 100vh;
+    margin-left: var(--chad-sidebar-width);
+    background: #fff;
+}
+
+#chad-mobile-bar {
+    display: none;
+}
+
+#chad-app {
+    width: min(100%, 960px) !important;
+    max-width: 960px !important;
+    min-height: 100vh;
+    margin: 0 auto !important;
+    padding: 16px 24px 130px !important;
+}
+
+#chad-header {
+    padding-top: 4px !important;
+}
+
+.chad-site-banner {
+    max-width: 760px !important;
+}
+
+#chad-disclaimer {
+    border: 0 !important;
+    border-left: 4px solid var(--chad-blue) !important;
+    border-radius: 9px !important;
+    background: #f4f6f8 !important;
+    box-shadow: none !important;
+    margin-bottom: 18px !important;
+}
+
+#chad-chat {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 14px 0 22px !important;
+    background: transparent !important;
+}
+
+/* Give every exchange comfortable ChatGPT-like breathing room. */
+#chad-chat .chad-message {
+    margin-bottom: 26px !important;
+}
+
+#chad-input-area {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 90 !important;
+    margin: 0 auto !important;
+    padding: 14px 0 18px !important;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(255,255,255,0),
+            rgba(255,255,255,.96) 18%,
+            #fff 42%
+        ) !important;
+    box-shadow: none !important;
+}
+
+#chad-question {
+    min-height: 58px !important;
+    max-height: 180px !important;
+    border: 1px solid #d8dde3 !important;
+    border-radius: 18px !important;
+    padding: 15px 16px !important;
+    box-shadow:
+        0 8px 24px rgba(0,0,0,.08),
+        0 1px 3px rgba(0,0,0,.05) !important;
+    background: #fff !important;
+}
+
+#chad-buttons {
+    margin-top: 8px !important;
+}
+
+#chad-reset {
+    display: none !important;
+}
+
+#chad-turnstile {
+    margin-top: 6px;
+}
+
+#chad-question-limit {
+    margin-top: 7px !important;
+}
+
+/* ---------- MOBILE DRAWER ---------- */
+
+#chad-sidebar-backdrop {
+    display: none;
+}
+
+@media (max-width: 820px) {
+
+    #chad-main {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    #chad-mobile-bar {
+        position: sticky;
+        top: 0;
+        z-index: 950;
+        height: 56px;
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        padding: 0 8px;
+        border-bottom: 1px solid #e6e8eb;
+        background: rgba(255,255,255,.96);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    #chad-menu-button,
+    #chad-mobile-new {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: #222;
+        font-size: 23px;
+        cursor: pointer;
+    }
+
+    #chad-menu-button:active,
+    #chad-mobile-new:active {
+        background: #f0f2f4;
+    }
+
+    .chad-mobile-title {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font: 800 15px Arial, Helvetica, sans-serif;
+        color: #191b1e;
+    }
+
+    .chad-mobile-title img {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    #chad-sidebar {
+        width: min(86vw, 310px);
+        transform: translateX(-102%);
+        transition: transform .2s ease;
+        box-shadow: 18px 0 45px rgba(0,0,0,.26);
+    }
+
+    body.chad-menu-open #chad-sidebar {
+        transform: translateX(0);
+    }
+
+    #chad-sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 990;
+        background: rgba(0,0,0,.42);
+    }
+
+    body.chad-menu-open #chad-sidebar-backdrop {
+        display: block;
+    }
+
+    #chad-app {
+        width: 100% !important;
+        max-width: none !important;
+        min-height: calc(100vh - 56px);
+        padding: 10px 14px 112px !important;
+    }
+
+    #chad-header {
+        padding: 4px 0 8px !important;
+    }
+
+    .chad-site-banner {
+        max-width: 620px !important;
+    }
+
+    .chad-tagline {
+        font-size: 13px !important;
+    }
+
+    #chad-disclaimer {
+        padding: 11px 12px !important;
+        font-size: 12px !important;
+    }
+
+    #chad-chat {
+        padding: 10px 0 18px !important;
+    }
+
+    #chad-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    }
+
+    #chad-question {
+        min-height: 54px !important;
+        font-size: 16px !important; /* prevents iPhone zoom */
+    }
+}
+
+@media (max-width: 520px) {
+
+    #chad-app {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    #chad-header {
+        margin-top: 0 !important;
+    }
+
+    .chad-site-banner {
+        max-width: 100% !important;
+    }
+
+    #chad-chat .chad-message {
+        margin-bottom: 22px !important;
+    }
+
+    #chad-app .chad-user-avatar,
+    #chad-app .chad-avatar {
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+    }
+
+    #chad-app .chad-user-content {
+        max-width: calc(100% - 44px) !important;
+    }
+
+    #chad-app .chad-answer-wrapper {
+        padding-left: 44px !important;
+    }
+
+    .chad-product-card,
+    .chad-video-card {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+
+/* =========================================================
+   CHADPDCHEE ACCOUNT UI
+   ========================================================= */
+#chad-auth-overlay{position:fixed;inset:0;z-index:5000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(10,12,14,.70);backdrop-filter:blur(5px)}
+#chad-auth-overlay.chad-auth-open{display:flex}
+#chad-auth-modal{position:relative;width:min(100%,470px);max-height:min(760px,calc(100vh - 36px));overflow-y:auto;box-sizing:border-box;border-radius:22px;background:#fff;color:#17191c;padding:28px;box-shadow:0 28px 80px rgba(0,0,0,.35);font-family:Arial,Helvetica,sans-serif}
+#chad-auth-close{position:absolute;right:14px;top:12px;width:36px;height:36px;border:0;border-radius:50%;background:#f1f3f5;color:#202327;font-size:25px;line-height:1;cursor:pointer}
+.chad-auth-brand{display:flex;align-items:center;gap:12px;padding-right:38px;margin-bottom:24px}.chad-auth-brand img{width:48px;height:48px;border-radius:50%;object-fit:cover}.chad-auth-brand-name{font-size:20px;font-weight:900}.chad-auth-brand-sub{color:#6c737a;font-size:12px;font-weight:700;margin-top:3px}
+.chad-auth-view h2{margin:0 0 7px;font-size:28px}.chad-auth-lead{margin:0 0 20px;color:#60676e;line-height:1.45}.chad-auth-view form{display:grid;gap:14px}.chad-auth-view label{display:grid;gap:7px;font-size:13px;font-weight:800}
+.chad-auth-view input[type="email"],.chad-auth-view input[type="password"],.chad-auth-view input[type="text"]{width:100%;box-sizing:border-box;border:1px solid #cfd4d9;border-radius:11px;padding:13px 14px;background:#fff;color:#16181b;font-size:16px;outline:none}.chad-auth-view input:focus{border-color:#1677B8;box-shadow:0 0 0 3px rgba(22,119,184,.12)}
+.chad-auth-view label small,.chad-auth-optional{color:#777f87;font-weight:500}.chad-auth-primary,.chad-auth-secondary,.chad-auth-danger{border:0;border-radius:11px;padding:13px 16px;font-weight:900;cursor:pointer;font-size:14px}.chad-auth-primary{background:#1677B8;color:#fff;width:100%}.chad-auth-primary:hover{background:#0f649e}.chad-auth-secondary{background:#eef2f5;color:#202327}.chad-auth-danger{background:#fff0f0;color:#a52020;border:1px solid #f2caca}
+.chad-auth-link,.chad-inline-policy{border:0;background:none;padding:0;color:#1677B8;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer}.chad-auth-view>.chad-auth-link{margin-top:14px}.chad-auth-switch{border-top:1px solid #e7e9eb;margin-top:20px;padding-top:18px;font-size:14px;color:#616970}
+.chad-auth-check{grid-template-columns:19px 1fr!important;align-items:start;gap:9px!important;line-height:1.4;font-weight:500!important}.chad-auth-check input{margin:2px 0 0;width:17px;height:17px}
+.chad-auth-message{display:none;margin:0 0 18px;border-radius:10px;padding:11px 13px;background:#eef7ff;color:#164f75;font-size:13px;line-height:1.4}.chad-auth-message.is-error{background:#fff0f0;color:#922}.chad-auth-message.is-success{background:#edf9ef;color:#216b32}.chad-auth-message:not(:empty){display:block}
+.chad-account-card{border:1px solid #e1e5e8;background:#f8f9fa;border-radius:14px;padding:16px;margin-bottom:14px}.chad-account-card strong{display:block;font-size:16px}.chad-account-card span{display:block;margin-top:5px;color:#697078;font-size:13px}#chad-verify-box[hidden]{display:none!important}
+.chad-verify-box{display:grid;gap:8px;padding:14px;border:1px solid #efd67a;background:#fff9df;border-radius:12px;margin:12px 0;font-size:13px}.chad-account-actions{display:grid;gap:10px;margin-top:18px}
+.chad-policy-panel h2{margin:15px 0 10px}.chad-policy-panel p,.chad-policy-panel li{color:#4e565d;line-height:1.5;font-size:14px}.chad-policy-panel ul{padding-left:20px}
+.chad-recent-item{width:100%;border:0;background:transparent;color:#e7eaed;text-align:left;border-radius:9px;padding:10px;margin:1px 0;cursor:pointer;font:700 13px/1.25 Arial,Helvetica,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chad-recent-item:hover,.chad-recent-item.is-active{background:rgba(255,255,255,.09)}.chad-recent-row{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:4px;align-items:center;margin:1px 0}.chad-recent-row .chad-recent-item{margin:0}.chad-recent-menu-wrap{position:relative}.chad-recent-more{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#aeb8c2;font-size:20px;line-height:1;cursor:pointer}.chad-recent-more:hover{background:rgba(255,255,255,.09);color:#fff}.chad-recent-menu{position:absolute;right:0;top:34px;z-index:40;min-width:128px;padding:6px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#20262c;box-shadow:0 12px 28px rgba(0,0,0,.35)}.chad-recent-menu[hidden]{display:none!important}.chad-recent-menu button{display:block;width:100%;border:0;border-radius:7px;background:transparent;color:#fff;text-align:left;padding:8px 10px;cursor:pointer;font:600 13px Arial,Helvetica,sans-serif}.chad-recent-menu button:hover{background:rgba(255,255,255,.08)}.chad-recent-menu button.chad-delete-project{color:#ff9a9a}.chad-sidebar-signedin{color:#78c8ff!important}.chad-history-note{text-align:center;color:#7c838a;font:600 12px/1.4 Arial,Helvetica,sans-serif;margin:18px 0}
+@media(max-width:600px){#chad-auth-overlay{padding:0;align-items:flex-end}#chad-auth-modal{width:100%;max-height:92vh;border-radius:20px 20px 0 0;padding:24px 18px max(24px,env(safe-area-inset-bottom))}}
+
+</style>
+
+
+<script
+    src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+    defer
+></script>
+
+<script>
+
+(function () {
+
+    'use strict';
+
+
+    /* =====================================================
+       ELEMENTS
+       ===================================================== */
+
+    const chat =
+        document.getElementById('chad-chat');
+
+    const questionInput =
+        document.getElementById('chad-question');
+
+    const askButton =
+        document.getElementById('chad-ask');
+
+    const resetButton =
+        document.getElementById('chad-reset');
+
+    const questionLimit =
+        document.getElementById('chad-question-limit');
+
+    const turnstileContainer =
+        document.getElementById('chad-turnstile');
+
+
+    if (
+        !chat ||
+        !questionInput ||
+        !askButton ||
+        !resetButton ||
+        !questionLimit ||
+        !turnstileContainer
+    ) {
+
+        console.error(
+            'CHADPDG: Required elements not found.'
+        );
+
+        return;
+
+    }
+
+
+    /* =====================================================
+       LOADING MESSAGES
+       ===================================================== */
+
+    const loadingMessages = [
+
+        'Chad is checking whether you actually know what you’re doing...',
+
+        'Consulting the tool drawer. This could take a while.',
+
+        'Calculating how many trips to the hardware store this will require...',
+
+        'Looking for a solution that doesn’t involve duct tape...',
+
+        'Determining whether this is actually a good idea...',
+
+        'Checking the internet because apparently I have to do everything...',
+
+        'Consulting the ancient handyman scrolls...',
+
+        'Trying to prevent you from making this more complicated...',
+
+        'Cross-referencing your questionable idea with reality...',
+
+        'Checking whether you need a tool or just better judgment...',
+
+        'Looking for the easiest way to explain this...',
+
+        'Checking specifications so you don’t buy the wrong thing...',
+
+        'Chad is on it. Try not to touch anything.',
+
+        'Determining how badly this could go...',
+
+        'Calculating the amount of swearing you’re going to avoid by asking Chad...',
+
+        'Checking the measurements. Yes, measurements matter.',
+
+        'Looking for a way to make this idiot-proof...',
+
+        'Evaluating your DIY ambitions...',
+
+        'Checking whether the instructions actually make sense...',
+
+        'Trying to save you from another trip to the hardware store...'
+
+    ];
+
+
+    let loadingInterval = null;
+
+
+    /* =====================================================
+       TURNSTILE
+       ===================================================== */
+
+    const CHAD_TURNSTILE_SITE_KEY =
+        '0x4AAAAAAEs8NPfO2xl4mDcY';
+
+    let turnstileWidgetId = null;
+    let turnstileResolve = null;
+    let turnstileReject = null;
+
+    let dailyLimitLocked = false;
+
+
+    function initializeTurnstile() {
+
+        if (
+            typeof window.turnstile === 'undefined' ||
+            !window.turnstile
+        ) {
+            return false;
+        }
+
+        if (turnstileWidgetId !== null) {
+            return true;
+        }
+
+        if (
+            !CHAD_TURNSTILE_SITE_KEY ||
+            CHAD_TURNSTILE_SITE_KEY ===
+                'PASTE_TURNSTILE_SITE_KEY_HERE'
+        ) {
+
+            console.error(
+                'CHADPDG: Turnstile site key has not been configured.'
+            );
+
+            return false;
+        }
+
+        turnstileWidgetId =
+            window.turnstile.render(
+                '#chad-turnstile',
+                {
+                    sitekey:
+                        CHAD_TURNSTILE_SITE_KEY,
+
+                    execution:
+                        'execute',
+
+                    appearance:
+                        'interaction-only',
+
+                    theme:
+                        'auto',
+
+                    callback:
+                        function (token) {
+
+                            if (turnstileResolve) {
+
+                                const resolve =
+                                    turnstileResolve;
+
+                                turnstileResolve =
+                                    null;
+
+                                turnstileReject =
+                                    null;
+
+                                resolve(token);
+
+                            }
+
+                        },
+
+                    'error-callback':
+                        function () {
+
+                            if (turnstileReject) {
+
+                                const reject =
+                                    turnstileReject;
+
+                                turnstileResolve =
+                                    null;
+
+                                turnstileReject =
+                                    null;
+
+                                reject(
+                                    new Error(
+                                        'Security verification failed. Please try again.'
+                                    )
+                                );
+
+                            }
+
+                        },
+
+                    'expired-callback':
+                        function () {
+
+                            if (
+                                turnstileWidgetId !== null
+                            ) {
+
+                                window.turnstile.reset(
+                                    turnstileWidgetId
+                                );
+
+                            }
+
+                        }
+                }
+            );
+
+        return true;
+    }
+
+
+    function waitForTurnstile() {
+
+        return new Promise(
+            function (resolve, reject) {
+
+                let attempts = 0;
+
+                const check =
+                    setInterval(
+                        function () {
+
+                            attempts++;
+
+                            if (initializeTurnstile()) {
+
+                                clearInterval(check);
+
+                                resolve();
+
+                                return;
+                            }
+
+                            if (attempts >= 50) {
+
+                                clearInterval(check);
+
+                                reject(
+                                    new Error(
+                                        'Security verification could not load. Please refresh the page and try again.'
+                                    )
+                                );
+
+                            }
+
+                        },
+                        100
+                    );
+
+            }
+        );
+
+    }
+
+
+    async function getTurnstileToken() {
+
+        await waitForTurnstile();
+
+        return new Promise(
+            function (resolve, reject) {
+
+                turnstileResolve =
+                    resolve;
+
+                turnstileReject =
+                    reject;
+
+                try {
+
+                    window.turnstile.execute(
+                        turnstileWidgetId
+                    );
+
+                } catch (error) {
+
+                    turnstileResolve =
+                        null;
+
+                    turnstileReject =
+                        null;
+
+                    reject(
+                        new Error(
+                            'Security verification could not start. Please try again.'
+                        )
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+
+    function resetTurnstile() {
+
+        if (
+            turnstileWidgetId !== null &&
+            typeof window.turnstile !== 'undefined'
+        ) {
+
+            try {
+
+                window.turnstile.reset(
+                    turnstileWidgetId
+                );
+
+            } catch (error) {
+
+                /* Never let Turnstile break Chad's UI. */
+
+            }
+
+        }
+
+    }
+
+
+    /* =====================================================
+       DAILY QUESTION LIMIT
+       ===================================================== */
+
+    function showAdminTestMode() {
+
+        const counter =
+            document.getElementById(
+                'chad-question-limit'
+            );
+
+        if (!counter) {
+            return;
+        }
+
+        counter.textContent =
+            'DEV MODE — Unlimited Questions';
+
+        counter.style.display = 'block';
+    }
+
+
+    function updateQuestionLimit(
+        remaining,
+        dailyLimit
+    ) {
+
+        const limit =
+            Number.isFinite(Number(dailyLimit))
+                ? Number(dailyLimit)
+                : 5;
+
+        const left =
+            Number.isFinite(Number(remaining))
+                ? Math.max(0, Number(remaining))
+                : null;
+
+        if (left === null) {
+            return;
+        }
+
+        questionLimit.textContent =
+            left +
+            ' of ' +
+            limit +
+            ' free questions remaining today';
+
+        if (left <= 0) {
+
+            questionLimit.classList.add(
+                'chad-limit-reached'
+            );
+
+        } else {
+
+            questionLimit.classList.remove(
+                'chad-limit-reached'
+            );
+
+        }
+
+    }
+
+
+    async function syncQuestionLimit() {
+
+        try {
+
+            const response =
+                await fetch(
+                    '/wp-json/chadpgt/v1/status',
+                    {
+                        method: 'GET',
+                        headers: chadApiHeaders()
+                    }
+                );
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data =
+                await response.json();
+
+            if (!data || data.success !== true) {
+                return;
+            }
+
+            updateQuestionLimit(
+                data.remaining,
+                data.daily_limit
+            );
+
+            if (Number(data.remaining) <= 0) {
+
+                dailyLimitLocked = true;
+
+                if (askButton) {
+                    askButton.disabled = true;
+                    askButton.classList.add(
+                        'chad-limit-reached'
+                    );
+                    askButton.textContent =
+                        'OUT OF QUESTIONS';
+                }
+
+                if (questionInput) {
+                    questionInput.disabled = true;
+                    questionInput.placeholder =
+                        'Sorry Bro… Chad is out until tomorrow.';
+                }
+
+            } else {
+
+                dailyLimitLocked = false;
+
+                if (askButton) {
+                    askButton.disabled = false;
+                    askButton.classList.remove(
+                        'chad-limit-reached'
+                    );
+                    askButton.textContent =
+                        'ASK CHAD';
+                }
+
+                if (questionInput) {
+                    questionInput.disabled = false;
+                    questionInput.placeholder =
+                        'Ask Chad...';
+                }
+            }
+
+        } catch (error) {
+            /* Counter sync must never break Chad. */
+        }
+    }
+
+
+    /* =====================================================
+       SHOW CHAT
+       ===================================================== */
+
+    function showChat() {
+
+        chat.classList.add(
+            'chad-chat-visible'
+        );
+
+    }
+
+
+    /* =====================================================
+       ESCAPE HTML
+       ===================================================== */
+
+    function escapeHtml(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+
+            return '';
+
+        }
+
+        return String(value)
+
+            .replace(
+                /&/g,
+                '&amp;'
+            )
+
+            .replace(
+                /</g,
+                '&lt;'
+            )
+
+            .replace(
+                />/g,
+                '&gt;'
+            )
+
+            .replace(
+                /"/g,
+                '&quot;'
+            )
+
+            .replace(
+                /'/g,
+                '&#039;'
+            );
+
+    }
+
+
+    /* =====================================================
+       FORMAT ANSWER
+       ===================================================== */
+
+    function formatAnswer(text) {
+
+        let value = String(text || '');
+
+        value = value
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n');
+
+        /*
+         * Clean raw Markdown headings so Chad looks like a polished
+         * assistant instead of a README file.
+         */
+        value = value.replace(
+            /^\s*#{1,6}\s+(.+?)\s*$/gm,
+            '<div class="chad-section-heading">$1</div>'
+        );
+
+        /*
+         * Convert Markdown bold.
+         */
+        value = value.replace(
+            /\*\*(.+?)\*\*/g,
+            '<strong>$1</strong>'
+        );
+
+        /*
+         * Convert simple bullet lines.
+         */
+        const lines = value.split('\n');
+        let output = '';
+        let inList = false;
+
+        lines.forEach(function (line) {
+
+            const bullet =
+                line.match(/^\s*[-*•]\s+(.+)$/);
+
+            if (bullet) {
+
+                if (!inList) {
+                    output += '<ul class="chad-answer-list">';
+                    inList = true;
+                }
+
+                output +=
+                    '<li>' +
+                    bullet[1] +
+                    '</li>';
+
+                return;
+            }
+
+            if (inList) {
+                output += '</ul>';
+                inList = false;
+            }
+
+            if (!line.trim()) {
+                output += '<div class="chad-answer-spacer"></div>';
+            } else {
+                output += '<div>' + line + '</div>';
+            }
+        });
+
+        if (inList) {
+            output += '</ul>';
+        }
+
+        return output;
+    }
+
+
+    /* =====================================================
+       SCROLL
+       ===================================================== */
+
+    function scrollToChadAnswer(
+        element
+    ) {
+
+        if (!element) {
+            return;
+        }
+
+        requestAnimationFrame(
+            function () {
+
+                const y =
+                    element.getBoundingClientRect().top +
+                    window.pageYOffset -
+                    18;
+
+                window.scrollTo({
+                    top: Math.max(0, y),
+                    behavior: 'smooth'
+                });
+
+            }
+        );
+
+    }
+
+
+    /* =====================================================
+       USER MESSAGE
+       ===================================================== */
+
+    function addUserMessage(
+        message
+    ) {
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+        wrapper.className =
+            'chad-message chad-user';
+
+
+        wrapper.innerHTML =
+
+            '<div class="chad-user-content">' +
+
+                '<div class="chad-user-name">' +
+                'Hammered Handyman:' +
+                '</div>' +
+
+                '<div class="chad-user-bubble">' +
+
+                escapeHtml(
+                    message
+                ) +
+
+                '</div>' +
+
+            '</div>' +
+
+            '<img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';
+
+
+        chat.appendChild(
+            wrapper
+        );
+
+
+        scrollToChadAnswer(
+            wrapper
+        );
+
+
+        return wrapper;
+
+    }
+
+
+    /* =====================================================
+       LOADING
+       ===================================================== */
+
+    function addLoadingMessage() {
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+
+        wrapper.className =
+            'chad-message chad-answer-wrapper';
+
+
+        const message =
+            loadingMessages[
+                Math.floor(
+                    Math.random() *
+                    loadingMessages.length
+                )
+            ];
+
+
+        wrapper.innerHTML =
+
+            '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+
+            '<div class="chad-name">' +
+            'Chad:' +
+            '</div>' +
+
+            '<div class="chad-loading">' +
+            escapeHtml(message) +
+            '</div>';
+
+
+        chat.appendChild(
+            wrapper
+        );
+
+
+        scrollToChadAnswer(
+            wrapper
+        );
+
+
+        return wrapper;
+
+    }
+
+
+    /* =====================================================
+       ANALYTICS — SIGNED VISITOR + TOKEN
+       ===================================================== */
+
+    const analyticsVisitorId =
+        (function () {
+
+            const storageKey =
+                'chadpgt_analytics_visitor';
+
+            try {
+
+                let existing =
+                    localStorage.getItem(
+                        storageKey
+                    );
+
+                if (existing) {
+                    return existing;
+                }
+
+                let created = '';
+
+                if (
+                    window.crypto &&
+                    typeof window.crypto.randomUUID ===
+                        'function'
+                ) {
+
+                    created =
+                        window.crypto.randomUUID();
+
+                } else {
+
+                    created =
+                        'chad-' +
+                        Date.now().toString(36) +
+                        '-' +
+                        Math.random().toString(36).slice(2) +
+                        '-' +
+                        Math.random().toString(36).slice(2);
+
+                }
+
+                localStorage.setItem(
+                    storageKey,
+                    created
+                );
+
+                return created;
+
+            } catch (error) {
+
+                return (
+                    'chad-session-' +
+                    Date.now().toString(36) +
+                    '-' +
+                    Math.random().toString(36).slice(2)
+                );
+            }
+
+        })();
+
+
+    let analyticsToken = '';
+
+    function chadAnalyticsAttribution() {
+        let referrerHost = '';
+        try {
+            referrerHost = document.referrer
+                ? new URL(document.referrer).hostname
+                : '';
+        } catch (error) {}
+
+        const params = new URLSearchParams(window.location.search);
+
+        return {
+            page_path: window.location.pathname || '/',
+            referrer_host: referrerHost,
+            utm_source: params.get('utm_source') || '',
+            utm_medium: params.get('utm_medium') || '',
+            utm_campaign: params.get('utm_campaign') || '',
+            utm_content: params.get('utm_content') || '',
+            utm_term: params.get('utm_term') || ''
+        };
+    }
+
+    function trackSimpleAnalyticsEvent(
+        eventName,
+        extra
+    ) {
+        try {
+            const payload = Object.assign(
+                {
+                    event: eventName,
+                    analytics_visitor: analyticsVisitorId,
+                    metadata: chadAnalyticsAttribution()
+                },
+                extra || {}
+            );
+
+            fetch(
+                '/wp-json/chadpgt/v1/analytics/track',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    keepalive: true
+                }
+            ).catch(function () {});
+        } catch (error) {}
+    }
+
+
+    /* =====================================================
+       CORE 20 — SPONSOR INVENTORY
+       Direct sponsor → Google hook → house ad.
+       ===================================================== */
+    const CHAD_SPONSOR_DEFAULT={
+        mode:'house',
+        campaign_id:'house-advertise-with-chad',
+        advertiser:'ChadPDChee',
+        placement:'above_chat',
+        badge:'ADVERTISE WITH CHAD',
+        headline:"Put your brand in Chad's shop.",
+        body:'Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.',
+        cta:'Advertise with Chad →',
+        url:'/advertise.html',
+        image_url:''
+    };
+
+    let chadSponsorImpressionSent=false;
+
+    function chadSponsorMetadata(config){
+        return {
+            campaign_id:String(config.campaign_id||'').slice(0,120),
+            advertiser:String(config.advertiser||'').slice(0,120),
+            placement:String(config.placement||'above_chat').slice(0,80),
+            sponsor_mode:String(config.mode||'house').slice(0,40)
+        };
+    }
+
+    function trackSponsorEvent(eventName,config){
+        trackSimpleAnalyticsEvent(eventName,{
+            metadata:Object.assign({},chadAnalyticsAttribution(),chadSponsorMetadata(config))
+        });
+    }
+
+    function resetSponsorSlot(){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link)return;
+
+        const oldGoogle=slot.querySelector('.chad-google-ad-wrap');
+        if(oldGoogle)oldGoogle.remove();
+
+        slot.classList.remove('chad-sponsor-google');
+        link.hidden=false;
+    }
+
+    function renderHouseOrDirectSponsor(rawConfig){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link)return;
+
+        resetSponsorSlot();
+
+        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,rawConfig||{});
+
+        document.getElementById('chad-sponsor-badge').textContent=
+            config.badge||(config.mode==='direct'?'SPONSORED':'ADVERTISE WITH CHAD');
+        document.getElementById('chad-sponsor-headline').textContent=config.headline||'';
+        document.getElementById('chad-sponsor-body').textContent=config.body||'';
+        document.getElementById('chad-sponsor-cta').textContent=config.cta||'Learn more →';
+        link.href=config.url||'#';
+
+        const image=document.getElementById('chad-sponsor-image');
+        if(config.image_url){
+            image.src=config.image_url;
+            image.alt=config.advertiser?(config.advertiser+' sponsor'):'Sponsor';
+            image.hidden=false;
+        }else{
+            image.removeAttribute('src');
+            image.hidden=true;
+        }
+
+        slot.hidden=false;
+
+        if(!chadSponsorImpressionSent){
+            chadSponsorImpressionSent=true;
+            trackSponsorEvent('sponsor_impression',config);
+        }
+
+        link.onclick=function(){
+            trackSponsorEvent('sponsor_click',config);
+        };
+    }
+
+    function renderHouseSponsor(){
+        chadSponsorImpressionSent=false;
+        renderHouseOrDirectSponsor(Object.assign({},CHAD_SPONSOR_DEFAULT));
+    }
+
+    function renderGoogleSponsor(google){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link||!google||!google.client||!google.slot){
+            renderHouseSponsor();
+            return;
+        }
+
+        resetSponsorSlot();
+        link.hidden=true;
+        slot.hidden=false;
+        slot.classList.add('chad-sponsor-google');
+
+        const wrap=document.createElement('div');
+        wrap.className='chad-google-ad-wrap';
+        wrap.style.width='100%';
+
+        const label=document.createElement('div');
+        label.className='chad-google-ad-label';
+        label.textContent='ADVERTISEMENT';
+
+        const ins=document.createElement('ins');
+        ins.className='adsbygoogle';
+        ins.style.display='block';
+        ins.setAttribute('data-ad-client',google.client);
+        ins.setAttribute('data-ad-slot',google.slot);
+        ins.setAttribute('data-ad-format',google.format||'auto');
+        ins.setAttribute('data-full-width-responsive',google.responsive===false?'false':'true');
+
+        wrap.appendChild(label);
+        wrap.appendChild(ins);
+        slot.appendChild(wrap);
+
+        try{
+            (window.adsbygoogle=window.adsbygoogle||[]).push({});
+
+            const googleConfig={
+                campaign_id:'google-adsense-fallback',
+                advertiser:'Google AdSense',
+                placement:'above_chat',
+                mode:'google'
+            };
+
+            if(!chadSponsorImpressionSent){
+                chadSponsorImpressionSent=true;
+                trackSponsorEvent('sponsor_impression',googleConfig);
+            }
+
+            /*
+             * AdSense marks an ad unit data-ad-status="unfilled" when
+             * no ad is available. If that happens, quietly restore the
+             * Chad house ad. We intentionally do not attempt to track
+             * AdSense clicks ourselves.
+             */
+            const observer=new MutationObserver(function(){
+                const status=ins.getAttribute('data-ad-status');
+                if(status==='unfilled'){
+                    observer.disconnect();
+                    renderHouseSponsor();
+                }else if(status==='filled'){
+                    observer.disconnect();
+                }
+            });
+
+            observer.observe(ins,{attributes:true,attributeFilter:['data-ad-status']});
+
+            setTimeout(function(){
+                if(ins.getAttribute('data-ad-status')==='unfilled'){
+                    observer.disconnect();
+                    renderHouseSponsor();
+                }
+            },7000);
+
+        }catch(error){
+            console.warn('AdSense sponsor slot failed:',error);
+            renderHouseSponsor();
+        }
+    }
+
+    async function loadChadSponsor(){
+        chadSponsorImpressionSent=false;
+
+        try{
+            const response=await fetch('/wp-json/chadpgt/v1/sponsor/current',{
+                method:'GET',
+                headers:{'Accept':'application/json'},
+                cache:'no-store'
+            });
+
+            const data=await response.json().catch(()=>null);
+
+            if(response.ok&&data&&data.success){
+                if(data.source==='direct'&&data.sponsor){
+                    renderHouseOrDirectSponsor(data.sponsor);
+                    return;
+                }
+
+                if(data.source==='google'&&data.google){
+                    renderGoogleSponsor(data.google);
+                    return;
+                }
+            }
+        }catch(error){
+            console.warn('Sponsor loader failed:',error);
+        }
+
+        renderHouseSponsor();
+    }
+
+    trackSimpleAnalyticsEvent('page_view');
+    loadChadSponsor();
+
+
+    /* =====================================================
+       ANALYTICS — QUESTION
+       Questions are now logged server-side by Analytics 2.0.
+       This legacy function intentionally does nothing.
+       ===================================================== */
+
+    function trackQuestion(
+        question
+    ) {
+
+        return;
+
+    }
+
+
+    /* =====================================================
+       ANALYTICS — PRODUCT IMPRESSIONS
+       ===================================================== */
+
+    function trackProductImpressions(
+        question,
+        products
+    ) {
+
+        if (
+            !products ||
+            !products.length
+        ) {
+
+            return;
+
+        }
+
+
+        products.forEach(
+            function (product) {
+
+                if (
+                    !product ||
+                    !product.asin
+                ) {
+
+                    return;
+
+                }
+
+
+                try {
+
+                    fetch(
+
+                        '/wp-json/chadpgt/v1/analytics/track',
+
+                        {
+
+                            method:
+                                'POST',
+
+                            headers: {
+
+                                'Content-Type':
+                                    'application/json'
+
+                            },
+
+                            body:
+                                JSON.stringify({
+
+                                    event:
+                                        'impression',
+
+                                    question:
+                                        question,
+
+                                    asin:
+                                        product.asin,
+
+                                    product_name:
+                                        product.name || '',
+
+                                    analytics_visitor:
+                                        analyticsVisitorId,
+
+                                    analytics_token:
+                                        analyticsToken
+
+                                })
+
+                        }
+
+                    ).catch(
+                        function () {}
+                    );
+
+                } catch (
+                    error
+                ) {
+
+                    /* Analytics should NEVER
+                       interfere with Chad. */
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /* =====================================================
+       ANALYTICS — AMAZON CLICK
+       ===================================================== */
+
+    function trackAmazonClick(
+        asin,
+        productName
+    ) {
+
+        try {
+
+            const payload =
+                JSON.stringify({
+
+                    event:
+                        'click',
+
+                    asin:
+                        asin,
+
+                    product_name:
+                        productName || '',
+
+                    analytics_visitor:
+                        analyticsVisitorId,
+
+                    analytics_token:
+                        analyticsToken
+
+                });
+
+
+            if (
+                navigator.sendBeacon
+            ) {
+
+                const blob =
+                    new Blob(
+
+                        [payload],
+
+                        {
+                            type:
+                                'application/json'
+                        }
+
+                    );
+
+
+                navigator.sendBeacon(
+
+                    '/wp-json/chadpgt/v1/analytics/track',
+
+                    blob
+
+                );
+
+            } else {
+
+                fetch(
+
+                    '/wp-json/chadpgt/v1/analytics/track',
+
+                    {
+
+                        method:
+                            'POST',
+
+                        headers: {
+
+                            'Content-Type':
+                                'application/json'
+
+                        },
+
+                        body:
+                            payload,
+
+                        keepalive:
+                            true
+
+                    }
+
+                ).catch(
+                    function () {}
+                );
+
+            }
+
+        } catch (
+            error
+        ) {
+
+            console.log(
+                'CHADPDG Amazon click tracking failed.'
+            );
+
+        }
+
+    }
+
+
+
+    /* =====================================================
+       SHOPPING LIST ANALYTICS
+       ===================================================== */
+
+    function trackShoppingProductImpressions(
+        question,
+        products
+    ) {
+
+        if (
+            !products ||
+            !products.length ||
+            !analyticsToken
+        ) {
+            return;
+        }
+
+        products.forEach(
+            function (product) {
+
+                if (
+                    !product ||
+                    !product.asin
+                ) {
+                    return;
+                }
+
+                fetch(
+                    '/wp-json/chadpgt/v1/analytics/track',
+                    {
+                        method: 'POST',
+                        headers:
+                            chadApiHeaders(),
+                        body:
+                            JSON.stringify({
+                                event:
+                                    'shopping_impression',
+                                question:
+                                    question,
+                                asin:
+                                    product.asin,
+                                product_name:
+                                    product.name || '',
+                                analytics_visitor:
+                                    analyticsVisitorId,
+                                analytics_token:
+                                    analyticsToken
+                            })
+                    }
+                ).catch(
+                    function () {}
+                );
+            }
+        );
+    }
+
+
+    function trackShoppingAmazonClick(
+        asin,
+        productName
+    ) {
+
+        if (
+            !asin ||
+            !analyticsToken
+        ) {
+            return;
+        }
+
+        const payload =
+            JSON.stringify({
+                event:
+                    'shopping_click',
+                asin:
+                    asin,
+                product_name:
+                    productName || '',
+                analytics_visitor:
+                    analyticsVisitorId,
+                analytics_token:
+                    analyticsToken
+            });
+
+        try {
+
+            if (
+                navigator.sendBeacon
+            ) {
+
+                const blob =
+                    new Blob(
+                        [payload],
+                        {
+                            type:
+                                'application/json'
+                        }
+                    );
+
+                navigator.sendBeacon(
+                    '/wp-json/chadpgt/v1/analytics/track',
+                    blob
+                );
+
+            } else {
+
+                fetch(
+                    '/wp-json/chadpgt/v1/analytics/track',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type':
+                                'application/json'
+                        },
+                        body: payload,
+                        keepalive: true
+                    }
+                ).catch(
+                    function () {}
+                );
+            }
+
+        } catch (error) {}
+    }
+
+
+    function chadApiHeaders() {
+
+        const headers = {
+            'Content-Type':
+                'application/json'
+        };
+
+        if (
+            window.CHADPDG_DEV &&
+            window.CHADPDG_DEV.restNonce
+        ) {
+            headers['X-WP-Nonce'] =
+                window.CHADPDG_DEV.restNonce;
+        }
+
+        if (
+            window.CHADPDG_DEV &&
+            window.CHADPDG_DEV.devToken
+        ) {
+            headers['X-ChadPDG-Dev'] =
+                window.CHADPDG_DEV.devToken;
+        }
+
+        return headers;
+    }
+
+
+    function normalizeShoppingItemName(
+        value
+    ) {
+
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+    }
+
+
+    function buildInlineShoppingProduct(
+        product
+    ) {
+
+        if (
+            !product ||
+            !product.asin ||
+            !product.source_url
+        ) {
+            return '';
+        }
+
+        const name =
+            product.name ||
+            'Chad’s pick';
+
+        const description =
+            product.description ||
+            '';
+
+        return (
+            '<div class="chad-shopping-product">' +
+
+            '<div class="chad-shopping-product-label">' +
+            'CHAD’S PICK' +
+            '</div>' +
+
+            '<div class="chad-shopping-product-name">' +
+            escapeHtml(name) +
+            '</div>' +
+
+            (
+                description
+                ? '<div class="chad-shopping-product-description">' +
+                  escapeHtml(description) +
+                  '</div>'
+                : ''
+            ) +
+
+            '<a class="chad-product-button chad-shopping-amazon-button" ' +
+            'href="' +
+            escapeHtml(product.source_url) +
+            '" ' +
+            'target="_blank" ' +
+            'rel="noopener sponsored" ' +
+            'data-chad-asin="' +
+            escapeHtml(product.asin) +
+            '" ' +
+            'data-chad-product="' +
+            escapeHtml(name) +
+            '">' +
+            'VIEW ON AMAZON →' +
+            '</a>' +
+
+            '</div>'
+        );
+    }
+
+
+    function buildShoppingItems(
+        items,
+        products
+    ) {
+
+        if (
+            !items ||
+            !items.length
+        ) {
+            return '';
+        }
+
+        const linkedProducts =
+            Array.isArray(products)
+            ? products
+            : [];
+
+        const usedProductIndexes =
+            new Set();
+
+        let output =
+            '<ul class="chad-shopping-items">';
+
+        items.forEach(
+            function (item) {
+
+                if (!item) {
+                    return;
+                }
+
+                const itemName =
+                    item.name || 'Item';
+
+                const normalizedItem =
+                    normalizeShoppingItemName(
+                        itemName
+                    );
+
+                let linkedProduct = null;
+
+                linkedProducts.some(
+                    function (
+                        product,
+                        productIndex
+                    ) {
+
+                        if (
+                            usedProductIndexes.has(
+                                productIndex
+                            )
+                        ) {
+                            return false;
+                        }
+
+                        const normalizedLink =
+                            normalizeShoppingItemName(
+                                product.item_name
+                            );
+
+                        if (
+                            normalizedLink &&
+                            normalizedLink ===
+                                normalizedItem
+                        ) {
+                            linkedProduct =
+                                product;
+
+                            usedProductIndexes.add(
+                                productIndex
+                            );
+
+                            return true;
+                        }
+
+                        return false;
+                    }
+                );
+
+                output +=
+                    '<li class="chad-shopping-item">' +
+
+                    '<div class="chad-shopping-item-top">' +
+
+                    '<span class="chad-shopping-item-name">' +
+                    '☐ ' +
+                    escapeHtml(
+                        itemName
+                    ) +
+                    '</span>' +
+
+                    (
+                        item.quantity
+                        ? '<span class="chad-shopping-item-qty">' +
+                          'Qty: ' +
+                          escapeHtml(
+                              item.quantity
+                          ) +
+                          '</span>'
+                        : ''
+                    ) +
+
+                    '</div>' +
+
+                    (
+                        item.type
+                        ? '<span class="chad-shopping-item-type">' +
+                          escapeHtml(
+                              item.type
+                          ) +
+                          '</span>'
+                        : ''
+                    ) +
+
+                    (
+                        item.note
+                        ? '<div class="chad-shopping-item-note">' +
+                          escapeHtml(
+                              item.note
+                          ) +
+                          '</div>'
+                        : ''
+                    ) +
+
+                    (
+                        linkedProduct
+                        ? buildInlineShoppingProduct(
+                              linkedProduct
+                          )
+                        : ''
+                    ) +
+
+                    '</li>';
+            }
+        );
+
+        output += '</ul>';
+
+        const unmatchedProducts =
+            linkedProducts.filter(
+                function (
+                    product,
+                    productIndex
+                ) {
+                    return (
+                        !usedProductIndexes.has(
+                            productIndex
+                        ) &&
+                        product &&
+                        product.asin &&
+                        product.source_url
+                    );
+                }
+            );
+
+        if (unmatchedProducts.length) {
+
+            output +=
+                '<div class="chad-shopping-unmatched">' +
+                buildProducts(
+                    unmatchedProducts
+                ) +
+                '</div>';
+        }
+
+        return output;
+    }
+
+
+    async function buildShoppingList(
+        wrapper,
+        question,
+        answer,
+        shoppingToken,
+        monetizationMode
+    ) {
+
+        const resultBox =
+            wrapper.querySelector(
+                '.chad-shopping-result'
+            );
+
+        if (!resultBox) {
+            return;
+        }
+
+        const loadingCopy = {
+            project:
+                'Chad is checking the project list and tool aisle... try to look busy.',
+            diagnostic:
+                'Chad is checking diagnostic tools... because replacing random parts is not a strategy.',
+            product_recommendation:
+                'Chad is checking real product options... this is the part where your wallet gets nervous.',
+            replacement_part:
+                'Chad is checking the actual replacement part... revolutionary concept, apparently.',
+            none:
+                ''
+        }[monetizationMode] ||
+            'Chad is checking the useful stuff...';
+
+        resultBox.innerHTML =
+            '<div class="chad-shopping-loading">' +
+            escapeHtml(loadingCopy) +
+            '</div>';
+
+        let turnstileToken = '';
+
+        try {
+
+            turnstileToken =
+                await getTurnstileToken();
+
+            const response =
+                await fetch(
+                    '/wp-json/chadpgt/v1/shopping-list',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type':
+                                'application/json'
+                        },
+                        body:
+                            JSON.stringify({
+                                question:
+                                    question,
+                                answer:
+                                    answer,
+                                shopping_token:
+                                    shoppingToken,
+                                monetization_opportunity:
+                                    monetizationMode || 'none',
+                                turnstile_token:
+                                    turnstileToken,
+                                analytics_visitor:
+                                    analyticsVisitorId
+                            })
+                    }
+                );
+
+            let data;
+
+            try {
+                data =
+                    await response.json();
+            } catch (error) {
+                throw new Error(
+                    'Chad made a shopping list so advanced the website could not read it.'
+                );
+            }
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+                throw new Error(
+                    data.error ||
+                    'Chad could not build the shopping list.'
+                );
+            }
+
+            let output =
+                '<div class="chad-shopping-title">' +
+                escapeHtml(
+                    data.title ||
+                    'YOUR SHOPPING LIST'
+                ) +
+                '</div>';
+
+            if (data.intro) {
+                output +=
+                    '<div class="chad-shopping-intro">' +
+                    escapeHtml(
+                        data.intro
+                    ) +
+                    '</div>';
+            }
+
+            output +=
+                buildShoppingItems(
+                    data.items || [],
+                    data.products || []
+                );
+
+            output +=
+                buildVideos(
+                    data.videos || []
+                );
+
+            output +=
+                buildSources(
+                    data.citations || []
+                );
+
+            resultBox.innerHTML =
+                output;
+
+            trackShoppingProductImpressions(
+                question,
+                data.products || []
+            );
+
+            const amazonButtons =
+                resultBox.querySelectorAll(
+                    '.chad-product-button'
+                );
+
+            amazonButtons.forEach(
+                function (amazonButton) {
+
+                    amazonButton.addEventListener(
+                        'click',
+                        function () {
+
+                            trackShoppingAmazonClick(
+                                amazonButton.getAttribute(
+                                    'data-chad-asin'
+                                ),
+                                amazonButton.getAttribute(
+                                    'data-chad-product'
+                                )
+                            );
+                        }
+                    );
+                }
+            );
+
+        } catch (error) {
+
+            // Chad's core answer is already on screen. Research failure is non-fatal.
+            resultBox.innerHTML =
+                '<div class="chad-shopping-error">' +
+                'Chad answered the important part. The tool-aisle research wandered off: ' +
+                escapeHtml(
+                    error.message
+                ) +
+                '</div>';
+
+        } finally {
+
+            if (
+                chadTurnstileWidgetId !== null &&
+                window.turnstile &&
+                typeof window.turnstile.reset ===
+                    'function'
+            ) {
+
+                try {
+                    window.turnstile.reset(
+                        chadTurnstileWidgetId
+                    );
+                } catch (error) {}
+            }
+        }
+    }
+
+
+    /* =====================================================
+       PRODUCTS
+       ===================================================== */
+
+    function buildProducts(
+        products
+    ) {
+
+        if (
+            !products ||
+            !products.length
+        ) {
+
+            return '';
+
+        }
+
+
+        let html =
+
+            '<div class="chad-products">' +
+
+            '<div class="chad-products-title">' +
+            'CHAD’S PICKS' +
+            '</div>';
+
+
+        products.forEach(
+            function (
+                product,
+                index
+            ) {
+
+                if (!product) {
+                    return;
+                }
+
+
+                const name =
+                    product.name ||
+                    'Recommended product';
+
+
+                const description =
+                    product.description ||
+                    '';
+
+
+                const asin =
+                    product.asin ||
+                    '';
+
+
+                const amazonUrl =
+                    product.source_url ||
+                    '';
+
+
+                if (
+                    !asin ||
+                    !amazonUrl
+                ) {
+
+                    return;
+
+                }
+
+
+                html +=
+
+                    '<div class="chad-product-card">';
+
+
+                if (
+                    product.image_url
+                ) {
+
+                    html +=
+
+                        '<div class="chad-product-image">' +
+
+                        '<img src="' +
+
+                        escapeHtml(
+                            product.image_url
+                        ) +
+
+                        '" alt="' +
+
+                        escapeHtml(
+                            name
+                        ) +
+
+                        '" loading="lazy">' +
+
+                        '</div>';
+
+                }
+
+
+                html +=
+
+                    '<div class="chad-product-info">' +
+
+
+                    '<div class="chad-product-option">' +
+
+                    'OPTION ' +
+
+                    (index + 1) +
+
+                    '</div>' +
+
+
+                    '<div class="chad-product-name">' +
+
+                    escapeHtml(
+                        name
+                    ) +
+
+                    '</div>' +
+
+
+                    '<div class="chad-product-description">' +
+
+                    escapeHtml(
+                        description
+                    ) +
+
+                    '</div>' +
+
+
+                    '<a class="chad-product-button" ' +
+
+                    'href="' +
+
+                    escapeHtml(
+                        amazonUrl
+                    ) +
+
+                    '" ' +
+
+                    'target="_blank" ' +
+
+                    'rel="noopener sponsored" ' +
+
+                    'data-chad-asin="' +
+
+                    escapeHtml(
+                        asin
+                    ) +
+
+                    '" ' +
+
+                    'data-chad-product="' +
+
+                    escapeHtml(
+                        name
+                    ) +
+
+                    '">' +
+
+                    'VIEW ON AMAZON' +
+
+                    '</a>' +
+
+
+                    '</div>' +
+
+
+                    '</div>';
+
+            }
+        );
+
+
+        html +=
+            '</div>';
+
+
+        return html;
+
+    }
+
+
+    /* =====================================================
+       SOURCES
+       ===================================================== */
+
+    function buildSources(
+        citations
+    ) {
+
+        if (
+            !citations ||
+            !citations.length
+        ) {
+
+            return '';
+
+        }
+
+
+        let html =
+
+            '<details class="chad-sources">' +
+
+            '<summary>SOURCES</summary>' +
+
+            '<div class="chad-source-list">';
+
+
+        citations.forEach(
+            function (citation) {
+
+                if (!citation) {
+                    return;
+                }
+
+
+                const title =
+                    citation.title ||
+                    citation.name ||
+                    citation.url ||
+                    'Source';
+
+
+                const url =
+                    citation.url ||
+                    '';
+
+
+                if (!url) {
+                    return;
+                }
+
+
+                html +=
+
+                    '<div>' +
+
+                    '<a href="' +
+
+                    escapeHtml(
+                        url
+                    ) +
+
+                    '" target="_blank" rel="noopener">' +
+
+                    escapeHtml(
+                        title
+                    ) +
+
+                    '</a>' +
+
+                    '</div>';
+
+            }
+        );
+
+
+        html +=
+
+            '</div>' +
+
+            '</details>';
+
+
+        return html;
+
+    }
+
+
+    /* =====================================================
+       CHAD RESPONSE
+       ===================================================== */
+
+
+    function escapeHtml(text) {
+
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
+    }
+
+
+    function buildVideos(videos) {
+
+        if (!Array.isArray(videos) || !videos.length) {
+            return '';
+        }
+
+        let html =
+            '<div class="chad-video-wrap">' +
+            '<div class="chad-video-heading">' +
+            'WATCH SOMEBODY ELSE DO IT FIRST' +
+            '</div>';
+
+        videos.slice(0, 3).forEach(
+            function (video) {
+
+                if (!video || !video.url) {
+                    return;
+                }
+
+                html +=
+                    '<a class="chad-video-link" ' +
+                    'href="' + escapeHtml(video.url) + '" ' +
+                    'target="_blank" rel="noopener noreferrer">' +
+                    '▶ ' + escapeHtml(video.title || 'YouTube How-To') +
+                    (
+                        video.channel
+                            ? '<span class="chad-video-channel">' +
+                              escapeHtml(video.channel) +
+                              '</span>'
+                            : ''
+                    ) +
+                    '</a>';
+            }
+        );
+
+        html += '</div>';
+
+        return html;
+    }
+
+
+    function addChadResponse(
+        data,
+        question
+    ) {
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+
+        wrapper.className =
+            'chad-message chad-answer-wrapper';
+
+
+        let html =
+
+            '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+
+            '<div class="chad-name">' +
+            'Chad:' +
+            '</div>' +
+
+            '<div class="chad-answer">' +
+            formatAnswer(
+                data.answer || ''
+            ) +
+            '</div>' +
+            '<div class="chad-after-answer"></div>';
+
+
+        let afterHtml = '';
+
+        if (
+            data.shopping_list_recommended &&
+            data.shopping_token
+        ) {
+
+            const monetizationMode =
+                data.monetization_opportunity || 'project';
+
+            const researchCopy = {
+                project:
+                    'Fine. Chad is building the project list and checking the tool aisle while you read.',
+                diagnostic:
+                    'Chad is checking the diagnostic gear. Apparently guessing wildly is not a troubleshooting method.',
+                product_recommendation:
+                    'Chad is checking real product options and useful accessories. Try not to buy the shiny one just because it is shiny.',
+                replacement_part:
+                    'Chad is hunting down the actual replacement part instead of making you buy the parts cannon.',
+                none:
+                    ''
+            }[monetizationMode] ||
+                'Chad is checking the useful stuff while you read.';
+
+            afterHtml +=
+                '<div class="chad-shopping-wrap">' +
+                '<div class="chad-shopping-subtext">' +
+                escapeHtml(researchCopy) +
+                '</div>' +
+                '<div class="chad-shopping-result" aria-live="polite"></div>' +
+                '</div>';
+        }
+
+        afterHtml +=
+            buildProducts(
+                data.products || []
+            );
+
+        afterHtml +=
+            buildVideos(
+                data.videos || []
+            );
+
+        afterHtml +=
+            buildSources(
+                data.citations || []
+            );
+
+
+        wrapper.innerHTML =
+            html;
+
+
+        chat.appendChild(
+            wrapper
+        );
+
+
+        /*
+         * Track products displayed.
+         */
+
+        trackProductImpressions(
+
+            question,
+
+            data.products || []
+
+        );
+
+
+        /*
+         * Track Amazon clicks.
+         *
+         * Browser still goes DIRECTLY
+         * to Amazon.
+         */
+
+        const amazonButtons =
+            wrapper.querySelectorAll(
+                '.chad-product-button'
+            );
+
+
+        amazonButtons.forEach(
+            function (button) {
+
+                button.addEventListener(
+                    'click',
+                    function () {
+
+                        const asin =
+                            button.getAttribute(
+                                'data-chad-asin'
+                            );
+
+
+                        const productName =
+                            button.getAttribute(
+                                'data-chad-product'
+                            );
+
+
+                        trackAmazonClick(
+
+                            asin,
+
+                            productName
+
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+
+        const afterAnswer =
+            wrapper.querySelector(
+                '.chad-after-answer'
+            );
+
+
+        const answerElement =
+            wrapper.querySelector(
+                '.chad-answer'
+            );
+
+
+        scrollToChadAnswer(
+            answerElement
+        );
+
+        if (afterAnswer) {
+
+            afterAnswer.innerHTML =
+                afterHtml;
+        }
+
+        /*
+         * Bind Amazon click tracking for cards.
+         */
+        const revealedAmazonButtons =
+            wrapper.querySelectorAll(
+                '.chad-after-answer .chad-product-button'
+            );
+
+        revealedAmazonButtons.forEach(
+            function (button) {
+
+                button.addEventListener(
+                    'click',
+                    function () {
+
+                        trackAmazonClick(
+                            button.getAttribute('data-chad-asin'),
+                            button.getAttribute('data-chad-product')
+                        );
+                    }
+                );
+            }
+        );
+
+        /*
+         * Automatically build the shopping list.
+         */
+        if (
+            data.shopping_list_recommended &&
+            data.shopping_token
+        ) {
+
+            buildShoppingList(
+                wrapper,
+                question,
+                data.answer || '',
+                data.shopping_token || '',
+                data.monetization_opportunity || 'project'
+            );
+        }
+
+    }
+
+
+    /* =====================================================
+       ERROR
+       ===================================================== */
+
+    function addError(
+        message
+    ) {
+
+        const wrapper =
+            document.createElement(
+                'div'
+            );
+
+
+        wrapper.className =
+            'chad-message chad-answer-wrapper';
+
+
+        wrapper.innerHTML =
+
+            '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+
+            '<div class="chad-name">' +
+            'Chad:' +
+            '</div>' +
+
+            '<div class="chad-answer">' +
+
+            '<strong>' +
+            'Something went sideways.' +
+            '</strong>' +
+
+            '<br>' +
+
+            escapeHtml(
+                message ||
+                'Try again.'
+            ) +
+
+            '</div>';
+
+
+        chat.appendChild(
+            wrapper
+        );
+
+
+        const answerElement =
+            wrapper.querySelector(
+                '.chad-answer'
+            );
+
+
+        scrollToChadAnswer(
+            answerElement
+        );
+
+    }
+
+
+    /* =====================================================
+       ASK CHAD
+       ===================================================== */
+
+
+    function formatResetTime(
+        resetIso,
+        resetDisplay,
+        resetDateDisplay
+    ) {
+
+        if (resetIso) {
+
+            try {
+
+                const date =
+                    new Date(resetIso);
+
+                if (!isNaN(date.getTime())) {
+
+                    return date.toLocaleString(
+                        undefined,
+                        {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                        }
+                    );
+                }
+
+            } catch (error) {}
+        }
+
+        if (
+            resetDisplay &&
+            resetDateDisplay
+        ) {
+            return (
+                resetDateDisplay +
+                ' at ' +
+                resetDisplay
+            );
+        }
+
+        if (resetDisplay) {
+            return resetDisplay;
+        }
+
+        return 'tomorrow';
+    }
+
+
+    function showDailyLimitMessage(data) {
+
+        dailyLimitLocked = true;
+
+        const resetText =
+            formatResetTime(
+                data && data.reset_iso
+                    ? data.reset_iso
+                    : '',
+                data && data.reset_display
+                    ? data.reset_display
+                    : '',
+                data && data.reset_date_display
+                    ? data.reset_date_display
+                    : ''
+            );
+
+        const dailyLimit =
+            data && data.daily_limit
+                ? Number(data.daily_limit)
+                : 5;
+
+        let message =
+            'Sorry Bro… I’m out. You used all ' +
+            dailyLimit +
+            ' questions for today.';
+
+        if (
+            resetText &&
+            resetText !== 'tomorrow'
+        ) {
+            message +=
+                ' Come back after ' +
+                resetText +
+                '.';
+        } else {
+            message +=
+                ' Come back tomorrow.';
+        }
+
+        addChadResponse(
+            {
+                success: true,
+                answer: message,
+                products: [],
+                citations: []
+            },
+            ''
+        );
+
+        updateQuestionLimit(
+            0,
+            data && data.daily_limit
+                ? data.daily_limit
+                : 5
+        );
+
+        if (askButton) {
+            askButton.disabled = true;
+            askButton.classList.add(
+                'chad-limit-reached'
+            );
+            askButton.textContent =
+                'OUT OF QUESTIONS';
+        }
+
+        if (questionInput) {
+            questionInput.disabled = true;
+            questionInput.placeholder =
+                'Sorry Bro… Chad is out until tomorrow.';
+        }
+    }
+
+
+    async function askChad() {
+
+        if (dailyLimitLocked) {
+            return;
+        }
+
+        const message =
+            questionInput.value.trim();
+
+        if (!message) {
+            questionInput.focus();
+            return;
+        }
+
+        showChat();
+
+        askButton.disabled = true;
+
+        trackQuestion(
+            message
+        );
+
+        questionInput.value = '';
+
+        /*
+         * Start the funny Hammered Handyman translation
+         * IMMEDIATELY.
+         *
+         * No Turnstile token is sent here.
+         */
+
+        const translationPromise =
+            fetch(
+                '/wp-json/chadpgt/v1/translate',
+                {
+                    method: 'POST',
+                    headers: chadApiHeaders(),
+                    body: JSON.stringify({
+                        message: message
+                    })
+                }
+            )
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+
+                if (
+                    data &&
+                    data.display_question
+                ) {
+                    return data.display_question;
+                }
+
+                return message;
+            })
+            .catch(function () {
+                return message;
+            });
+
+
+        /*
+         * At the same time, start obtaining the single-use
+         * Turnstile token for the REAL Chad request.
+         */
+
+        const answerPromise =
+            (async function () {
+
+                const turnstileToken =
+                    await getTurnstileToken();
+
+                return fetch(
+                    '/wp-json/chadpgt/v1/ask',
+                    {
+                        method: 'POST',
+                        headers: chadApiHeaders(),
+                        body: JSON.stringify({
+                            message: message,
+                            turnstile_token:
+                                turnstileToken,
+                            analytics_visitor:
+                                analyticsVisitorId
+                        })
+                    }
+                );
+
+            })();
+
+
+        /*
+         * HH should ALWAYS appear before Chad's thinking line.
+         * The real answer is already processing in parallel.
+         */
+
+        const displayQuestion =
+            await translationPromise;
+
+        addUserMessage(
+            displayQuestion
+        );
+
+        const loading =
+            addLoadingMessage();
+
+        let messageIndex = 0;
+
+        loadingInterval =
+            setInterval(
+                function () {
+
+                    messageIndex++;
+
+                    const nextMessage =
+                        loadingMessages[
+                            messageIndex %
+                            loadingMessages.length
+                        ];
+
+                    const loadingText =
+                        loading.querySelector(
+                            '.chad-loading'
+                        );
+
+                    if (loadingText) {
+                        loadingText.textContent =
+                            nextMessage;
+                    }
+
+                },
+                2200
+            );
+
+
+        try {
+
+            const response =
+                await answerPromise;
+
+            let data;
+
+            try {
+
+                data =
+                    await response.json();
+
+            } catch (jsonError) {
+
+                throw new Error(
+                    'Chad returned something the website could not understand.'
+                );
+
+            }
+
+            if (loadingInterval) {
+                clearInterval(
+                    loadingInterval
+                );
+                loadingInterval = null;
+            }
+
+            if (
+                loading &&
+                loading.parentNode
+            ) {
+                loading.parentNode.removeChild(
+                    loading
+                );
+            }
+
+            const dailyLimitReached =
+                data &&
+                (
+                    data.limit_reached === true ||
+                    (
+                        response.status === 429 &&
+                        Number(data.remaining) === 0
+                    )
+                );
+
+            if (dailyLimitReached) {
+                showDailyLimitMessage(data);
+                return;
+            }
+
+            const burstLimited =
+                data &&
+                (
+                    data.burst_limited === true ||
+                    (
+                        response.status === 429 &&
+                        String(
+                            data.error || ''
+                        ).toLowerCase().includes(
+                            'too many requests too fast'
+                        )
+                    )
+                );
+
+            if (burstLimited) {
+                showBurstLimitMessage();
+                return;
+            }
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+
+                if (
+                    data &&
+                    data.remaining !== undefined
+                ) {
+
+                    if (data.admin_test_mode) {
+
+                        showAdminTestMode();
+
+                    } else {
+
+                        updateQuestionLimit(
+                            data.remaining,
+                            data.daily_limit
+                        );
+
+                    }
+
+                }
+
+                throw new Error(
+                    data.message ||
+                    data.error ||
+                    'Chad could not answer that one.'
+                );
+            }
+
+            analyticsToken =
+                data.analytics_token || '';
+
+            addChadResponse(
+                data,
+                message
+            );
+
+            updateQuestionLimit(
+                data.remaining,
+                data.daily_limit
+            );
+
+        } catch (error) {
+
+            if (loadingInterval) {
+                clearInterval(
+                    loadingInterval
+                );
+                loadingInterval = null;
+            }
+
+            if (
+                loading &&
+                loading.parentNode
+            ) {
+                loading.parentNode.removeChild(
+                    loading
+                );
+            }
+
+            addError(
+                error.message ||
+                'Chad could not answer that one.'
+            );
+
+        } finally {
+
+            resetTurnstile();
+
+            if (!dailyLimitLocked) {
+                askButton.disabled = false;
+            }
+
+            questionInput.focus();
+
+        }
+
+    }
+
+
+    function showBurstLimitMessage() {
+
+        addChadResponse(
+            {
+                success: true,
+                answer:
+                    'Easy there, Bro. Chad can only pretend to care so fast. Give me a minute.',
+                products: [],
+                citations: []
+            },
+            ''
+        );
+    }
+
+
+    /* =====================================================
+       RESET
+       ===================================================== */
+
+    async function resetConversation() {
+
+        try {
+
+            await fetch(
+
+                '/wp-json/chadpgt/v1/reset',
+
+                {
+
+                    method:
+                        'POST',
+
+                    headers: {
+
+                        'Content-Type':
+                            'application/json'
+
+                    }
+
+                }
+
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.log(
+                'CHADPDG reset request failed.'
+            );
+
+        }
+
+
+        /*
+         * Clear conversation.
+         */
+
+        chat.innerHTML =
+            '';
+
+
+        /*
+         * Hide chat again.
+         */
+
+        chat.classList.remove(
+            'chad-chat-visible'
+        );
+
+
+        /*
+         * Clear question.
+         */
+
+        questionInput.value =
+            '';
+
+
+        /*
+         * Reset scroll.
+         */
+
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+
+
+        questionInput.focus();
+
+        syncQuestionLimit();
+
+    }
+
+
+    if (
+        window.CHADPDG_DEV &&
+        window.CHADPDG_DEV.enabled === true
+    ) {
+        dailyLimitLocked = false;
+        showAdminTestMode();
+
+        askButton.disabled = false;
+        askButton.classList.remove(
+            'chad-limit-reached'
+        );
+        askButton.textContent =
+            'ASK CHAD';
+
+        questionInput.disabled = false;
+        questionInput.placeholder =
+            'Ask Chad...';
+    }
+
+
+    if (
+        !(
+            window.CHADPDG_DEV &&
+            window.CHADPDG_DEV.enabled === true
+        )
+    ) {
+        syncQuestionLimit();
+    }
+
+
+
+    document.addEventListener(
+        'click',
+        function (event) {
+            const link = event.target.closest
+                ? event.target.closest('.chad-video-link')
+                : null;
+
+            if (!link) {
+                return;
+            }
+
+            const channelElement =
+                link.querySelector('.chad-video-channel');
+
+            trackSimpleAnalyticsEvent(
+                'video_click',
+                {
+                    metadata: Object.assign(
+                        chadAnalyticsAttribution(),
+                        {
+                            video_title:
+                                String(link.textContent || '')
+                                    .replace(
+                                        channelElement
+                                            ? String(channelElement.textContent || '')
+                                            : '',
+                                        ''
+                                    )
+                                    .replace(/^▶\s*/, '')
+                                    .trim()
+                                    .slice(0, 300),
+                            video_channel:
+                                channelElement
+                                    ? String(channelElement.textContent || '').trim().slice(0, 300)
+                                    : ''
+                        }
+                    )
+                }
+            );
+        }
+    );
+
+
+    /* =====================================================
+       BUTTON EVENTS
+       ===================================================== */
+
+    askButton.addEventListener(
+
+        'click',
+
+        function () {
+
+            askChad();
+
+        }
+
+    );
+
+
+    resetButton.addEventListener(
+
+        'click',
+
+        function () {
+
+            resetConversation();
+
+        }
+
+    );
+
+
+    /* =====================================================
+       ENTER TO SEND
+       ===================================================== */
+
+    questionInput.addEventListener(
+
+        'keydown',
+
+        function (event) {
+
+            if (
+
+                event.key === 'Enter' &&
+
+                !event.shiftKey
+
+            ) {
+
+                event.preventDefault();
+
+                askChad();
+
+            }
+
+        }
+
+    );
+
+    /*
+     * Allow the separate account UI to refresh the live quota counter
+     * immediately after sign-in, sign-up, sign-out, or account deletion.
+     */
+    window.CHADPDG_SYNC_QUESTION_LIMIT = syncQuestionLimit;
+
+})();
+
+</script>
+
+<script>
+(function () {
+    'use strict';
+
+    const menuButton = document.getElementById('chad-menu-button');
+    const backdrop = document.getElementById('chad-sidebar-backdrop');
+    const sidebarNew = document.getElementById('chad-sidebar-new');
+    const mobileNew = document.getElementById('chad-mobile-new');
+    const realReset = document.getElementById('chad-reset');
+
+    function setMenu(open) {
+        document.body.classList.toggle('chad-menu-open', !!open);
+        if (menuButton) {
+            menuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+    }
+
+    function startNewProject() {
+        setMenu(false);
+        if (realReset) {
+            realReset.click();
+        }
+    }
+
+    if (menuButton) {
+        menuButton.addEventListener('click', function () {
+            setMenu(!document.body.classList.contains('chad-menu-open'));
+        });
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', function () {
+            setMenu(false);
+        });
+    }
+
+    if (sidebarNew) {
+        sidebarNew.addEventListener('click', startNewProject);
+    }
+
+    if (mobileNew) {
+        mobileNew.addEventListener('click', startNewProject);
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            setMenu(false);
+        }
+    });
+
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 820) {
+            setMenu(false);
+        }
+    });
+
+    document.querySelectorAll('.chad-placeholder-control').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const title = button.querySelector('strong');
+            const name = title ? title.textContent.trim() : 'That feature';
+            window.alert(name + ' is the next build. Chad is already acting like it exists.');
+        });
+    });
+})();
+</script>
+
+
+<script>
+(function(){
+'use strict';
+const overlay=document.getElementById('chad-auth-overlay'),closeButton=document.getElementById('chad-auth-close'),accountButton=document.getElementById('chad-account-button'),accountTitle=document.getElementById('chad-account-title'),accountSubtitle=document.getElementById('chad-account-subtitle'),recentList=document.getElementById('chad-recent-list'),authMessage=document.getElementById('chad-auth-message'),chat=document.getElementById('chad-chat');
+let currentUser=null,currentConversationId=null,lastAuthView='signin';
+
+function api(path,options){return fetch(path,Object.assign({credentials:'same-origin'},options||{})).then(async r=>{let d={};try{d=await r.json()}catch(_){ }if(!r.ok||d.success===false){const e=new Error(d.error||'Something went sideways.');e.status=r.status;e.data=d;throw e}return d})}
+function jsonOptions(method,body){return{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}}
+function refreshQuestionLimit(){try{if(typeof window.CHADPDG_SYNC_QUESTION_LIMIT==='function'){window.CHADPDG_SYNC_QUESTION_LIMIT()}}catch(_){}}
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
+function msg(m,t){if(!authMessage)return;authMessage.textContent=m||'';authMessage.className='chad-auth-message'+(t?' is-'+t:'')}
+function setView(name){if(name!=='account')lastAuthView=name;document.querySelectorAll('.chad-auth-view').forEach(v=>v.hidden=v.id!=='chad-auth-'+name);const p=document.getElementById('chad-policy-panel');if(p)p.hidden=true;msg('','')}
+function openAuth(view){setView(view||(currentUser?'account':'signin'));overlay.classList.add('chad-auth-open');overlay.setAttribute('aria-hidden','false');document.body.style.overflow='hidden'}
+function closeAuth(){overlay.classList.remove('chad-auth-open');overlay.setAttribute('aria-hidden','true');document.body.style.overflow=''}
+
+function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(currentUser.plan||'free')+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
+function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Save your projects';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
+function signedIn(){if(!currentUser)return signedOut();accountTitle.textContent=currentUser.display_name||'Account';accountSubtitle.textContent=currentUser.email;accountButton.classList.add('chad-sidebar-signedin')}
+
+async function loadMe(){try{const d=await api('/auth/me');currentUser=d.authenticated?d.user:null;if(currentUser){signedIn();renderAccount();await loadRecent()}else signedOut();refreshQuestionLimit()}catch(_){currentUser=null;signedOut();refreshQuestionLimit()}}
+function closeRecentMenus(){document.querySelectorAll('.chad-recent-menu').forEach(m=>m.hidden=true)}
+async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
+async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
+async function saveConversation(c){const suggested=(c&&c.title)||'My Chad Project';const title=window.prompt('Give this conversation a title',suggested);if(title===null)return null;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return null;try{const d=await api('/account/conversations/save',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||'',title:clean}));currentConversationId=d.conversation?.id||currentConversationId;await loadRecent();return d.conversation}catch(e){window.alert(e.message||'Could not save that conversation.');return null}}
+let activeShareConversationId=null,activeShareTitle='';
+function openShareModal(url,title,id){activeShareConversationId=id||currentConversationId||null;activeShareTitle=title||'ChadPDChee conversation';const overlay=document.getElementById('chad-share-overlay'),input=document.getElementById('chad-share-url'),status=document.getElementById('chad-share-status');if(input)input.value=url||'';if(status)status.textContent='';if(overlay)overlay.hidden=false}
+function closeShareModal(){const overlay=document.getElementById('chad-share-overlay');if(overlay)overlay.hidden=true}
+async function shareConversation(c){try{const d=await api('/account/conversations/share',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||''}));openShareModal(d.share_url,d.title,c?.id||currentConversationId)}catch(e){window.alert(e.message||'Could not share that conversation.')}}
+async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
+async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
+async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
+function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
+function historyChad(text){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div>';chat.appendChild(w)}
+async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'');if(m.role==='assistant')historyChad(m.content||'')});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
+
+accountButton&&accountButton.addEventListener('click',()=>openAuth(currentUser?'account':'signin'));closeButton&&closeButton.addEventListener('click',closeAuth);overlay&&overlay.addEventListener('click',e=>{if(e.target===overlay)closeAuth()});
+document.querySelectorAll('[data-auth-view]').forEach(b=>b.addEventListener('click',()=>setView(b.getAttribute('data-auth-view'))));
+
+document.getElementById('chad-signin-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Signing in…');try{const d=await api('/auth/login',jsonOptions('POST',{email:document.getElementById('chad-signin-email').value,password:document.getElementById('chad-signin-password').value}));currentUser=d.user;signedIn();renderAccount();await loadRecent();refreshQuestionLimit();setView('account');msg('Signed in. Chad has reluctantly restored your projects.','success')}catch(err){msg(err.message,'error')}});
+
+document.getElementById('chad-signup-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Creating your account…');try{const d=await api('/auth/signup',jsonOptions('POST',{display_name:document.getElementById('chad-signup-name').value,email:document.getElementById('chad-signup-email').value,password:document.getElementById('chad-signup-password').value,accept_terms:document.getElementById('chad-signup-terms').checked,accept_privacy:document.getElementById('chad-signup-privacy').checked,marketing_consent:document.getElementById('chad-signup-marketing').checked}));currentUser=d.user;signedIn();renderAccount();await loadRecent();refreshQuestionLimit();setView('account');msg(d.verification_email_sent?'Account created. Check your email for the verification link.':'Account created, but the verification email could not be sent. Use Resend verification below.',d.verification_email_sent?'success':'error')}catch(err){msg(err.message,'error')}});
+
+document.getElementById('chad-forgot-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Sending reset link…');try{const d=await api('/auth/forgot-password',jsonOptions('POST',{email:document.getElementById('chad-forgot-email').value}));msg(d.message||'If that account exists, a reset link has been sent.','success')}catch(_){msg('If that account exists, a reset link has been sent.','success')}});
+
+document.getElementById('chad-resend-verify')?.addEventListener('click',async function(){this.disabled=true;try{await api('/auth/resend-verification',jsonOptions('POST',{}));msg('Verification email sent. Check your inbox.','success')}catch(e){msg(e.message,'error')}finally{this.disabled=false}});
+document.getElementById('chad-signout')?.addEventListener('click',async()=>{try{await api('/auth/logout',jsonOptions('POST',{}))}catch(_){ }currentUser=null;currentConversationId=null;signedOut();refreshQuestionLimit();closeAuth()});
+
+document.getElementById('chad-export-data')?.addEventListener('click',async()=>{try{const d=await api('/account/export'),blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='chadpdchee-my-data.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){msg(e.message,'error')}});
+
+document.getElementById('chad-delete-account')?.addEventListener('click',async()=>{const typed=window.prompt('Permanent means permanent. Type DELETE to continue.');if(typed!=='DELETE')return;const password=window.prompt('Enter your password to permanently delete the account and all saved conversations.');if(!password)return;try{await api('/account/delete',jsonOptions('POST',{confirm:'DELETE',password}));try{localStorage.removeItem('chadpgt_analytics_visitor')}catch(_){ }currentUser=null;currentConversationId=null;signedOut();refreshQuestionLimit();closeAuth();window.location.reload()}catch(e){msg(e.message,'error')}});
+
+document.querySelectorAll('.chad-inline-policy').forEach(b=>b.addEventListener('click',()=>{const kind=b.getAttribute('data-policy');document.querySelectorAll('.chad-auth-view').forEach(v=>v.hidden=true);const panel=document.getElementById('chad-policy-panel'),content=document.getElementById('chad-policy-content');panel.hidden=false;content.innerHTML=kind==='privacy'?'<h2>Privacy Notice</h2><p><strong>Version: September 9, 2026.</strong></p><p>ChadPDChee collects the information needed to run your account and saved projects, including your email address, optional display name, account/security records, consent choices, and conversations you choose to save.</p><p>We use that information to provide the service, secure accounts, remember projects, send verification/password-reset messages, enforce usage limits, and operate privacy-conscious analytics.</p><ul><li>Passwords are stored as password hashes, not readable passwords.</li><li>Authentication uses secure session cookies.</li><li>Marketing consent is separate and optional.</li><li>You can download your account data from Account.</li><li>You can delete your account and saved conversations from Account.</li></ul><p><strong>Testing notice:</strong> this in-app notice describes the current implementation. A complete public Privacy Policy with operator/contact details, service providers, retention, cross-border processing and legal rights must be published before public account launch.</p>':'<h2>Terms of Use</h2><p><strong>Version: September 9, 2026.</strong></p><p>ChadPDChee provides informational DIY assistance. It is not a licensed contractor, electrician, plumber, engineer, or other professional. Users remain responsible for evaluating advice and using qualified professionals where appropriate, especially for electrical, gas, structural, plumbing and other safety-critical work.</p><p><strong>Testing notice:</strong> complete public Terms of Use must be published before public account launch.</p>'}));
+document.getElementById('chad-policy-back')?.addEventListener('click',()=>setView('signup'));
+
+[document.getElementById('chad-sidebar-new'),document.getElementById('chad-mobile-new')].forEach(b=>b&&b.addEventListener('click',()=>{currentConversationId=null;closeRecentMenus();if(currentUser){loadRecent();setTimeout(loadRecent,700)}}));
+document.getElementById('chad-ask')?.addEventListener('click',()=>{if(currentUser)setTimeout(loadRecent,4500)});
+document.addEventListener('click',e=>{if(!e.target.closest('.chad-recent-menu-wrap'))closeRecentMenus()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('chad-auth-open'))closeAuth()});
+
+function showSignupForFeature(feature){
+    const reason = feature === 'share' ? 'share this conversation' : 'save this conversation';
+    openAuth('signup');
+    msg('Create a free account to '+reason+', keep your project history, and get 15 Chad questions every day instead of 5.','success');
+}
+
+document.getElementById('chad-save-conversation')?.addEventListener('click', async ()=>{
+    if(!currentUser){ showSignupForFeature('save'); return; }
+    await saveConversation(null);
+});
+
+document.getElementById('chad-share-conversation')?.addEventListener('click', async ()=>{
+    if(!currentUser){ showSignupForFeature('share'); return; }
+    await shareConversation(null);
+});
+
+document.getElementById('chad-share-close')?.addEventListener('click', closeShareModal);
+document.getElementById('chad-share-overlay')?.addEventListener('click', e=>{
+    if(e.target === e.currentTarget) closeShareModal();
+});
+
+document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){
+        const shareOverlay = document.getElementById('chad-share-overlay');
+        if(shareOverlay && !shareOverlay.hidden) closeShareModal();
+    }
+});
+
+document.getElementById('chad-copy-share')?.addEventListener('click', async ()=>{
+    const input = document.getElementById('chad-share-url');
+    const status = document.getElementById('chad-share-status');
+    const url = input?.value || '';
+    try{
+        await navigator.clipboard.writeText(url);
+        if(status) status.textContent = 'Copied. Technology has peaked.';
+    }catch(_){
+        input?.focus();
+        input?.select();
+        try{ document.execCommand('copy'); }catch(__){}
+        if(status) status.textContent = 'Link copied.';
+    }
+});
+
+document.getElementById('chad-native-share')?.addEventListener('click', async ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const status = document.getElementById('chad-share-status');
+    if(navigator.share){
+        try{
+            await navigator.share({
+                title: activeShareTitle || 'ChadPDChee conversation',
+                text: 'Check out this ChadPDChee conversation.',
+                url
+            });
+            if(status) status.textContent = 'Shared. Chad accepts your endorsement.';
+        }catch(error){
+            if(error?.name !== 'AbortError' && status) status.textContent = 'Your device did not complete the share.';
+        }
+    }else if(status){
+        status.textContent = 'Use Copy Link, Email, Text, WhatsApp, Facebook, X, or Save to Device.';
+    }
+});
+
+document.getElementById('chad-email-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const subject = encodeURIComponent(activeShareTitle || 'ChadPDChee conversation');
+    const body = encodeURIComponent('Here is the ChadPDChee conversation:\n\n' + url);
+    window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
+});
+
+document.getElementById('chad-text-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const body = encodeURIComponent('ChadPDChee conversation: ' + url);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.location.href = isIOS ? 'sms:&body=' + body : 'sms:?body=' + body;
+});
+
+document.getElementById('chad-whatsapp-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const text = encodeURIComponent((activeShareTitle || 'ChadPDChee conversation') + '\n' + url);
+    window.open('https://wa.me/?text=' + text, '_blank', 'noopener,noreferrer');
+});
+
+document.getElementById('chad-facebook-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url), '_blank', 'noopener,noreferrer,width=720,height=620');
+});
+
+document.getElementById('chad-x-share')?.addEventListener('click', ()=>{
+    const url = document.getElementById('chad-share-url')?.value || '';
+    const text = encodeURIComponent(activeShareTitle || 'ChadPDChee conversation');
+    window.open('https://twitter.com/intent/tweet?text=' + text + '&url=' + encodeURIComponent(url), '_blank', 'noopener,noreferrer,width=720,height=620');
+});
+
+document.getElementById('chad-download-share')?.addEventListener('click', ()=>{
+    const status = document.getElementById('chad-share-status');
+    const id = activeShareConversationId || currentConversationId || '';
+    const href = '/account/conversations/download' + (id ? '?conversation_id=' + encodeURIComponent(id) : '');
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if(status) status.textContent = 'Saving a copy to your device.';
+});
+
+document.getElementById('chad-stop-share')?.addEventListener('click', async ()=>{
+    const status = document.getElementById('chad-share-status');
+    try{
+        await api('/account/conversations/unshare', jsonOptions('POST', {
+            conversation_id: activeShareConversationId || currentConversationId || ''
+        }));
+        if(status) status.textContent = 'Sharing stopped. That link is now dead.';
+    }catch(e){
+        if(status) status.textContent = e.message || 'Could not stop sharing.';
+    }
+});
+
+
+loadMe();
+})();
+
+</script>
+
+
+<div class="chad-legal-links" style="text-align:center;padding:18px 12px 28px;font:600 12px Arial,Helvetica,sans-serif;color:#6b737b">
+  <a href="/terms.html" style="color:inherit">Terms of Use</a>
+  <span aria-hidden="true"> · </span>
+  <a href="/privacy.html" style="color:inherit">Privacy Policy</a>
+</div>
+
+</body>
+</html>
+
 body {
     margin: 0;
     padding: 12px;
