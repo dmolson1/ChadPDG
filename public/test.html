@@ -145,6 +145,8 @@ body {
 .chad-sponsor-copy{flex:1 1 auto;min-width:0}
 .chad-sponsor-headline{font:900 16px/1.2 Arial,Helvetica,sans-serif;color:#111}
 .chad-sponsor-body{margin-top:4px;color:#5a646d;font:500 12px/1.4 Arial,Helvetica,sans-serif}
+.chad-sponsor-discount{display:inline-block;margin-top:6px;padding:4px 7px;border-radius:6px;background:#f1bd29;color:#111;font:900 11px/1.1 Arial,Helvetica,sans-serif;letter-spacing:.25px}
+.chad-sponsor-discount[hidden]{display:none!important}
 .chad-sponsor-cta{flex:0 0 auto;color:#0D5F91;font:900 12px/1.2 Arial,Helvetica,sans-serif;white-space:nowrap}
 .chad-google-ad-label{
     margin:0 0 5px;
@@ -577,6 +579,7 @@ body.chad-test-enabled .chad-dev-title{
                     <div class="chad-sponsor-copy">
                         <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
                         <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+                        <div id="chad-sponsor-discount" class="chad-sponsor-discount" hidden></div>
                     </div>
                     <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
                 </a>
@@ -3253,6 +3256,23 @@ body {
 
         document.getElementById('chad-sponsor-body').textContent=
             config.body||'';
+
+        const discountEl=document.getElementById('chad-sponsor-discount');
+        const pct=Number(config.discount_percent);
+        const code=String(config.discount_code||'').trim();
+        const offer=[];
+
+        if(Number.isFinite(pct)&&pct>0){
+            offer.push('SAVE '+String(pct).replace(/\.00$/,'')+'%');
+        }
+        if(code){
+            offer.push('CODE: '+code);
+        }
+
+        if(discountEl){
+            discountEl.textContent=offer.join(' • ');
+            discountEl.hidden=!offer.length;
+        }
 
         document.getElementById('chad-sponsor-cta').textContent=
             config.cta||'Learn more →';
