@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chad P.D. Chee Admin</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#eef3f7;
+  color:#15191d
+}
+.wrap{
+  width:min(1120px,calc(100% - 28px));
+  margin:30px auto 60px
+}
+.top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  margin-bottom:20px
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:14px
+}
+.brand img{
+  width:58px;
+  height:58px;
+  border-radius:50%;
+  object-fit:cover;
+  background:#fff;
+  border:1px solid #dbe3e9
+}
+h1{margin:0;font-size:30px}
+.sub{margin-top:4px;color:#6b7882;font-size:14px}
+.panel{
+  background:#fff;
+  border:1px solid #dbe3e9;
+  border-radius:16px;
+  padding:18px;
+  box-shadow:0 5px 18px rgba(0,0,0,.04);
+  margin-bottom:18px
+}
+.keyrow{
+  display:flex;
+  gap:10px;
+  align-items:end;
+  flex-wrap:wrap
+}
+label{
+  display:block;
+  font-size:11px;
+  font-weight:900;
+  color:#5f6e7a;
+  text-transform:uppercase;
+  letter-spacing:.55px
+}
+input{
+  width:100%;
+  margin-top:6px;
+  border:1px solid #cdd8e0;
+  border-radius:8px;
+  padding:11px 12px;
+  font:14px Arial,Helvetica,sans-serif
+}
+button{
+  border:0;
+  border-radius:8px;
+  padding:11px 15px;
+  font-weight:900;
+  cursor:pointer
+}
+.primary{background:#1677B8;color:#fff}
+.light{background:#edf1f4;color:#222}
+.status{
+  margin-top:10px;
+  min-height:18px;
+  font-size:13px;
+  font-weight:800
+}
+.cards{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px
+}
+.card{
+  display:block;
+  text-decoration:none;
+  color:inherit;
+  background:#fff;
+  border:1px solid #dbe3e9;
+  border-radius:14px;
+  padding:18px;
+  transition:.15s ease;
+  box-shadow:0 3px 12px rgba(0,0,0,.03)
+}
+.card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 22px rgba(0,0,0,.07);
+  border-color:#b9c7d1
+}
+.icon{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:#f1f6fa;
+  font-size:22px;
+  margin-bottom:12px
+}
+.card h2{
+  margin:0 0 6px;
+  font-size:18px
+}
+.card p{
+  margin:0;
+  color:#6a7680;
+  font-size:13px;
+  line-height:1.45
+}
+.section-title{
+  margin:0 0 12px;
+  font-size:13px;
+  color:#66737d;
+  text-transform:uppercase;
+  letter-spacing:.7px
+}
+.note{
+  margin-top:14px;
+  color:#78848d;
+  font-size:12px;
+  line-height:1.5
+}
+@media(max-width:850px){
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  .cards{grid-template-columns:1fr}
+  .top{align-items:flex-start;flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <img src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad P.D. Chee">
+      <div>
+        <h1>Chad Admin</h1>
+        <div class="sub">Your control room for the whole Chad P.D. Chee operation.</div>
+      </div>
+    </div>
+    <a href="/" style="font-weight:900;color:#1677B8;text-decoration:none">Open Chad →</a>
+  </div>
+
+  <div class="panel">
+    <div class="keyrow">
+      <div style="flex:1;min-width:260px">
+        <label>Admin Key
+          <input type="password" id="adminKey" placeholder="Your CHAD_ADMIN_TEST_KEY">
+        </label>
+      </div>
+      <button class="primary" id="saveKey">Unlock Admin</button>
+      <button class="light" id="clearKey">Clear</button>
+    </div>
+    <div id="keyStatus" class="status"></div>
+    <div class="note">
+      The key is stored only in this browser session and is shared with the other Chad admin pages through sessionStorage.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Management</div>
+    <div class="cards">
+      <a class="card" href="/sponsor-admin.html">
+        <div class="icon">📣</div>
+        <h2>Sponsor Manager</h2>
+        <p>Create, schedule, rotate, pause, and delete direct sponsor campaigns. Manage Google fallback.</p>
+      </a>
+
+      <a class="card" href="/sponsor-leads.html">
+        <div class="icon">📥</div>
+        <h2>Sponsor Leads</h2>
+        <p>Review sponsor inquiries and uploaded creative from the public advertise page.</p>
+      </a>
+
+      <a class="card" href="/analytics.html">
+        <div class="icon">📊</div>
+        <h2>Analytics</h2>
+        <p>Questions, usage, AI cost, sponsor impressions, clicks, CTR, and monetization planning.</p>
+      </a>
+
+      <a class="card" href="/test.html">
+        <div class="icon">🧪</div>
+        <h2>Test Chad</h2>
+        <p>Open the private unlimited development version for testing without burning public quota.</p>
+      </a>
+
+      <a class="card" href="/advertise.html">
+        <div class="icon">💼</div>
+        <h2>Advertise Page</h2>
+        <p>Preview the public sponsor sales page exactly as advertisers see it.</p>
+      </a>
+
+      <a class="card" href="/">
+        <div class="icon">🛠️</div>
+        <h2>Public Chad</h2>
+        <p>Open the live public app and test the real visitor experience.</p>
+      </a>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Coming later</div>
+    <div class="cards">
+      <div class="card" style="opacity:.7;cursor:default">
+        <div class="icon">👥</div>
+        <h2>Users</h2>
+        <p>Account management, plan status, quotas, and support tools.</p>
+      </div>
+
+      <div class="card" style="opacity:.7;cursor:default">
+        <div class="icon">💳</div>
+        <h2>Billing</h2>
+        <p>Pro subscriptions, PayPal events, revenue, and payment health.</p>
+      </div>
+
+      <div class="card" style="opacity:.7;cursor:default">
+        <div class="icon">❤️‍🩹</div>
+        <h2>System Health</h2>
+        <p>API status, errors, database health, traffic, and operational alerts.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const input=document.getElementById('adminKey');
+  const status=document.getElementById('keyStatus');
+  const stored=sessionStorage.getItem('chad_admin_key')||'';
+
+  input.value=stored;
+  if(stored){
+    status.textContent='Admin key is loaded for this browser session.';
+  }
+
+  document.getElementById('saveKey').addEventListener('click',function(){
+    const value=input.value.trim();
+    if(!value){
+      status.textContent='Enter the admin key first.';
+      return;
+    }
+    sessionStorage.setItem('chad_admin_key',value);
+    status.textContent='Admin key saved for this browser session.';
+  });
+
+  document.getElementById('clearKey').addEventListener('click',function(){
+    sessionStorage.removeItem('chad_admin_key');
+    input.value='';
+    status.textContent='Admin key cleared from this browser session.';
+  });
+})();
+</script>
+</body>
+</html>
