@@ -388,6 +388,126 @@ body.chad-test-enabled .chad-dev-title{
     #chad-dev-key{min-width:100%}
 }
 
+
+/* =========================================================
+   SPONSOR BANNER — STABLE IMAGE + MOBILE TEXT FIX
+   ========================================================= */
+
+/* Keep sponsor artwork from swallowing the banner. */
+#chad-sponsor-slot #chad-sponsor-image{
+    width:96px !important;
+    height:56px !important;
+    max-width:96px !important;
+    max-height:56px !important;
+    object-fit:contain !important;
+    flex:0 0 96px !important;
+    align-self:center !important;
+}
+
+/* Text owns the remaining space and must stay visible. */
+#chad-sponsor-slot .chad-sponsor-copy{
+    flex:1 1 0 !important;
+    min-width:0 !important;
+    overflow:visible !important;
+}
+
+#chad-sponsor-slot #chad-sponsor-headline,
+#chad-sponsor-slot #chad-sponsor-body{
+    visibility:visible !important;
+    opacity:1 !important;
+}
+
+@media (max-width:700px){
+    #chad-sponsor-slot .chad-sponsor-link{
+        display:grid !important;
+        grid-template-columns:68px minmax(0,1fr) !important;
+        grid-template-rows:auto auto !important;
+        column-gap:10px !important;
+        row-gap:5px !important;
+        align-items:center !important;
+        flex-wrap:nowrap !important;
+        padding:11px 12px !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-image{
+        grid-column:1 !important;
+        grid-row:1 / span 2 !important;
+        width:64px !important;
+        height:46px !important;
+        max-width:64px !important;
+        max-height:46px !important;
+        flex:none !important;
+        align-self:center !important;
+        justify-self:center !important;
+    }
+
+    #chad-sponsor-slot .chad-sponsor-copy{
+        grid-column:2 !important;
+        grid-row:1 !important;
+        width:auto !important;
+        min-width:0 !important;
+        overflow:visible !important;
+        align-self:center !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-headline{
+        display:-webkit-box !important;
+        -webkit-line-clamp:2 !important;
+        -webkit-box-orient:vertical !important;
+        overflow:hidden !important;
+        font-size:14px !important;
+        line-height:1.15 !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-body{
+        display:-webkit-box !important;
+        -webkit-line-clamp:2 !important;
+        -webkit-box-orient:vertical !important;
+        overflow:hidden !important;
+        margin-top:3px !important;
+        font-size:11px !important;
+        line-height:1.25 !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-discount{
+        margin-top:4px !important;
+        padding:3px 6px !important;
+        font-size:10px !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-cta{
+        grid-column:2 !important;
+        grid-row:2 !important;
+        width:auto !important;
+        padding-left:0 !important;
+        align-self:start !important;
+        white-space:normal !important;
+        font-size:11px !important;
+    }
+}
+
+@media (max-width:480px){
+    #chad-sponsor-slot .chad-sponsor-link{
+        grid-template-columns:58px minmax(0,1fr) !important;
+        column-gap:9px !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-image{
+        width:54px !important;
+        height:42px !important;
+        max-width:54px !important;
+        max-height:42px !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-headline{
+        font-size:13px !important;
+    }
+
+    #chad-sponsor-slot #chad-sponsor-body{
+        font-size:10.5px !important;
+    }
+}
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
