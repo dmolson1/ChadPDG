@@ -839,6 +839,23 @@ async function initializeDatabase() {
         CREATE INDEX IF NOT EXISTS chad_sponsors_active_schedule_idx
             ON chad_sponsors (is_active, priority, starts_at, ends_at);
 
+        CREATE TABLE IF NOT EXISTS chad_ad_settings (
+            settings_key TEXT PRIMARY KEY,
+            google_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            google_client TEXT NOT NULL DEFAULT '',
+            google_slot TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        INSERT INTO chad_ad_settings (
+            settings_key,
+            google_enabled,
+            google_client,
+            google_slot
+        )
+        VALUES ('default', FALSE, '', '')
+        ON CONFLICT (settings_key) DO NOTHING;
+
         CREATE TABLE IF NOT EXISTS chad_openai_usage (
             id BIGSERIAL PRIMARY KEY,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -3809,56 +3826,122 @@ function validateSponsorInput(sponsor) {
 
 async function handlePublicSponsorCurrent(req, res) {
     try {
+        /*
+         * CORE 22 ROTATION:
+         * 1. Only currently eligible direct sponsors participate.
+         * 2. Lowest numeric priority wins.
+         * 3. Within that priority tier, the campaign with the fewest
+         *    recorded impressions is served first. Random breaks ties.
+         *
+         * This keeps direct campaigns rotating much more evenly than
+         * simple RANDOM() while preserving manual priority control.
+         */
         const result = await pool.query(
-            `SELECT
-                id,
-                campaign_id,
-                advertiser,
-                headline,
-                body,
-                cta,
-                destination_url,
-                image_url,
-                starts_at,
-                ends_at,
-                priority
-             FROM chad_sponsors
-             WHERE is_active = TRUE
-               AND (starts_at IS NULL OR starts_at <= NOW())
-               AND (ends_at IS NULL OR ends_at > NOW())
-             ORDER BY priority ASC, created_at ASC
+            `WITH eligible AS (
+                SELECT
+                    id,
+                    campaign_id,
+                    advertiser,
+                    headline,
+                    body,
+                    cta,
+                    destination_url,
+                    image_url,
+                    starts_at,
+                    ends_at,
+                    priority
+                FROM chad_sponsors
+                WHERE is_active = TRUE
+                  AND (starts_at IS NULL OR starts_at <= NOW())
+                  AND (ends_at IS NULL OR ends_at > NOW())
+             ),
+             best_priority AS (
+                SELECT MIN(priority) AS priority
+                FROM eligible
+             ),
+             impression_counts AS (
+                SELECT
+                    metadata->>'campaign_id' AS campaign_id,
+                    COUNT(*)::bigint AS impressions
+                FROM chad_analytics
+                WHERE event = 'sponsor_impression'
+                  AND metadata->>'sponsor_mode' = 'direct'
+                GROUP BY metadata->>'campaign_id'
+             )
+             SELECT
+                e.*,
+                COALESCE(i.impressions, 0)::bigint AS impressions
+             FROM eligible e
+             LEFT JOIN impression_counts i
+               ON i.campaign_id = e.campaign_id
+             CROSS JOIN best_priority p
+             WHERE e.priority = p.priority
+             ORDER BY COALESCE(i.impressions, 0) ASC, RANDOM()
              LIMIT 1`
         );
 
-        if (!result.rowCount) {
+        if (result.rowCount) {
+            const row = result.rows[0];
+
             return res.json({
                 success: true,
-                sponsor: null,
-                fallback: "house"
+                source: "direct",
+                sponsor: {
+                    id: row.id,
+                    campaign_id: row.campaign_id,
+                    advertiser: row.advertiser,
+                    headline: row.headline,
+                    body: row.body || "",
+                    cta: row.cta || "Learn more →",
+                    url: row.destination_url,
+                    image_url: row.image_url || "",
+                    placement: "above_chat",
+                    mode: "direct"
+                }
             });
         }
 
-        const row = result.rows[0];
+        const settingsResult = await pool.query(
+            `SELECT
+                google_enabled,
+                google_client,
+                google_slot
+             FROM chad_ad_settings
+             WHERE settings_key = 'default'
+             LIMIT 1`
+        );
+
+        const settings = settingsResult.rows[0] || {};
+
+        if (
+            settings.google_enabled === true &&
+            /^ca-pub-\d{10,30}$/.test(String(settings.google_client || "").trim()) &&
+            /^\d{5,30}$/.test(String(settings.google_slot || "").trim())
+        ) {
+            return res.json({
+                success: true,
+                source: "google",
+                google: {
+                    client: String(settings.google_client).trim(),
+                    slot: String(settings.google_slot).trim(),
+                    format: "auto",
+                    responsive: true,
+                    placement: "above_chat"
+                }
+            });
+        }
 
         return res.json({
             success: true,
-            sponsor: {
-                id: row.id,
-                campaign_id: row.campaign_id,
-                advertiser: row.advertiser,
-                headline: row.headline,
-                body: row.body || "",
-                cta: row.cta || "Learn more →",
-                url: row.destination_url,
-                image_url: row.image_url || "",
-                placement: "above_chat",
-                mode: "direct"
-            }
+            source: "house",
+            sponsor: null,
+            fallback: "house"
         });
     } catch (error) {
         console.error("Sponsor current error:", error);
         return res.status(500).json({
             success: false,
+            source: "house",
             sponsor: null,
             fallback: "house"
         });
@@ -4061,6 +4144,122 @@ async function handleAdminSponsorDelete(req, res) {
 }
 
 
+
+function sanitizeGoogleAdSettings(body = {}) {
+    return {
+        google_enabled:
+            body.google_enabled === true ||
+            String(body.google_enabled).toLowerCase() === "true",
+        google_client: String(body.google_client || "").trim().slice(0, 80),
+        google_slot: String(body.google_slot || "").trim().slice(0, 80)
+    };
+}
+
+function validateGoogleAdSettings(settings) {
+    if (!settings.google_enabled) return "";
+
+    if (!/^ca-pub-\d{10,30}$/.test(settings.google_client)) {
+        return "AdSense client must look like ca-pub-1234567890123456.";
+    }
+
+    if (!/^\d{5,30}$/.test(settings.google_slot)) {
+        return "AdSense slot must be the numeric data-ad-slot value.";
+    }
+
+    return "";
+}
+
+async function handleAdminAdSettingsGet(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const result = await pool.query(
+            `SELECT
+                google_enabled,
+                google_client,
+                google_slot,
+                updated_at
+             FROM chad_ad_settings
+             WHERE settings_key = 'default'
+             LIMIT 1`
+        );
+
+        return res.json({
+            success: true,
+            settings: result.rows[0] || {
+                google_enabled: false,
+                google_client: "",
+                google_slot: ""
+            }
+        });
+    } catch (error) {
+        console.error("Ad settings load error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not load Google fallback settings."
+        });
+    }
+}
+
+async function handleAdminAdSettingsSave(req, res) {
+    try {
+        if (!isAdminTestRequest(req)) {
+            return res.status(401).json({ success: false, error: "Admin key required." });
+        }
+
+        const settings = sanitizeGoogleAdSettings(req.body || {});
+        const validationError = validateGoogleAdSettings(settings);
+
+        if (validationError) {
+            return res.status(400).json({
+                success: false,
+                error: validationError
+            });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO chad_ad_settings (
+                settings_key,
+                google_enabled,
+                google_client,
+                google_slot,
+                updated_at
+             )
+             VALUES ('default', $1, $2, $3, NOW())
+             ON CONFLICT (settings_key)
+             DO UPDATE SET
+                google_enabled = EXCLUDED.google_enabled,
+                google_client = EXCLUDED.google_client,
+                google_slot = EXCLUDED.google_slot,
+                updated_at = NOW()
+             RETURNING
+                google_enabled,
+                google_client,
+                google_slot,
+                updated_at`,
+            [
+                settings.google_enabled,
+                settings.google_client,
+                settings.google_slot
+            ]
+        );
+
+        return res.json({
+            success: true,
+            settings: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Ad settings save error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Could not save Google fallback settings."
+        });
+    }
+}
+
+
 function registerBoth(method, path, handler) {
     app[method](path, handler);
     app[method](`/wp-json/chadpgt/v1${path}`, handler);
@@ -4070,7 +4269,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-21-sponsor-manager"
+        version: "chad-core-22-ad-server"
     });
 });
 
@@ -4084,7 +4283,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-21-sponsor-manager",
+        version: "chad-core-22-ad-server",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -4134,6 +4333,8 @@ registerBoth("get", "/admin/sponsors", handleAdminSponsorList);
 registerBoth("post", "/admin/sponsors/create", handleAdminSponsorCreate);
 registerBoth("post", "/admin/sponsors/update", handleAdminSponsorUpdate);
 registerBoth("post", "/admin/sponsors/delete", handleAdminSponsorDelete);
+registerBoth("get", "/admin/ad-settings", handleAdminAdSettingsGet);
+registerBoth("post", "/admin/ad-settings", handleAdminAdSettingsSave);
 
 app.get("/openai-test", async (req, res) => {
     try {
