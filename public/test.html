@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chad P.D. Chee — Developer Test</title>
+<title>ChadPDChee Developer Test — Unlimited</title>
 <style>
 html {
     scroll-behavior: smooth;
@@ -157,6 +157,133 @@ body {
     width:100%;
     min-height:70px
 }
+
+#chad-sponsor-slot{
+    position:relative;
+}
+
+.chad-sponsor-slider{
+    position:relative;
+    width:100%;
+}
+
+.chad-sponsor-slide-stage{
+    width:100%;
+    min-height:150px;
+    height:150px;
+    display:flex;
+    align-items:stretch;
+}
+
+#chad-sponsor-link{
+    width:100%;
+    height:100%;
+    box-sizing:border-box;
+    overflow:hidden;
+}
+
+#chad-sponsor-link .chad-sponsor-copy{
+    min-width:0;
+    overflow:hidden;
+}
+
+#chad-sponsor-headline{
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+}
+
+#chad-sponsor-body{
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+}
+
+#chad-sponsor-image{
+    max-height:100%;
+    height:100%;
+    width:auto;
+    object-fit:contain;
+    flex:0 0 auto;
+}
+
+#chad-sponsor-cta{
+    flex:0 0 auto;
+    white-space:nowrap;
+}
+
+@media (max-width:700px){
+    .chad-sponsor-slide-stage{
+        min-height:170px;
+        height:170px;
+    }
+
+    #chad-sponsor-image{
+        max-width:34%;
+    }
+
+    #chad-sponsor-cta{
+        white-space:normal;
+    }
+}
+
+
+.chad-sponsor-controls{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    margin-top:7px;
+}
+
+.chad-sponsor-dot{
+    width:8px;
+    height:8px;
+    border:0;
+    border-radius:50%;
+    padding:0;
+    background:#c5cbd0;
+    cursor:pointer;
+}
+
+.chad-sponsor-dot.is-active{
+    background:#0D5F91;
+}
+
+.chad-sponsor-nav{
+    border:0;
+    background:transparent;
+    color:#687078;
+    font:900 15px/1 Arial,Helvetica,sans-serif;
+    cursor:pointer;
+    padding:2px 5px;
+}
+
+.chad-sponsor-nav:hover,
+.chad-sponsor-nav:focus{
+    color:#0D5F91;
+}
+
+.chad-sponsor-google-static{
+    margin-top:10px;
+    padding-top:8px;
+    border-top:1px solid #e5e8eb;
+}
+
+.chad-sponsor-google-static[hidden]{
+    display:none!important;
+}
+
+.chad-google-ad-label{
+    margin-bottom:4px;
+    color:#858b90;
+    font:700 9px/1 Arial,Helvetica,sans-serif;
+    letter-spacing:.6px;
+    text-align:center;
+}
+
 #chad-sponsor-slot.chad-sponsor-google{
     min-height:90px;display:block;border:1px dashed #cbd2d9;border-radius:12px;padding:8px;background:#fafafa
 }
@@ -175,9 +302,8 @@ body {
 }
 
 
-/* =========================================================
-   DEVELOPER TEST PANEL
-   ========================================================= */
+
+/* DEVELOPER TEST PAGE */
 #chad-dev-panel{
     width:100%;
     max-width:900px;
@@ -351,7 +477,6 @@ body.chad-test-enabled .chad-dev-title{
             <button type="button" id="chad-mobile-new" aria-label="New project">＋</button>
         </header>
 
-
         <div id="chad-dev-panel">
             <div class="chad-dev-top">
                 <div class="chad-dev-title">DEVELOPER TEST PAGE — UNLIMITED QUESTIONS</div>
@@ -394,17 +519,7 @@ body.chad-test-enabled .chad-dev-title{
 
 
     <!-- CHADPDCHEE SPONSOR INVENTORY — ABOVE CHAT -->
-    <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
-        <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
-            <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
-            <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
-            <div class="chad-sponsor-copy">
-                <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
-                <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
-            </div>
-            <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
-        </a>
-    </div>
+
 
     <!-- HIDDEN UNTIL FIRST QUESTION -->
     <div id="chad-chat"></div>
@@ -452,6 +567,30 @@ body.chad-test-enabled .chad-dev-title{
             </button>
 
         </div>
+
+    <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
+        <div class="chad-sponsor-slider">
+            <div id="chad-sponsor-slide-stage" class="chad-sponsor-slide-stage">
+                <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
+                    <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
+                    <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
+                    <div class="chad-sponsor-copy">
+                        <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
+                        <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+                    </div>
+                    <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
+                </a>
+            </div>
+
+            <div id="chad-sponsor-controls" class="chad-sponsor-controls" hidden>
+                <button id="chad-sponsor-prev" class="chad-sponsor-nav" type="button" aria-label="Previous sponsor">‹</button>
+                <div id="chad-sponsor-dots"></div>
+                <button id="chad-sponsor-next" class="chad-sponsor-nav" type="button" aria-label="Next sponsor">›</button>
+            </div>
+        </div>
+
+        <div id="chad-sponsor-google-static" class="chad-sponsor-google-static" hidden></div>
+    </div>
 
         <div id="chad-turnstile"></div>
 
@@ -845,6 +984,24 @@ body.chad-test-enabled .chad-dev-title{
     line-height: 1.4;
     color: #444;
     margin-bottom: 10px;
+}
+
+.chad-affiliate-promo {
+    display: inline-block;
+    margin: 0 0 10px 0;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #f1f7fb;
+    color: #0D5F91;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.chad-affiliate-disclosure {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #777;
 }
 
 
@@ -1387,6 +1544,56 @@ body.chad-test-enabled .chad-dev-title{
 
 #chad-question-limit.chad-limit-reached {
     color: #9a2d2d;
+}
+
+.chad-free-account-limit {
+    margin: 16px 0 6px 0;
+    padding: 18px;
+    border: 1px solid #d7e4ee;
+    border-radius: 12px;
+    background: #f7fbfe;
+}
+
+.chad-free-account-limit-title {
+    margin: 0 0 6px 0;
+    font-size: 17px;
+    font-weight: 900;
+    color: #17191c;
+}
+
+.chad-free-account-limit-copy {
+    margin: 0 0 13px 0;
+    color: #5e6870;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.chad-free-account-limit-button {
+    border: 0;
+    border-radius: 9px;
+    padding: 11px 15px;
+    background: #1677B8;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.chad-free-account-limit-button:hover {
+    background: #0f649e;
+}
+
+.chad-free-account-limit-signin {
+    margin-left: 10px;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: #1677B8;
+    text-decoration: underline;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
 }
 
 
@@ -2539,7 +2746,15 @@ body {
                 if (questionInput) {
                     questionInput.disabled = true;
                     questionInput.placeholder =
-                        'Sorry Bro… Chad is out until tomorrow.';
+                        data.authenticated === true
+                            ? 'Sorry Bro… Chad is out until tomorrow.'
+                            : 'Create a free account for more Chad questions.';
+                }
+
+                if (
+                    data.authenticated !== true
+                ) {
+                    showFreeAccountLimitPrompt(data);
                 }
 
             } else {
@@ -2956,9 +3171,11 @@ body {
 
 
     /* =====================================================
-       CORE 20 — SPONSOR INVENTORY
-       Direct sponsor → Google hook → house ad.
+       SPONSOR INVENTORY — ROTATING DIRECT SPONSORS
+       Direct sponsors + house ad rotate automatically.
+       Google AdSense stays static and is never auto-refreshed.
        ===================================================== */
+
     const CHAD_SPONSOR_DEFAULT={
         mode:'house',
         campaign_id:'house-advertise-with-chad',
@@ -2972,7 +3189,12 @@ body {
         image_url:''
     };
 
-    let chadSponsorImpressionSent=false;
+    let chadSponsorDeck=[];
+    let chadSponsorIndex=0;
+    let chadSponsorTimer=null;
+    let chadSponsorRotationMs=8000;
+    let chadSponsorPaused=false;
+    let chadSponsorLastImpressionKey='';
 
     function chadSponsorMetadata(config){
         return {
@@ -2985,81 +3207,226 @@ body {
 
     function trackSponsorEvent(eventName,config){
         trackSimpleAnalyticsEvent(eventName,{
-            metadata:Object.assign({},chadAnalyticsAttribution(),chadSponsorMetadata(config))
+            metadata:Object.assign(
+                {},
+                chadAnalyticsAttribution(),
+                chadSponsorMetadata(config)
+            )
         });
     }
 
     function resetSponsorSlot(){
         const slot=document.getElementById('chad-sponsor-slot');
         const link=document.getElementById('chad-sponsor-link');
+
         if(!slot||!link)return;
 
-        const oldGoogle=slot.querySelector('.chad-google-ad-wrap');
-        if(oldGoogle)oldGoogle.remove();
-
-        slot.classList.remove('chad-sponsor-google');
+        slot.hidden=false;
         link.hidden=false;
+        slot.classList.remove('chad-sponsor-google');
     }
 
-    function renderHouseOrDirectSponsor(rawConfig){
+    function renderSponsorSlide(rawConfig){
         const slot=document.getElementById('chad-sponsor-slot');
         const link=document.getElementById('chad-sponsor-link');
+
         if(!slot||!link)return;
 
         resetSponsorSlot();
 
-        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,rawConfig||{});
+        const config=Object.assign(
+            {},
+            CHAD_SPONSOR_DEFAULT,
+            rawConfig||{}
+        );
 
         document.getElementById('chad-sponsor-badge').textContent=
-            config.badge||(config.mode==='direct'?'SPONSORED':'ADVERTISE WITH CHAD');
-        document.getElementById('chad-sponsor-headline').textContent=config.headline||'';
-        document.getElementById('chad-sponsor-body').textContent=config.body||'';
-        document.getElementById('chad-sponsor-cta').textContent=config.cta||'Learn more →';
+            config.badge||
+            (
+                config.mode==='direct'
+                    ? 'SPONSORED'
+                    : 'ADVERTISE WITH CHAD'
+            );
+
+        document.getElementById('chad-sponsor-headline').textContent=
+            config.headline||'';
+
+        document.getElementById('chad-sponsor-body').textContent=
+            config.body||'';
+
+        document.getElementById('chad-sponsor-cta').textContent=
+            config.cta||'Learn more →';
+
         link.href=config.url||'#';
 
         const image=document.getElementById('chad-sponsor-image');
+
         if(config.image_url){
             image.src=config.image_url;
-            image.alt=config.advertiser?(config.advertiser+' sponsor'):'Sponsor';
+            image.alt=config.advertiser
+                ? (config.advertiser+' sponsor')
+                : 'Sponsor';
             image.hidden=false;
         }else{
             image.removeAttribute('src');
             image.hidden=true;
         }
 
-        slot.hidden=false;
+        const impressionKey=[
+            config.campaign_id||'',
+            chadSponsorIndex
+        ].join(':');
 
-        if(!chadSponsorImpressionSent){
-            chadSponsorImpressionSent=true;
-            trackSponsorEvent('sponsor_impression',config);
+        if(chadSponsorLastImpressionKey!==impressionKey){
+            chadSponsorLastImpressionKey=impressionKey;
+            trackSponsorEvent(
+                'sponsor_impression',
+                config
+            );
         }
 
         link.onclick=function(){
-            trackSponsorEvent('sponsor_click',config);
+            trackSponsorEvent(
+                'sponsor_click',
+                config
+            );
         };
+
+        updateSponsorDots();
     }
 
-    function renderHouseSponsor(){
-        chadSponsorImpressionSent=false;
-        renderHouseOrDirectSponsor(Object.assign({},CHAD_SPONSOR_DEFAULT));
+    function updateSponsorDots(){
+        const dots=document.querySelectorAll(
+            '#chad-sponsor-dots .chad-sponsor-dot'
+        );
+
+        dots.forEach(function(dot,index){
+            dot.classList.toggle(
+                'is-active',
+                index===chadSponsorIndex
+            );
+            dot.setAttribute(
+                'aria-current',
+                index===chadSponsorIndex
+                    ? 'true'
+                    : 'false'
+            );
+        });
     }
 
-    function renderGoogleSponsor(google){
-        const slot=document.getElementById('chad-sponsor-slot');
-        const link=document.getElementById('chad-sponsor-link');
-        if(!slot||!link||!google||!google.client||!google.slot){
-            renderHouseSponsor();
+    function buildSponsorControls(){
+        const controls=document.getElementById(
+            'chad-sponsor-controls'
+        );
+        const dotsWrap=document.getElementById(
+            'chad-sponsor-dots'
+        );
+
+        if(!controls||!dotsWrap)return;
+
+        dotsWrap.innerHTML='';
+
+        if(chadSponsorDeck.length<=1){
+            controls.hidden=true;
             return;
         }
 
-        resetSponsorSlot();
-        link.hidden=true;
-        slot.hidden=false;
-        slot.classList.add('chad-sponsor-google');
+        controls.hidden=false;
 
-        const wrap=document.createElement('div');
-        wrap.className='chad-google-ad-wrap';
-        wrap.style.width='100%';
+        chadSponsorDeck.forEach(function(config,index){
+            const dot=document.createElement('button');
+
+            dot.type='button';
+            dot.className='chad-sponsor-dot';
+            dot.setAttribute(
+                'aria-label',
+                'Show sponsor '+(index+1)
+            );
+
+            dot.addEventListener(
+                'click',
+                function(){
+                    showSponsorIndex(index,true);
+                }
+            );
+
+            dotsWrap.appendChild(dot);
+        });
+
+        updateSponsorDots();
+    }
+
+    function showSponsorIndex(index,restartTimer){
+        if(!chadSponsorDeck.length)return;
+
+        const length=chadSponsorDeck.length;
+
+        chadSponsorIndex=
+            ((index%length)+length)%length;
+
+        renderSponsorSlide(
+            chadSponsorDeck[chadSponsorIndex]
+        );
+
+        if(restartTimer){
+            startSponsorRotation();
+        }
+    }
+
+    function nextSponsor(){
+        showSponsorIndex(
+            chadSponsorIndex+1,
+            false
+        );
+    }
+
+    function startSponsorRotation(){
+        stopSponsorRotation();
+
+        if(
+            chadSponsorDeck.length<=1||
+            chadSponsorPaused
+        ){
+            return;
+        }
+
+        chadSponsorTimer=setInterval(
+            function(){
+                if(
+                    !chadSponsorPaused&&
+                    document.visibilityState==='visible'
+                ){
+                    nextSponsor();
+                }
+            },
+            chadSponsorRotationMs
+        );
+    }
+
+    function stopSponsorRotation(){
+        if(chadSponsorTimer){
+            clearInterval(chadSponsorTimer);
+            chadSponsorTimer=null;
+        }
+    }
+
+    function renderStaticGoogleSponsor(google){
+        const wrap=document.getElementById(
+            'chad-sponsor-google-static'
+        );
+
+        if(!wrap)return;
+
+        wrap.innerHTML='';
+        wrap.hidden=true;
+
+        if(
+            !google||
+            !google.client||
+            !google.slot
+        ){
+            return;
+        }
 
         const label=document.createElement('div');
         label.className='chad-google-ad-label';
@@ -3068,91 +3435,277 @@ body {
         const ins=document.createElement('ins');
         ins.className='adsbygoogle';
         ins.style.display='block';
-        ins.setAttribute('data-ad-client',google.client);
-        ins.setAttribute('data-ad-slot',google.slot);
-        ins.setAttribute('data-ad-format',google.format||'auto');
-        ins.setAttribute('data-full-width-responsive',google.responsive===false?'false':'true');
+        ins.setAttribute(
+            'data-ad-client',
+            google.client
+        );
+        ins.setAttribute(
+            'data-ad-slot',
+            google.slot
+        );
+        ins.setAttribute(
+            'data-ad-format',
+            google.format||'auto'
+        );
+        ins.setAttribute(
+            'data-full-width-responsive',
+            google.responsive===false
+                ? 'false'
+                : 'true'
+        );
 
         wrap.appendChild(label);
         wrap.appendChild(ins);
-        slot.appendChild(wrap);
+        wrap.hidden=false;
 
         try{
-            (window.adsbygoogle=window.adsbygoogle||[]).push({});
+            (
+                window.adsbygoogle=
+                window.adsbygoogle||[]
+            ).push({});
 
-            const googleConfig={
-                campaign_id:'google-adsense-fallback',
-                advertiser:'Google AdSense',
-                placement:'above_chat',
-                mode:'google'
-            };
-
-            if(!chadSponsorImpressionSent){
-                chadSponsorImpressionSent=true;
-                trackSponsorEvent('sponsor_impression',googleConfig);
-            }
-
-            /*
-             * AdSense marks an ad unit data-ad-status="unfilled" when
-             * no ad is available. If that happens, quietly restore the
-             * Chad house ad. We intentionally do not attempt to track
-             * AdSense clicks ourselves.
-             */
-            const observer=new MutationObserver(function(){
-                const status=ins.getAttribute('data-ad-status');
-                if(status==='unfilled'){
-                    observer.disconnect();
-                    renderHouseSponsor();
-                }else if(status==='filled'){
-                    observer.disconnect();
+            trackSponsorEvent(
+                'sponsor_impression',
+                {
+                    campaign_id:'google-adsense-static',
+                    advertiser:'Google AdSense',
+                    placement:'above_chat',
+                    mode:'google'
                 }
-            });
+            );
 
-            observer.observe(ins,{attributes:true,attributeFilter:['data-ad-status']});
+            const observer=
+                new MutationObserver(function(){
+                    const status=
+                        ins.getAttribute(
+                            'data-ad-status'
+                        );
+
+                    if(status==='unfilled'){
+                        observer.disconnect();
+                        wrap.hidden=true;
+                    }else if(status==='filled'){
+                        observer.disconnect();
+                    }
+                });
+
+            observer.observe(
+                ins,
+                {
+                    attributes:true,
+                    attributeFilter:[
+                        'data-ad-status'
+                    ]
+                }
+            );
 
             setTimeout(function(){
-                if(ins.getAttribute('data-ad-status')==='unfilled'){
+                if(
+                    ins.getAttribute(
+                        'data-ad-status'
+                    )==='unfilled'
+                ){
                     observer.disconnect();
-                    renderHouseSponsor();
+                    wrap.hidden=true;
                 }
             },7000);
 
         }catch(error){
-            console.warn('AdSense sponsor slot failed:',error);
-            renderHouseSponsor();
+            console.warn(
+                'AdSense sponsor slot failed:',
+                error
+            );
+            wrap.hidden=true;
         }
+    }
+
+    function initSponsorInteractions(){
+        const slot=document.getElementById(
+            'chad-sponsor-slot'
+        );
+        const prev=document.getElementById(
+            'chad-sponsor-prev'
+        );
+        const next=document.getElementById(
+            'chad-sponsor-next'
+        );
+
+        prev?.addEventListener(
+            'click',
+            function(){
+                showSponsorIndex(
+                    chadSponsorIndex-1,
+                    true
+                );
+            }
+        );
+
+        next?.addEventListener(
+            'click',
+            function(){
+                showSponsorIndex(
+                    chadSponsorIndex+1,
+                    true
+                );
+            }
+        );
+
+        slot?.addEventListener(
+            'mouseenter',
+            function(){
+                chadSponsorPaused=true;
+                stopSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'mouseleave',
+            function(){
+                chadSponsorPaused=false;
+                startSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'focusin',
+            function(){
+                chadSponsorPaused=true;
+                stopSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'focusout',
+            function(){
+                chadSponsorPaused=false;
+                startSponsorRotation();
+            }
+        );
+
+        document.addEventListener(
+            'visibilitychange',
+            function(){
+                if(document.visibilityState==='visible'){
+                    startSponsorRotation();
+                }else{
+                    stopSponsorRotation();
+                }
+            }
+        );
     }
 
     async function loadChadSponsor(){
-        chadSponsorImpressionSent=false;
-
         try{
-            const response=await fetch('/wp-json/chadpgt/v1/sponsor/current',{
-                method:'GET',
-                headers:{'Accept':'application/json'},
-                cache:'no-store'
-            });
-
-            const data=await response.json().catch(()=>null);
-
-            if(response.ok&&data&&data.success){
-                if(data.source==='direct'&&data.sponsor){
-                    renderHouseOrDirectSponsor(data.sponsor);
-                    return;
+            const response=await fetch(
+                '/wp-json/chadpgt/v1/sponsor/current',
+                {
+                    method:'GET',
+                    headers:{
+                        'Accept':'application/json'
+                    },
+                    cache:'no-store'
                 }
+            );
 
-                if(data.source==='google'&&data.google){
-                    renderGoogleSponsor(data.google);
-                    return;
-                }
+            const data=
+                await response
+                    .json()
+                    .catch(()=>null);
+
+            const directSponsors=
+                (
+                    response.ok&&
+                    data&&
+                    data.success&&
+                    Array.isArray(data.sponsors)
+                )
+                    ? data.sponsors
+                    : [];
+
+            chadSponsorDeck=
+                directSponsors.map(function(sponsor){
+                    return Object.assign(
+                        {},
+                        sponsor,
+                        {
+                            mode:'direct',
+                            badge:
+                                sponsor.badge||
+                                'SPONSORED'
+                        }
+                    );
+                });
+
+            /*
+             * Always include our own house ad as the final slide.
+             * It sells unused inventory without slowing anything down.
+             */
+            if(
+                !data||
+                data.include_house!==false
+            ){
+                chadSponsorDeck.push(
+                    Object.assign(
+                        {},
+                        CHAD_SPONSOR_DEFAULT
+                    )
+                );
             }
-        }catch(error){
-            console.warn('Sponsor loader failed:',error);
-        }
 
-        renderHouseSponsor();
+            chadSponsorRotationMs=
+                Math.max(
+                    5000,
+                    Math.min(
+                        20000,
+                        Number(
+                            data&&
+                            data.rotation_ms
+                        )||8000
+                    )
+                );
+
+            chadSponsorIndex=0;
+            chadSponsorLastImpressionKey='';
+
+            buildSponsorControls();
+
+            if(chadSponsorDeck.length){
+                renderSponsorSlide(
+                    chadSponsorDeck[0]
+                );
+            }
+
+            renderStaticGoogleSponsor(
+                data&&data.google
+                    ? data.google
+                    : null
+            );
+
+            startSponsorRotation();
+
+        }catch(error){
+            console.warn(
+                'Sponsor loader failed:',
+                error
+            );
+
+            chadSponsorDeck=[
+                Object.assign(
+                    {},
+                    CHAD_SPONSOR_DEFAULT
+                )
+            ];
+
+            chadSponsorIndex=0;
+
+            buildSponsorControls();
+            renderSponsorSlide(
+                chadSponsorDeck[0]
+            );
+        }
     }
 
+    initSponsorInteractions();
     trackSimpleAnalyticsEvent('page_view');
     loadChadSponsor();
 
@@ -3566,7 +4119,7 @@ body {
             '<div class="chad-shopping-product">' +
 
             '<div class="chad-shopping-product-label">' +
-            'CHAD’S PICK' +
+            'CHAD’S AFFILIATE PICKS' +
             '</div>' +
 
             '<div class="chad-shopping-product-name">' +
@@ -3967,183 +4520,179 @@ body {
        ===================================================== */
 
     function buildProducts(
-        products
+        products,
+        affiliateOffers,
+        affiliateDisclosure
     ) {
 
+        const amazonProducts =
+            Array.isArray(products)
+                ? products
+                : [];
+
+        const partnerOffers =
+            Array.isArray(affiliateOffers)
+                ? affiliateOffers
+                : [];
+
         if (
-            !products ||
-            !products.length
+            !amazonProducts.length &&
+            !partnerOffers.length
         ) {
-
             return '';
-
         }
 
-
         let html =
-
             '<div class="chad-products">' +
-
             '<div class="chad-products-title">' +
-            'CHAD’S PICKS' +
+            'CHAD’S AFFILIATE PICKS' +
             '</div>';
 
+        let optionNumber = 1;
 
-        products.forEach(
-            function (
-                product,
-                index
-            ) {
+        partnerOffers.forEach(
+            function (offer) {
+
+                if (
+                    !offer ||
+                    !offer.partner ||
+                    !offer.url
+                ) {
+                    return;
+                }
+
+                html +=
+                    '<div class="chad-product-card">' +
+                    '<div class="chad-product-info">' +
+                    '<div class="chad-product-option">' +
+                    'AFFILIATE PICK ' +
+                    optionNumber +
+                    '</div>' +
+                    '<div class="chad-product-name">' +
+                    escapeHtml(offer.partner) +
+                    '</div>' +
+                    '<div class="chad-product-description">' +
+                    escapeHtml(offer.description || '') +
+                    '</div>';
+
+                if (offer.promo_text) {
+                    html +=
+                        '<div class="chad-affiliate-promo">' +
+                        escapeHtml(offer.promo_text) +
+                        '</div>';
+                }
+
+                html +=
+                    '<a class="chad-product-button chad-partner-affiliate-button" ' +
+                    'href="' +
+                    escapeHtml(offer.url) +
+                    '" ' +
+                    'target="_blank" ' +
+                    'rel="noopener sponsored" ' +
+                    'data-chad-partner="' +
+                    escapeHtml(offer.partner) +
+                    '">' +
+                    escapeHtml(
+                        offer.button_label ||
+                        ('SHOP ' + offer.partner)
+                    ) +
+                    '</a>' +
+                    '</div>' +
+                    '</div>';
+
+                optionNumber += 1;
+            }
+        );
+
+        amazonProducts.forEach(
+            function (product) {
 
                 if (!product) {
                     return;
                 }
 
-
                 const name =
                     product.name ||
                     'Recommended product';
-
 
                 const description =
                     product.description ||
                     '';
 
-
                 const asin =
                     product.asin ||
                     '';
-
 
                 const amazonUrl =
                     product.source_url ||
                     '';
 
-
                 if (
                     !asin ||
                     !amazonUrl
                 ) {
-
                     return;
-
                 }
 
-
                 html +=
-
                     '<div class="chad-product-card">';
-
 
                 if (
                     product.image_url
                 ) {
-
                     html +=
-
                         '<div class="chad-product-image">' +
-
                         '<img src="' +
-
-                        escapeHtml(
-                            product.image_url
-                        ) +
-
+                        escapeHtml(product.image_url) +
                         '" alt="' +
-
-                        escapeHtml(
-                            name
-                        ) +
-
+                        escapeHtml(name) +
                         '" loading="lazy">' +
-
                         '</div>';
-
                 }
 
-
                 html +=
-
                     '<div class="chad-product-info">' +
-
-
                     '<div class="chad-product-option">' +
-
-                    'OPTION ' +
-
-                    (index + 1) +
-
+                    'AFFILIATE PICK ' +
+                    optionNumber +
                     '</div>' +
-
-
                     '<div class="chad-product-name">' +
-
-                    escapeHtml(
-                        name
-                    ) +
-
+                    escapeHtml(name) +
                     '</div>' +
-
-
                     '<div class="chad-product-description">' +
-
-                    escapeHtml(
-                        description
-                    ) +
-
+                    escapeHtml(description) +
                     '</div>' +
-
-
                     '<a class="chad-product-button" ' +
-
                     'href="' +
-
-                    escapeHtml(
-                        amazonUrl
-                    ) +
-
+                    escapeHtml(amazonUrl) +
                     '" ' +
-
                     'target="_blank" ' +
-
                     'rel="noopener sponsored" ' +
-
                     'data-chad-asin="' +
-
-                    escapeHtml(
-                        asin
-                    ) +
-
+                    escapeHtml(asin) +
                     '" ' +
-
                     'data-chad-product="' +
-
-                    escapeHtml(
-                        name
-                    ) +
-
+                    escapeHtml(name) +
                     '">' +
-
                     'VIEW ON AMAZON' +
-
                     '</a>' +
-
-
                     '</div>' +
-
-
                     '</div>';
 
+                optionNumber += 1;
             }
         );
 
-
         html +=
+            '<div class="chad-affiliate-disclosure">' +
+            escapeHtml(
+                affiliateDisclosure ||
+                'Affiliate disclosure: ChadPDChee may earn a commission from qualifying purchases made through these links, at no extra cost to you.'
+            ) +
+            '</div>' +
             '</div>';
 
-
         return html;
-
     }
 
 
@@ -4338,7 +4887,9 @@ body {
 
         afterHtml +=
             buildProducts(
-                data.products || []
+                data.products || [],
+                data.affiliate_offers || [],
+                data.affiliate_disclosure || ''
             );
 
         afterHtml +=
@@ -4599,6 +5150,142 @@ body {
     }
 
 
+    function lockQuestionLimitUI() {
+
+        dailyLimitLocked = true;
+
+        if (askButton) {
+            askButton.disabled = true;
+            askButton.classList.add(
+                'chad-limit-reached'
+            );
+            askButton.textContent =
+                'OUT OF QUESTIONS';
+        }
+
+        if (questionInput) {
+            questionInput.disabled = true;
+            questionInput.placeholder =
+                'Create a free account for more Chad questions.';
+        }
+    }
+
+
+    function showFreeAccountLimitPrompt(data) {
+
+        if (
+            data &&
+            data.authenticated === true
+        ) {
+            return;
+        }
+
+        if (
+            document.getElementById(
+                'chad-free-account-limit'
+            )
+        ) {
+            return;
+        }
+
+        const accountLimit =
+            data &&
+            Number(data.account_daily_limit)
+                ? Number(data.account_daily_limit)
+                : 15;
+
+        const guestLimit =
+            data &&
+            Number(data.guest_daily_limit)
+                ? Number(data.guest_daily_limit)
+                : 5;
+
+        const prompt =
+            document.createElement('div');
+
+        prompt.id =
+            'chad-free-account-limit';
+
+        prompt.className =
+            'chad-free-account-limit';
+
+        prompt.innerHTML =
+            '<div class="chad-free-account-limit-title">' +
+            'Need more Chad?' +
+            '</div>' +
+            '<div class="chad-free-account-limit-copy">' +
+            "You used today's " +
+            guestLimit +
+            ' free questions. Create a free account and get ' +
+            accountLimit +
+            ' Chad questions every day, plus saved projects and conversation history.' +
+            '</div>' +
+            '<button type="button" class="chad-free-account-limit-button">' +
+            'CREATE FREE ACCOUNT — GET ' +
+            accountLimit +
+            ' QUESTIONS/DAY' +
+            '</button>' +
+            '<button type="button" class="chad-free-account-limit-signin">' +
+            'Already have an account? Sign in' +
+            '</button>';
+
+        chat.appendChild(prompt);
+
+        const signupButton =
+            prompt.querySelector(
+                '.chad-free-account-limit-button'
+            );
+
+        const signinButton =
+            prompt.querySelector(
+                '.chad-free-account-limit-signin'
+            );
+
+        signupButton?.addEventListener(
+            'click',
+            function () {
+
+                if (
+                    typeof window.CHADPDG_OPEN_AUTH ===
+                    'function'
+                ) {
+                    window.CHADPDG_OPEN_AUTH(
+                        'signup',
+                        'Create a free account and get ' +
+                        accountLimit +
+                        ' Chad questions every day instead of ' +
+                        guestLimit +
+                        '.'
+                    );
+                }
+            }
+        );
+
+        signinButton?.addEventListener(
+            'click',
+            function () {
+
+                if (
+                    typeof window.CHADPDG_OPEN_AUTH ===
+                    'function'
+                ) {
+                    window.CHADPDG_OPEN_AUTH(
+                        'signin',
+                        'Sign in to continue with your account question limit.'
+                    );
+                }
+            }
+        );
+
+        try {
+            prompt.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        } catch (error) {}
+    }
+
+
     function showDailyLimitMessage(data) {
 
         dailyLimitLocked = true;
@@ -4656,20 +5343,8 @@ body {
                 : 5
         );
 
-        if (askButton) {
-            askButton.disabled = true;
-            askButton.classList.add(
-                'chad-limit-reached'
-            );
-            askButton.textContent =
-                'OUT OF QUESTIONS';
-        }
-
-        if (questionInput) {
-            questionInput.disabled = true;
-            questionInput.placeholder =
-                'Sorry Bro… Chad is out until tomorrow.';
-        }
+        lockQuestionLimitUI();
+        showFreeAccountLimitPrompt(data);
     }
 
 
@@ -4921,6 +5596,18 @@ body {
                 data.remaining,
                 data.daily_limit
             );
+
+            if (
+                Number(data.remaining) <= 0
+            ) {
+                lockQuestionLimitUI();
+
+                if (
+                    data.authenticated !== true
+                ) {
+                    showFreeAccountLimitPrompt(data);
+                }
+            }
 
         } catch (error) {
 
@@ -5280,6 +5967,13 @@ function setView(name){if(name!=='account')lastAuthView=name;document.querySelec
 function openAuth(view){setView(view||(currentUser?'account':'signin'));overlay.classList.add('chad-auth-open');overlay.setAttribute('aria-hidden','false');document.body.style.overflow='hidden'}
 function closeAuth(){overlay.classList.remove('chad-auth-open');overlay.setAttribute('aria-hidden','true');document.body.style.overflow=''}
 
+window.CHADPDG_OPEN_AUTH = function(view, message){
+    openAuth(view || 'signup');
+    if(message){
+        msg(message, 'success');
+    }
+};
+
 function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(currentUser.plan||'free')+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
 function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Save your projects';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
 function signedIn(){if(!currentUser)return signedOut();accountTitle.textContent=currentUser.display_name||'Account';accountSubtitle.textContent=currentUser.email;accountButton.classList.add('chad-sidebar-signedin')}
@@ -5314,7 +6008,7 @@ document.getElementById('chad-signout')?.addEventListener('click',async()=>{try{
 
 document.getElementById('chad-export-data')?.addEventListener('click',async()=>{try{const d=await api('/account/export'),blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='chadpdchee-my-data.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}catch(e){msg(e.message,'error')}});
 
-document.getElementById('chad-delete-account')?.addEventListener('click',async()=>{const typed=window.prompt('Permanent means permanent. Type DELETE to continue.');if(typed!=='DELETE')return;const password=window.prompt('Enter your password to permanently delete the account and all saved conversations.');if(!password)return;try{await api('/account/delete',jsonOptions('POST',{confirm:'DELETE',password}));currentUser=null;currentConversationId=null;signedOut();refreshQuestionLimit();closeAuth();window.location.reload()}catch(e){msg(e.message,'error')}});
+document.getElementById('chad-delete-account')?.addEventListener('click',async()=>{const typed=window.prompt('Permanent means permanent. Type DELETE to continue.');if(typed!=='DELETE')return;const password=window.prompt('Enter your password to permanently delete the account and all saved conversations.');if(!password)return;try{await api('/account/delete',jsonOptions('POST',{confirm:'DELETE',password}));try{localStorage.removeItem('chadpgt_analytics_visitor')}catch(_){ }currentUser=null;currentConversationId=null;signedOut();refreshQuestionLimit();closeAuth();window.location.reload()}catch(e){msg(e.message,'error')}});
 
 document.querySelectorAll('.chad-inline-policy').forEach(b=>b.addEventListener('click',()=>{const kind=b.getAttribute('data-policy');document.querySelectorAll('.chad-auth-view').forEach(v=>v.hidden=true);const panel=document.getElementById('chad-policy-panel'),content=document.getElementById('chad-policy-content');panel.hidden=false;content.innerHTML=kind==='privacy'?'<h2>Privacy Notice</h2><p><strong>Version: September 9, 2026.</strong></p><p>ChadPDChee collects the information needed to run your account and saved projects, including your email address, optional display name, account/security records, consent choices, and conversations you choose to save.</p><p>We use that information to provide the service, secure accounts, remember projects, send verification/password-reset messages, enforce usage limits, and operate privacy-conscious analytics.</p><ul><li>Passwords are stored as password hashes, not readable passwords.</li><li>Authentication uses secure session cookies.</li><li>Marketing consent is separate and optional.</li><li>You can download your account data from Account.</li><li>You can delete your account and saved conversations from Account.</li></ul><p><strong>Testing notice:</strong> this in-app notice describes the current implementation. A complete public Privacy Policy with operator/contact details, service providers, retention, cross-border processing and legal rights must be published before public account launch.</p>':'<h2>Terms of Use</h2><p><strong>Version: September 9, 2026.</strong></p><p>ChadPDChee provides informational DIY assistance. It is not a licensed contractor, electrician, plumber, engineer, or other professional. Users remain responsible for evaluating advice and using qualified professionals where appropriate, especially for electrical, gas, structural, plumbing and other safety-critical work.</p><p><strong>Testing notice:</strong> complete public Terms of Use must be published before public account launch.</p>'}));
 document.getElementById('chad-policy-back')?.addEventListener('click',()=>setView('signup'));
@@ -5454,6 +6148,7 @@ loadMe();
   <span aria-hidden="true"> · </span>
   <a href="/privacy.html" style="color:inherit">Privacy Policy</a>
 </div>
+
 
 
 <script>
