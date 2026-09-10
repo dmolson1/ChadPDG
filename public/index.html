@@ -157,6 +157,74 @@ body {
     width:100%;
     min-height:70px
 }
+
+#chad-sponsor-slot{
+    position:relative;
+}
+
+.chad-sponsor-slider{
+    position:relative;
+    width:100%;
+}
+
+.chad-sponsor-slide-stage{
+    width:100%;
+}
+
+.chad-sponsor-controls{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    margin-top:7px;
+}
+
+.chad-sponsor-dot{
+    width:8px;
+    height:8px;
+    border:0;
+    border-radius:50%;
+    padding:0;
+    background:#c5cbd0;
+    cursor:pointer;
+}
+
+.chad-sponsor-dot.is-active{
+    background:#0D5F91;
+}
+
+.chad-sponsor-nav{
+    border:0;
+    background:transparent;
+    color:#687078;
+    font:900 15px/1 Arial,Helvetica,sans-serif;
+    cursor:pointer;
+    padding:2px 5px;
+}
+
+.chad-sponsor-nav:hover,
+.chad-sponsor-nav:focus{
+    color:#0D5F91;
+}
+
+.chad-sponsor-google-static{
+    margin-top:10px;
+    padding-top:8px;
+    border-top:1px solid #e5e8eb;
+}
+
+.chad-sponsor-google-static[hidden]{
+    display:none!important;
+}
+
+.chad-google-ad-label{
+    margin-bottom:4px;
+    color:#858b90;
+    font:700 9px/1 Arial,Helvetica,sans-serif;
+    letter-spacing:.6px;
+    text-align:center;
+}
+
 #chad-sponsor-slot.chad-sponsor-google{
     min-height:90px;display:block;border:1px dashed #cbd2d9;border-radius:12px;padding:8px;background:#fafafa
 }
@@ -290,15 +358,27 @@ body {
 
     <!-- CHADPDCHEE SPONSOR INVENTORY — ABOVE CHAT -->
     <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
-        <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
-            <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
-            <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
-            <div class="chad-sponsor-copy">
-                <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
-                <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+        <div class="chad-sponsor-slider">
+            <div id="chad-sponsor-slide-stage" class="chad-sponsor-slide-stage">
+                <a id="chad-sponsor-link" class="chad-sponsor-link" href="#" target="_blank" rel="sponsored noopener">
+                    <div class="chad-sponsor-badge" id="chad-sponsor-badge">ADVERTISE WITH CHAD</div>
+                    <img id="chad-sponsor-image" class="chad-sponsor-image" alt="" hidden>
+                    <div class="chad-sponsor-copy">
+                        <div id="chad-sponsor-headline" class="chad-sponsor-headline">Put your brand in Chad's shop.</div>
+                        <div id="chad-sponsor-body" class="chad-sponsor-body">Reach DIYers, homeowners, tradespeople and people who definitely own too many tools.</div>
+                    </div>
+                    <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
+                </a>
             </div>
-            <div id="chad-sponsor-cta" class="chad-sponsor-cta">Advertise with Chad →</div>
-        </a>
+
+            <div id="chad-sponsor-controls" class="chad-sponsor-controls" hidden>
+                <button id="chad-sponsor-prev" class="chad-sponsor-nav" type="button" aria-label="Previous sponsor">‹</button>
+                <div id="chad-sponsor-dots"></div>
+                <button id="chad-sponsor-next" class="chad-sponsor-nav" type="button" aria-label="Next sponsor">›</button>
+            </div>
+        </div>
+
+        <div id="chad-sponsor-google-static" class="chad-sponsor-google-static" hidden></div>
     </div>
 
     <!-- HIDDEN UNTIL FIRST QUESTION -->
@@ -2927,9 +3007,11 @@ body {
 
 
     /* =====================================================
-       CORE 20 — SPONSOR INVENTORY
-       Direct sponsor → Google hook → house ad.
+       SPONSOR INVENTORY — ROTATING DIRECT SPONSORS
+       Direct sponsors + house ad rotate automatically.
+       Google AdSense stays static and is never auto-refreshed.
        ===================================================== */
+
     const CHAD_SPONSOR_DEFAULT={
         mode:'house',
         campaign_id:'house-advertise-with-chad',
@@ -2943,7 +3025,12 @@ body {
         image_url:''
     };
 
-    let chadSponsorImpressionSent=false;
+    let chadSponsorDeck=[];
+    let chadSponsorIndex=0;
+    let chadSponsorTimer=null;
+    let chadSponsorRotationMs=8000;
+    let chadSponsorPaused=false;
+    let chadSponsorLastImpressionKey='';
 
     function chadSponsorMetadata(config){
         return {
@@ -2956,81 +3043,226 @@ body {
 
     function trackSponsorEvent(eventName,config){
         trackSimpleAnalyticsEvent(eventName,{
-            metadata:Object.assign({},chadAnalyticsAttribution(),chadSponsorMetadata(config))
+            metadata:Object.assign(
+                {},
+                chadAnalyticsAttribution(),
+                chadSponsorMetadata(config)
+            )
         });
     }
 
     function resetSponsorSlot(){
         const slot=document.getElementById('chad-sponsor-slot');
         const link=document.getElementById('chad-sponsor-link');
+
         if(!slot||!link)return;
 
-        const oldGoogle=slot.querySelector('.chad-google-ad-wrap');
-        if(oldGoogle)oldGoogle.remove();
-
-        slot.classList.remove('chad-sponsor-google');
+        slot.hidden=false;
         link.hidden=false;
+        slot.classList.remove('chad-sponsor-google');
     }
 
-    function renderHouseOrDirectSponsor(rawConfig){
+    function renderSponsorSlide(rawConfig){
         const slot=document.getElementById('chad-sponsor-slot');
         const link=document.getElementById('chad-sponsor-link');
+
         if(!slot||!link)return;
 
         resetSponsorSlot();
 
-        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,rawConfig||{});
+        const config=Object.assign(
+            {},
+            CHAD_SPONSOR_DEFAULT,
+            rawConfig||{}
+        );
 
         document.getElementById('chad-sponsor-badge').textContent=
-            config.badge||(config.mode==='direct'?'SPONSORED':'ADVERTISE WITH CHAD');
-        document.getElementById('chad-sponsor-headline').textContent=config.headline||'';
-        document.getElementById('chad-sponsor-body').textContent=config.body||'';
-        document.getElementById('chad-sponsor-cta').textContent=config.cta||'Learn more →';
+            config.badge||
+            (
+                config.mode==='direct'
+                    ? 'SPONSORED'
+                    : 'ADVERTISE WITH CHAD'
+            );
+
+        document.getElementById('chad-sponsor-headline').textContent=
+            config.headline||'';
+
+        document.getElementById('chad-sponsor-body').textContent=
+            config.body||'';
+
+        document.getElementById('chad-sponsor-cta').textContent=
+            config.cta||'Learn more →';
+
         link.href=config.url||'#';
 
         const image=document.getElementById('chad-sponsor-image');
+
         if(config.image_url){
             image.src=config.image_url;
-            image.alt=config.advertiser?(config.advertiser+' sponsor'):'Sponsor';
+            image.alt=config.advertiser
+                ? (config.advertiser+' sponsor')
+                : 'Sponsor';
             image.hidden=false;
         }else{
             image.removeAttribute('src');
             image.hidden=true;
         }
 
-        slot.hidden=false;
+        const impressionKey=[
+            config.campaign_id||'',
+            chadSponsorIndex
+        ].join(':');
 
-        if(!chadSponsorImpressionSent){
-            chadSponsorImpressionSent=true;
-            trackSponsorEvent('sponsor_impression',config);
+        if(chadSponsorLastImpressionKey!==impressionKey){
+            chadSponsorLastImpressionKey=impressionKey;
+            trackSponsorEvent(
+                'sponsor_impression',
+                config
+            );
         }
 
         link.onclick=function(){
-            trackSponsorEvent('sponsor_click',config);
+            trackSponsorEvent(
+                'sponsor_click',
+                config
+            );
         };
+
+        updateSponsorDots();
     }
 
-    function renderHouseSponsor(){
-        chadSponsorImpressionSent=false;
-        renderHouseOrDirectSponsor(Object.assign({},CHAD_SPONSOR_DEFAULT));
+    function updateSponsorDots(){
+        const dots=document.querySelectorAll(
+            '#chad-sponsor-dots .chad-sponsor-dot'
+        );
+
+        dots.forEach(function(dot,index){
+            dot.classList.toggle(
+                'is-active',
+                index===chadSponsorIndex
+            );
+            dot.setAttribute(
+                'aria-current',
+                index===chadSponsorIndex
+                    ? 'true'
+                    : 'false'
+            );
+        });
     }
 
-    function renderGoogleSponsor(google){
-        const slot=document.getElementById('chad-sponsor-slot');
-        const link=document.getElementById('chad-sponsor-link');
-        if(!slot||!link||!google||!google.client||!google.slot){
-            renderHouseSponsor();
+    function buildSponsorControls(){
+        const controls=document.getElementById(
+            'chad-sponsor-controls'
+        );
+        const dotsWrap=document.getElementById(
+            'chad-sponsor-dots'
+        );
+
+        if(!controls||!dotsWrap)return;
+
+        dotsWrap.innerHTML='';
+
+        if(chadSponsorDeck.length<=1){
+            controls.hidden=true;
             return;
         }
 
-        resetSponsorSlot();
-        link.hidden=true;
-        slot.hidden=false;
-        slot.classList.add('chad-sponsor-google');
+        controls.hidden=false;
 
-        const wrap=document.createElement('div');
-        wrap.className='chad-google-ad-wrap';
-        wrap.style.width='100%';
+        chadSponsorDeck.forEach(function(config,index){
+            const dot=document.createElement('button');
+
+            dot.type='button';
+            dot.className='chad-sponsor-dot';
+            dot.setAttribute(
+                'aria-label',
+                'Show sponsor '+(index+1)
+            );
+
+            dot.addEventListener(
+                'click',
+                function(){
+                    showSponsorIndex(index,true);
+                }
+            );
+
+            dotsWrap.appendChild(dot);
+        });
+
+        updateSponsorDots();
+    }
+
+    function showSponsorIndex(index,restartTimer){
+        if(!chadSponsorDeck.length)return;
+
+        const length=chadSponsorDeck.length;
+
+        chadSponsorIndex=
+            ((index%length)+length)%length;
+
+        renderSponsorSlide(
+            chadSponsorDeck[chadSponsorIndex]
+        );
+
+        if(restartTimer){
+            startSponsorRotation();
+        }
+    }
+
+    function nextSponsor(){
+        showSponsorIndex(
+            chadSponsorIndex+1,
+            false
+        );
+    }
+
+    function startSponsorRotation(){
+        stopSponsorRotation();
+
+        if(
+            chadSponsorDeck.length<=1||
+            chadSponsorPaused
+        ){
+            return;
+        }
+
+        chadSponsorTimer=setInterval(
+            function(){
+                if(
+                    !chadSponsorPaused&&
+                    document.visibilityState==='visible'
+                ){
+                    nextSponsor();
+                }
+            },
+            chadSponsorRotationMs
+        );
+    }
+
+    function stopSponsorRotation(){
+        if(chadSponsorTimer){
+            clearInterval(chadSponsorTimer);
+            chadSponsorTimer=null;
+        }
+    }
+
+    function renderStaticGoogleSponsor(google){
+        const wrap=document.getElementById(
+            'chad-sponsor-google-static'
+        );
+
+        if(!wrap)return;
+
+        wrap.innerHTML='';
+        wrap.hidden=true;
+
+        if(
+            !google||
+            !google.client||
+            !google.slot
+        ){
+            return;
+        }
 
         const label=document.createElement('div');
         label.className='chad-google-ad-label';
@@ -3039,91 +3271,277 @@ body {
         const ins=document.createElement('ins');
         ins.className='adsbygoogle';
         ins.style.display='block';
-        ins.setAttribute('data-ad-client',google.client);
-        ins.setAttribute('data-ad-slot',google.slot);
-        ins.setAttribute('data-ad-format',google.format||'auto');
-        ins.setAttribute('data-full-width-responsive',google.responsive===false?'false':'true');
+        ins.setAttribute(
+            'data-ad-client',
+            google.client
+        );
+        ins.setAttribute(
+            'data-ad-slot',
+            google.slot
+        );
+        ins.setAttribute(
+            'data-ad-format',
+            google.format||'auto'
+        );
+        ins.setAttribute(
+            'data-full-width-responsive',
+            google.responsive===false
+                ? 'false'
+                : 'true'
+        );
 
         wrap.appendChild(label);
         wrap.appendChild(ins);
-        slot.appendChild(wrap);
+        wrap.hidden=false;
 
         try{
-            (window.adsbygoogle=window.adsbygoogle||[]).push({});
+            (
+                window.adsbygoogle=
+                window.adsbygoogle||[]
+            ).push({});
 
-            const googleConfig={
-                campaign_id:'google-adsense-fallback',
-                advertiser:'Google AdSense',
-                placement:'above_chat',
-                mode:'google'
-            };
-
-            if(!chadSponsorImpressionSent){
-                chadSponsorImpressionSent=true;
-                trackSponsorEvent('sponsor_impression',googleConfig);
-            }
-
-            /*
-             * AdSense marks an ad unit data-ad-status="unfilled" when
-             * no ad is available. If that happens, quietly restore the
-             * Chad house ad. We intentionally do not attempt to track
-             * AdSense clicks ourselves.
-             */
-            const observer=new MutationObserver(function(){
-                const status=ins.getAttribute('data-ad-status');
-                if(status==='unfilled'){
-                    observer.disconnect();
-                    renderHouseSponsor();
-                }else if(status==='filled'){
-                    observer.disconnect();
+            trackSponsorEvent(
+                'sponsor_impression',
+                {
+                    campaign_id:'google-adsense-static',
+                    advertiser:'Google AdSense',
+                    placement:'above_chat',
+                    mode:'google'
                 }
-            });
+            );
 
-            observer.observe(ins,{attributes:true,attributeFilter:['data-ad-status']});
+            const observer=
+                new MutationObserver(function(){
+                    const status=
+                        ins.getAttribute(
+                            'data-ad-status'
+                        );
+
+                    if(status==='unfilled'){
+                        observer.disconnect();
+                        wrap.hidden=true;
+                    }else if(status==='filled'){
+                        observer.disconnect();
+                    }
+                });
+
+            observer.observe(
+                ins,
+                {
+                    attributes:true,
+                    attributeFilter:[
+                        'data-ad-status'
+                    ]
+                }
+            );
 
             setTimeout(function(){
-                if(ins.getAttribute('data-ad-status')==='unfilled'){
+                if(
+                    ins.getAttribute(
+                        'data-ad-status'
+                    )==='unfilled'
+                ){
                     observer.disconnect();
-                    renderHouseSponsor();
+                    wrap.hidden=true;
                 }
             },7000);
 
         }catch(error){
-            console.warn('AdSense sponsor slot failed:',error);
-            renderHouseSponsor();
+            console.warn(
+                'AdSense sponsor slot failed:',
+                error
+            );
+            wrap.hidden=true;
         }
+    }
+
+    function initSponsorInteractions(){
+        const slot=document.getElementById(
+            'chad-sponsor-slot'
+        );
+        const prev=document.getElementById(
+            'chad-sponsor-prev'
+        );
+        const next=document.getElementById(
+            'chad-sponsor-next'
+        );
+
+        prev?.addEventListener(
+            'click',
+            function(){
+                showSponsorIndex(
+                    chadSponsorIndex-1,
+                    true
+                );
+            }
+        );
+
+        next?.addEventListener(
+            'click',
+            function(){
+                showSponsorIndex(
+                    chadSponsorIndex+1,
+                    true
+                );
+            }
+        );
+
+        slot?.addEventListener(
+            'mouseenter',
+            function(){
+                chadSponsorPaused=true;
+                stopSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'mouseleave',
+            function(){
+                chadSponsorPaused=false;
+                startSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'focusin',
+            function(){
+                chadSponsorPaused=true;
+                stopSponsorRotation();
+            }
+        );
+
+        slot?.addEventListener(
+            'focusout',
+            function(){
+                chadSponsorPaused=false;
+                startSponsorRotation();
+            }
+        );
+
+        document.addEventListener(
+            'visibilitychange',
+            function(){
+                if(document.visibilityState==='visible'){
+                    startSponsorRotation();
+                }else{
+                    stopSponsorRotation();
+                }
+            }
+        );
     }
 
     async function loadChadSponsor(){
-        chadSponsorImpressionSent=false;
-
         try{
-            const response=await fetch('/wp-json/chadpgt/v1/sponsor/current',{
-                method:'GET',
-                headers:{'Accept':'application/json'},
-                cache:'no-store'
-            });
-
-            const data=await response.json().catch(()=>null);
-
-            if(response.ok&&data&&data.success){
-                if(data.source==='direct'&&data.sponsor){
-                    renderHouseOrDirectSponsor(data.sponsor);
-                    return;
+            const response=await fetch(
+                '/wp-json/chadpgt/v1/sponsor/current',
+                {
+                    method:'GET',
+                    headers:{
+                        'Accept':'application/json'
+                    },
+                    cache:'no-store'
                 }
+            );
 
-                if(data.source==='google'&&data.google){
-                    renderGoogleSponsor(data.google);
-                    return;
-                }
+            const data=
+                await response
+                    .json()
+                    .catch(()=>null);
+
+            const directSponsors=
+                (
+                    response.ok&&
+                    data&&
+                    data.success&&
+                    Array.isArray(data.sponsors)
+                )
+                    ? data.sponsors
+                    : [];
+
+            chadSponsorDeck=
+                directSponsors.map(function(sponsor){
+                    return Object.assign(
+                        {},
+                        sponsor,
+                        {
+                            mode:'direct',
+                            badge:
+                                sponsor.badge||
+                                'SPONSORED'
+                        }
+                    );
+                });
+
+            /*
+             * Always include our own house ad as the final slide.
+             * It sells unused inventory without slowing anything down.
+             */
+            if(
+                !data||
+                data.include_house!==false
+            ){
+                chadSponsorDeck.push(
+                    Object.assign(
+                        {},
+                        CHAD_SPONSOR_DEFAULT
+                    )
+                );
             }
-        }catch(error){
-            console.warn('Sponsor loader failed:',error);
-        }
 
-        renderHouseSponsor();
+            chadSponsorRotationMs=
+                Math.max(
+                    5000,
+                    Math.min(
+                        20000,
+                        Number(
+                            data&&
+                            data.rotation_ms
+                        )||8000
+                    )
+                );
+
+            chadSponsorIndex=0;
+            chadSponsorLastImpressionKey='';
+
+            buildSponsorControls();
+
+            if(chadSponsorDeck.length){
+                renderSponsorSlide(
+                    chadSponsorDeck[0]
+                );
+            }
+
+            renderStaticGoogleSponsor(
+                data&&data.google
+                    ? data.google
+                    : null
+            );
+
+            startSponsorRotation();
+
+        }catch(error){
+            console.warn(
+                'Sponsor loader failed:',
+                error
+            );
+
+            chadSponsorDeck=[
+                Object.assign(
+                    {},
+                    CHAD_SPONSOR_DEFAULT
+                )
+            ];
+
+            chadSponsorIndex=0;
+
+            buildSponsorControls();
+            renderSponsorSlide(
+                chadSponsorDeck[0]
+            );
+        }
     }
 
+    initSponsorInteractions();
     trackSimpleAnalyticsEvent('page_view');
     loadChadSponsor();
 
@@ -5559,3 +5977,4 @@ loadMe();
 
 </body>
 </html>
+
