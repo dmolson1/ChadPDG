@@ -146,6 +146,17 @@ body {
 .chad-sponsor-headline{font:900 16px/1.2 Arial,Helvetica,sans-serif;color:#111}
 .chad-sponsor-body{margin-top:4px;color:#5a646d;font:500 12px/1.4 Arial,Helvetica,sans-serif}
 .chad-sponsor-cta{flex:0 0 auto;color:#0D5F91;font:900 12px/1.2 Arial,Helvetica,sans-serif;white-space:nowrap}
+.chad-google-ad-label{
+    margin:0 0 5px;
+    color:#818b93;
+    font:800 9px/1 Arial,Helvetica,sans-serif;
+    letter-spacing:.8px;
+    text-align:center
+}
+.chad-google-ad-wrap{
+    width:100%;
+    min-height:70px
+}
 #chad-sponsor-slot.chad-sponsor-google{
     min-height:90px;display:block;border:1px dashed #cbd2d9;border-radius:12px;padding:8px;background:#fafafa
 }
@@ -2873,38 +2884,26 @@ body {
         });
     }
 
-    function renderChadSponsor(){
+    function resetSponsorSlot(){
         const slot=document.getElementById('chad-sponsor-slot');
         const link=document.getElementById('chad-sponsor-link');
         if(!slot||!link)return;
 
-        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,(window.CHADPDG_SPONSOR_CONFIG||{}));
+        const oldGoogle=slot.querySelector('.chad-google-ad-wrap');
+        if(oldGoogle)oldGoogle.remove();
 
-        if(config.mode==='off'){
-            slot.hidden=true;
-            return;
-        }
+        slot.classList.remove('chad-sponsor-google');
+        link.hidden=false;
+    }
 
-        if(config.mode==='google'&&typeof window.CHADPDG_RENDER_GOOGLE_SPONSOR==='function'){
-            slot.hidden=false;
-            slot.classList.add('chad-sponsor-google');
-            link.hidden=true;
-            try{
-                const rendered=window.CHADPDG_RENDER_GOOGLE_SPONSOR(slot);
-                if(rendered!==false){
-                    if(!chadSponsorImpressionSent){
-                        chadSponsorImpressionSent=true;
-                        trackSponsorEvent('sponsor_impression',config);
-                    }
-                    return;
-                }
-            }catch(error){
-                console.warn('Chad sponsor Google fallback failed:',error);
-            }
-            slot.classList.remove('chad-sponsor-google');
-            link.hidden=false;
-            config.mode='house';
-        }
+    function renderHouseOrDirectSponsor(rawConfig){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link)return;
+
+        resetSponsorSlot();
+
+        const config=Object.assign({},CHAD_SPONSOR_DEFAULT,rawConfig||{});
 
         document.getElementById('chad-sponsor-badge').textContent=
             config.badge||(config.mode==='direct'?'SPONSORED':'ADVERTISE WITH CHAD');
@@ -2935,7 +2934,93 @@ body {
         };
     }
 
+    function renderHouseSponsor(){
+        chadSponsorImpressionSent=false;
+        renderHouseOrDirectSponsor(Object.assign({},CHAD_SPONSOR_DEFAULT));
+    }
+
+    function renderGoogleSponsor(google){
+        const slot=document.getElementById('chad-sponsor-slot');
+        const link=document.getElementById('chad-sponsor-link');
+        if(!slot||!link||!google||!google.client||!google.slot){
+            renderHouseSponsor();
+            return;
+        }
+
+        resetSponsorSlot();
+        link.hidden=true;
+        slot.hidden=false;
+        slot.classList.add('chad-sponsor-google');
+
+        const wrap=document.createElement('div');
+        wrap.className='chad-google-ad-wrap';
+        wrap.style.width='100%';
+
+        const label=document.createElement('div');
+        label.className='chad-google-ad-label';
+        label.textContent='ADVERTISEMENT';
+
+        const ins=document.createElement('ins');
+        ins.className='adsbygoogle';
+        ins.style.display='block';
+        ins.setAttribute('data-ad-client',google.client);
+        ins.setAttribute('data-ad-slot',google.slot);
+        ins.setAttribute('data-ad-format',google.format||'auto');
+        ins.setAttribute('data-full-width-responsive',google.responsive===false?'false':'true');
+
+        wrap.appendChild(label);
+        wrap.appendChild(ins);
+        slot.appendChild(wrap);
+
+        try{
+            (window.adsbygoogle=window.adsbygoogle||[]).push({});
+
+            const googleConfig={
+                campaign_id:'google-adsense-fallback',
+                advertiser:'Google AdSense',
+                placement:'above_chat',
+                mode:'google'
+            };
+
+            if(!chadSponsorImpressionSent){
+                chadSponsorImpressionSent=true;
+                trackSponsorEvent('sponsor_impression',googleConfig);
+            }
+
+            /*
+             * AdSense marks an ad unit data-ad-status="unfilled" when
+             * no ad is available. If that happens, quietly restore the
+             * Chad house ad. We intentionally do not attempt to track
+             * AdSense clicks ourselves.
+             */
+            const observer=new MutationObserver(function(){
+                const status=ins.getAttribute('data-ad-status');
+                if(status==='unfilled'){
+                    observer.disconnect();
+                    renderHouseSponsor();
+                }else if(status==='filled'){
+                    observer.disconnect();
+                }
+            });
+
+            observer.observe(ins,{attributes:true,attributeFilter:['data-ad-status']});
+
+            setTimeout(function(){
+                if(ins.getAttribute('data-ad-status')==='unfilled'){
+                    observer.disconnect();
+                    renderHouseSponsor();
+                }
+            },7000);
+
+        }catch(error){
+            console.warn('AdSense sponsor slot failed:',error);
+            renderHouseSponsor();
+        }
+    }
+
     async function loadChadSponsor(){
+        chadSponsorImpressionSent=false;
+
         try{
             const response=await fetch('/wp-json/chadpgt/v1/sponsor/current',{
                 method:'GET',
@@ -2945,16 +3030,22 @@ body {
 
             const data=await response.json().catch(()=>null);
 
-            if(response.ok&&data&&data.success&&data.sponsor){
-                window.CHADPDG_SPONSOR_CONFIG=data.sponsor;
-            }else{
-                window.CHADPDG_SPONSOR_CONFIG=Object.assign({},CHAD_SPONSOR_DEFAULT);
+            if(response.ok&&data&&data.success){
+                if(data.source==='direct'&&data.sponsor){
+                    renderHouseOrDirectSponsor(data.sponsor);
+                    return;
+                }
+
+                if(data.source==='google'&&data.google){
+                    renderGoogleSponsor(data.google);
+                    return;
+                }
             }
         }catch(error){
-            window.CHADPDG_SPONSOR_CONFIG=Object.assign({},CHAD_SPONSOR_DEFAULT);
+            console.warn('Sponsor loader failed:',error);
         }
 
-        renderChadSponsor();
+        renderHouseSponsor();
     }
 
     trackSimpleAnalyticsEvent('page_view');
