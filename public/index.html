@@ -742,6 +742,24 @@ body {
     margin-bottom: 10px;
 }
 
+.chad-affiliate-promo {
+    display: inline-block;
+    margin: 0 0 10px 0;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #f1f7fb;
+    color: #0D5F91;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.chad-affiliate-disclosure {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #777;
+}
+
 
 /* =========================================================
    AMAZON BUTTON
@@ -3451,7 +3469,7 @@ body {
             '<div class="chad-shopping-product">' +
 
             '<div class="chad-shopping-product-label">' +
-            'CHAD’S PICK' +
+            'CHAD’S AFFILIATE PICKS' +
             '</div>' +
 
             '<div class="chad-shopping-product-name">' +
@@ -3852,183 +3870,179 @@ body {
        ===================================================== */
 
     function buildProducts(
-        products
+        products,
+        affiliateOffers,
+        affiliateDisclosure
     ) {
 
+        const amazonProducts =
+            Array.isArray(products)
+                ? products
+                : [];
+
+        const partnerOffers =
+            Array.isArray(affiliateOffers)
+                ? affiliateOffers
+                : [];
+
         if (
-            !products ||
-            !products.length
+            !amazonProducts.length &&
+            !partnerOffers.length
         ) {
-
             return '';
-
         }
 
-
         let html =
-
             '<div class="chad-products">' +
-
             '<div class="chad-products-title">' +
-            'CHAD’S PICK' +
+            'CHAD’S AFFILIATE PICKS' +
             '</div>';
 
+        let optionNumber = 1;
 
-        products.forEach(
-            function (
-                product,
-                index
-            ) {
+        partnerOffers.forEach(
+            function (offer) {
+
+                if (
+                    !offer ||
+                    !offer.partner ||
+                    !offer.url
+                ) {
+                    return;
+                }
+
+                html +=
+                    '<div class="chad-product-card">' +
+                    '<div class="chad-product-info">' +
+                    '<div class="chad-product-option">' +
+                    'AFFILIATE PICK ' +
+                    optionNumber +
+                    '</div>' +
+                    '<div class="chad-product-name">' +
+                    escapeHtml(offer.partner) +
+                    '</div>' +
+                    '<div class="chad-product-description">' +
+                    escapeHtml(offer.description || '') +
+                    '</div>';
+
+                if (offer.promo_text) {
+                    html +=
+                        '<div class="chad-affiliate-promo">' +
+                        escapeHtml(offer.promo_text) +
+                        '</div>';
+                }
+
+                html +=
+                    '<a class="chad-product-button chad-partner-affiliate-button" ' +
+                    'href="' +
+                    escapeHtml(offer.url) +
+                    '" ' +
+                    'target="_blank" ' +
+                    'rel="noopener sponsored" ' +
+                    'data-chad-partner="' +
+                    escapeHtml(offer.partner) +
+                    '">' +
+                    escapeHtml(
+                        offer.button_label ||
+                        ('SHOP ' + offer.partner)
+                    ) +
+                    '</a>' +
+                    '</div>' +
+                    '</div>';
+
+                optionNumber += 1;
+            }
+        );
+
+        amazonProducts.forEach(
+            function (product) {
 
                 if (!product) {
                     return;
                 }
 
-
                 const name =
                     product.name ||
                     'Recommended product';
-
 
                 const description =
                     product.description ||
                     '';
 
-
                 const asin =
                     product.asin ||
                     '';
-
 
                 const amazonUrl =
                     product.source_url ||
                     '';
 
-
                 if (
                     !asin ||
                     !amazonUrl
                 ) {
-
                     return;
-
                 }
 
-
                 html +=
-
                     '<div class="chad-product-card">';
-
 
                 if (
                     product.image_url
                 ) {
-
                     html +=
-
                         '<div class="chad-product-image">' +
-
                         '<img src="' +
-
-                        escapeHtml(
-                            product.image_url
-                        ) +
-
+                        escapeHtml(product.image_url) +
                         '" alt="' +
-
-                        escapeHtml(
-                            name
-                        ) +
-
+                        escapeHtml(name) +
                         '" loading="lazy">' +
-
                         '</div>';
-
                 }
 
-
                 html +=
-
                     '<div class="chad-product-info">' +
-
-
                     '<div class="chad-product-option">' +
-
-                    'OPTION ' +
-
-                    (index + 1) +
-
+                    'AFFILIATE PICK ' +
+                    optionNumber +
                     '</div>' +
-
-
                     '<div class="chad-product-name">' +
-
-                    escapeHtml(
-                        name
-                    ) +
-
+                    escapeHtml(name) +
                     '</div>' +
-
-
                     '<div class="chad-product-description">' +
-
-                    escapeHtml(
-                        description
-                    ) +
-
+                    escapeHtml(description) +
                     '</div>' +
-
-
                     '<a class="chad-product-button" ' +
-
                     'href="' +
-
-                    escapeHtml(
-                        amazonUrl
-                    ) +
-
+                    escapeHtml(amazonUrl) +
                     '" ' +
-
                     'target="_blank" ' +
-
                     'rel="noopener sponsored" ' +
-
                     'data-chad-asin="' +
-
-                    escapeHtml(
-                        asin
-                    ) +
-
+                    escapeHtml(asin) +
                     '" ' +
-
                     'data-chad-product="' +
-
-                    escapeHtml(
-                        name
-                    ) +
-
+                    escapeHtml(name) +
                     '">' +
-
                     'VIEW ON AMAZON' +
-
                     '</a>' +
-
-
                     '</div>' +
-
-
                     '</div>';
 
+                optionNumber += 1;
             }
         );
 
-
         html +=
+            '<div class="chad-affiliate-disclosure">' +
+            escapeHtml(
+                affiliateDisclosure ||
+                'Affiliate disclosure: ChadPDChee may earn a commission from qualifying purchases made through these links, at no extra cost to you.'
+            ) +
+            '</div>' +
             '</div>';
 
-
         return html;
-
     }
 
 
@@ -4223,7 +4237,9 @@ body {
 
         afterHtml +=
             buildProducts(
-                data.products || []
+                data.products || [],
+                data.affiliate_offers || [],
+                data.affiliate_disclosure || ''
             );
 
         afterHtml +=
