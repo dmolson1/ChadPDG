@@ -7,7 +7,34 @@
 <title>ChadPDChee Analytics</title>
 <style>
 :root{--blue:#1677B8;--dark:#0b1720;--muted:#667985;--line:#dbe5ec;--bg:#f5f8fa;--card:#fff;--yellow:#f4cc1d}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:#111}.wrap{max-width:1180px;margin:auto;padding:20px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}.logo{width:min(520px,100%);height:auto}.auth{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.auth input{min-width:260px;padding:10px 12px;border:1px solid #b8c9d4;border-radius:8px}.btn{border:0;border-radius:8px;padding:11px 14px;font-weight:800;cursor:pointer;background:var(--blue);color:#fff}.btn.secondary{background:#dfe8ee;color:#173545}.status{font-size:13px;font-weight:700;margin:12px 0}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0}.toolbar select{padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff}.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.card .k{font-size:12px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.5px}.card .v{font-size:30px;font-weight:900;margin-top:7px;color:var(--dark)}.card .s{font-size:12px;color:var(--muted);margin-top:4px}.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}.section h2{font-size:18px;margin:0 0 14px}.chart{display:grid;grid-template-columns:repeat(30,minmax(8px,1fr));gap:4px;height:210px;align-items:end;border-bottom:1px solid #ccd8df;padding:0 0 6px}.barwrap{height:100%;display:flex;align-items:end;gap:1px;justify-content:center}.bar{width:42%;min-height:2px;border-radius:3px 3px 0 0;background:var(--blue)}.bar.q{background:var(--yellow)}.legend{display:flex;gap:16px;font-size:12px;margin-top:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--blue);margin-right:5px}.dot.q{background:var(--yellow)}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #edf1f4}th{font-size:11px;text-transform:uppercase;color:var(--muted)}.empty{color:var(--muted);font-style:italic}.today{background:#0d5f91;color:#fff;border-radius:14px;padding:16px;margin-top:16px}.today strong{font-size:20px}.today-grid{display:flex;gap:24px;flex-wrap:wrap;margin-top:10px}.today-grid div{font-size:13px}.today-grid b{font-size:22px;display:block}.privacy{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.45}@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.chart{overflow:hidden}.top{align-items:flex-start}}@media(max-width:520px){.wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}.card .v{font-size:24px}.auth input{min-width:100%;width:100%}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:#111}.wrap{max-width:1180px;margin:auto;padding:20px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}.logo{width:min(520px,100%);height:auto}.auth{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.auth input{min-width:260px;padding:10px 12px;border:1px solid #b8c9d4;border-radius:8px}.btn{border:0;border-radius:8px;padding:11px 14px;font-weight:800;cursor:pointer;background:var(--blue);color:#fff}.btn.secondary{background:#dfe8ee;color:#173545}.status{font-size:13px;font-weight:700;margin:12px 0}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0}.toolbar select{padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff}.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.card .k{font-size:12px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.5px}.card .v{font-size:30px;font-weight:900;margin-top:7px;color:var(--dark)}.card .s{font-size:12px;color:var(--muted);margin-top:4px}.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}.section h2{font-size:18px;margin:0 0 14px}.chart{display:grid;grid-template-columns:repeat(30,minmax(8px,1fr));gap:4px;height:210px;align-items:end;border-bottom:1px solid #ccd8df;padding:0 0 6px}.barwrap{height:100%;display:flex;align-items:end;gap:1px;justify-content:center}.bar{width:42%;min-height:2px;border-radius:3px 3px 0 0;background:var(--blue)}.bar.q{background:var(--yellow)}.legend{display:flex;gap:16px;font-size:12px;margin-top:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--blue);margin-right:5px}.dot.q{background:var(--yellow)}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #edf1f4}th{font-size:11px;text-transform:uppercase;color:var(--muted)}.empty{color:var(--muted);font-style:italic}.today{background:#0d5f91;color:#fff;border-radius:14px;padding:16px;margin-top:16px}.today strong{font-size:20px}.today-grid{display:flex;gap:24px;flex-wrap:wrap;margin-top:10px}.today-grid div{font-size:13px}.today-grid b{font-size:22px;display:block}.privacy{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.45}
+.costgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.costcard{background:#f7fbff;border:1px solid #cfe2f3;border-radius:12px;padding:14px}
+.costcard .k{font-size:11px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.45px}
+.costcard .v{font-size:24px;font-weight:900;margin-top:7px;color:var(--dark)}
+.costcard .s{font-size:12px;color:var(--muted);margin-top:4px}
+.barrow{display:grid;grid-template-columns:minmax(145px,1fr) 3fr 58px;gap:10px;align-items:center;margin:10px 0;font-size:13px}
+.bartrack{height:13px;background:#edf1f5;border-radius:999px;overflow:hidden}
+.barfill{height:100%;background:var(--blue);border-radius:999px}
+.rank{font-weight:900;color:var(--blue)}
+.money-section{border:2px solid #c7dfeF;background:linear-gradient(180deg,#fff 0%,#f7fbff 100%)}
+.money-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.money-head p{margin:4px 0 0;color:var(--muted);font-size:13px;max-width:760px;line-height:1.45}
+.money-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+.money-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+.money-card .k{font-size:11px;text-transform:uppercase;font-weight:900;color:var(--muted);letter-spacing:.45px}
+.money-card .v{font-size:25px;font-weight:900;margin-top:7px;color:var(--dark)}
+.money-card .s{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35}
+.assumptions{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.assumptions h3{font-size:14px;margin:0 0 10px}
+.assumption-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+.assumption{display:flex;flex-direction:column;gap:5px}
+.assumption label{font-size:11px;font-weight:900;text-transform:uppercase;color:var(--muted)}
+.assumption input{width:100%;padding:9px 10px;border:1px solid #b8c9d4;border-radius:8px;background:#fff;font-weight:700}
+.money-note{margin-top:12px;font-size:11px;line-height:1.45;color:var(--muted)}
+.good{color:#147a43!important}.bad{color:#b42318!important}
+@media(max-width:1050px){.costgrid{grid-template-columns:repeat(3,1fr)}.money-grid{grid-template-columns:repeat(2,1fr)}.assumption-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.chart{overflow:hidden}.top{align-items:flex-start}}@media(max-width:520px){.wrap{padding:10px}.cards{grid-template-columns:1fr 1fr}.costgrid,.money-grid,.assumption-grid{grid-template-columns:1fr}.barrow{grid-template-columns:1fr 2fr 48px}.card .v{font-size:24px}.auth input{min-width:100%;width:100%}}
 </style>
 </head>
 <body>
@@ -75,6 +102,44 @@
       <table><thead><tr><th>OpenAI Request Type</th><th>Requests</th><th>Tokens</th><th>Est. Cost USD</th></tr></thead><tbody id="costKinds"></tbody></table>
     </div>
 
+    <div class="section money-section">
+      <div class="money-head">
+        <div>
+          <h2>Monetization Intelligence</h2>
+          <p>Turns Chad's real usage into break-even targets for rewarded ads and a working Pro subscription model. Change the assumptions below any time — they are saved only in this browser.</p>
+        </div>
+      </div>
+
+      <div class="money-grid">
+        <div class="money-card"><div class="k">Projected Monthly Questions</div><div class="v" id="monthlyQuestions">0</div><div class="s">at the selected-period run rate</div></div>
+        <div class="money-card"><div class="k">Projected Monthly AI Cost</div><div class="v" id="monthlyAiCost">$0.00</div><div class="s">USD, token estimate at current run rate</div></div>
+        <div class="money-card"><div class="k">Break-even Rewarded Ad eCPM</div><div class="v" id="breakEvenEcpm">$0.00</div><div class="s" id="rewardBundleLabel">to fund 5 extra questions</div></div>
+        <div class="money-card"><div class="k">Rewarded Ad Margin</div><div class="v" id="rewardMargin">$0.0000</div><div class="s" id="rewardMarginNote">per completed reward at assumed eCPM</div></div>
+
+        <div class="money-card"><div class="k">Pro Net After PayPal</div><div class="v" id="proNet">$0.00</div><div class="s">CAD per subscriber before AI cost</div></div>
+        <div class="money-card"><div class="k">Est. Pro AI Cost</div><div class="v" id="proAiCost">$0.00</div><div class="s" id="proUsageLabel">CAD at assumed monthly usage</div></div>
+        <div class="money-card"><div class="k">Est. Profit / Pro User</div><div class="v" id="proProfit">$0.00</div><div class="s">CAD before hosting, tax and other overhead</div></div>
+        <div class="money-card"><div class="k">Est. Pro Gross Margin</div><div class="v" id="proMarginPct">0%</div><div class="s">after PayPal + estimated AI usage only</div></div>
+      </div>
+
+      <div class="assumptions">
+        <h3>Editable assumptions</h3>
+        <div class="assumption-grid">
+          <div class="assumption"><label for="assumeRewardQuestions">Questions / rewarded ad</label><input id="assumeRewardQuestions" type="number" min="1" step="1" value="5"></div>
+          <div class="assumption"><label for="assumeAdEcpm">Rewarded ad eCPM (USD)</label><input id="assumeAdEcpm" type="number" min="0" step="0.01" value="10.00"></div>
+          <div class="assumption"><label for="assumeProPrice">Pro price (CAD/mo)</label><input id="assumeProPrice" type="number" min="0" step="0.01" value="4.99"></div>
+          <div class="assumption"><label for="assumeProQuestions">Pro questions / month</label><input id="assumeProQuestions" type="number" min="0" step="1" value="1000"></div>
+          <div class="assumption"><label for="assumeCadUsd">1 CAD in USD</label><input id="assumeCadUsd" type="number" min="0.01" step="0.001" value="0.72"></div>
+          <div class="assumption"><label for="assumePayPalPct">PayPal fee (%)</label><input id="assumePayPalPct" type="number" min="0" step="0.01" value="2.90"></div>
+          <div class="assumption"><label for="assumePayPalFixed">PayPal fixed fee (CAD)</label><input id="assumePayPalFixed" type="number" min="0" step="0.01" value="0.30"></div>
+        </div>
+      </div>
+
+      <div class="money-note">
+        These are planning estimates, not accounting figures. AI cost currently uses Chad's recorded token telemetry; web-search/tool fees, DigitalOcean hosting, Resend, taxes, chargebacks and other business costs are not included. Break-even ad eCPM therefore represents the token-cost floor, not the final all-in break-even point.
+      </div>
+    </div>
+
     <div class="two">
       <div class="section">
         <h2>Conversation Types</h2>
@@ -113,6 +178,96 @@ if(saved) keyInput.value=saved;
 const n=v=>Number(v||0).toLocaleString();
 function setText(id,value){document.getElementById(id).textContent=value;}
 function esc(v){const d=document.createElement('div');d.textContent=String(v||'');return d.innerHTML;}
+const MONEY_STORAGE='chadpdchee_monetization_assumptions_v1';
+let lastAnalyticsData=null;
+const moneyDefaults={
+  rewardQuestions:5,
+  adEcpm:10.00,
+  proPrice:4.99,
+  proQuestions:1000,
+  cadUsd:0.72,
+  paypalPct:2.90,
+  paypalFixed:0.30
+};
+function moneyNumber(id,fallback){
+  const el=document.getElementById(id);
+  const v=Number(el&&el.value);
+  return Number.isFinite(v)&&v>=0?v:fallback;
+}
+function loadMoneyAssumptions(){
+  let savedMoney={};
+  try{savedMoney=JSON.parse(localStorage.getItem(MONEY_STORAGE)||'{}')||{};}catch(_){}
+  const vals={...moneyDefaults,...savedMoney};
+  document.getElementById('assumeRewardQuestions').value=vals.rewardQuestions;
+  document.getElementById('assumeAdEcpm').value=vals.adEcpm;
+  document.getElementById('assumeProPrice').value=vals.proPrice;
+  document.getElementById('assumeProQuestions').value=vals.proQuestions;
+  document.getElementById('assumeCadUsd').value=vals.cadUsd;
+  document.getElementById('assumePayPalPct').value=vals.paypalPct;
+  document.getElementById('assumePayPalFixed').value=vals.paypalFixed;
+}
+function saveMoneyAssumptions(){
+  const vals={
+    rewardQuestions:moneyNumber('assumeRewardQuestions',moneyDefaults.rewardQuestions),
+    adEcpm:moneyNumber('assumeAdEcpm',moneyDefaults.adEcpm),
+    proPrice:moneyNumber('assumeProPrice',moneyDefaults.proPrice),
+    proQuestions:moneyNumber('assumeProQuestions',moneyDefaults.proQuestions),
+    cadUsd:Math.max(0.01,moneyNumber('assumeCadUsd',moneyDefaults.cadUsd)),
+    paypalPct:moneyNumber('assumePayPalPct',moneyDefaults.paypalPct),
+    paypalFixed:moneyNumber('assumePayPalFixed',moneyDefaults.paypalFixed)
+  };
+  localStorage.setItem(MONEY_STORAGE,JSON.stringify(vals));
+  return vals;
+}
+function renderMonetization(data){
+  if(!data)return;
+  const vals=saveMoneyAssumptions();
+  const summary=data.summary||{};
+  const costs=data.openai_costs||{};
+  const selectedDays=Math.max(1,Number(data.days||days.value||30));
+  const questions=Number(summary.questions||0);
+  const tokenCostUsd=Number(costs.estimated_token_cost_usd||0);
+  const costPerQuestionUsd=questions>0?tokenCostUsd/questions:0;
+
+  const projectedMonthlyQuestions=(questions/selectedDays)*30.4375;
+  const projectedMonthlyAiUsd=(tokenCostUsd/selectedDays)*30.4375;
+
+  const rewardBundleCostUsd=costPerQuestionUsd*vals.rewardQuestions;
+  const breakEvenEcpmUsd=rewardBundleCostUsd*1000;
+  const assumedRevenuePerRewardUsd=vals.adEcpm/1000;
+  const rewardMarginUsd=assumedRevenuePerRewardUsd-rewardBundleCostUsd;
+
+  const paypalFeeCad=(vals.proPrice*(vals.paypalPct/100))+vals.paypalFixed;
+  const proNetCad=Math.max(0,vals.proPrice-paypalFeeCad);
+  const proAiUsd=costPerQuestionUsd*vals.proQuestions;
+  const proAiCad=vals.cadUsd>0?proAiUsd/vals.cadUsd:0;
+  const proProfitCad=proNetCad-proAiCad;
+  const proMarginPct=proNetCad>0?(proProfitCad/proNetCad)*100:0;
+
+  setText('monthlyQuestions',Math.round(projectedMonthlyQuestions).toLocaleString());
+  setText('monthlyAiCost','$'+projectedMonthlyAiUsd.toFixed(4));
+  setText('breakEvenEcpm','$'+breakEvenEcpmUsd.toFixed(2));
+  setText('rewardBundleLabel','token-cost floor to fund '+Math.round(vals.rewardQuestions)+' extra questions');
+  setText('rewardMargin',(rewardMarginUsd>=0?'+':'')+'$'+rewardMarginUsd.toFixed(4));
+  setText('rewardMarginNote','per completed reward at $'+vals.adEcpm.toFixed(2)+' assumed eCPM');
+  setText('proNet','$'+proNetCad.toFixed(2));
+  setText('proAiCost','$'+proAiCad.toFixed(2));
+  setText('proUsageLabel','CAD at '+Math.round(vals.proQuestions).toLocaleString()+' questions/month');
+  setText('proProfit',(proProfitCad>=0?'+':'-')+'$'+Math.abs(proProfitCad).toFixed(2));
+  setText('proMarginPct',proMarginPct.toFixed(1)+'%');
+
+  const rewardEl=document.getElementById('rewardMargin');
+  const profitEl=document.getElementById('proProfit');
+  const marginEl=document.getElementById('proMarginPct');
+  rewardEl.classList.toggle('good',rewardMarginUsd>=0);rewardEl.classList.toggle('bad',rewardMarginUsd<0);
+  profitEl.classList.toggle('good',proProfitCad>=0);profitEl.classList.toggle('bad',proProfitCad<0);
+  marginEl.classList.toggle('good',proProfitCad>=0);marginEl.classList.toggle('bad',proProfitCad<0);
+}
+loadMoneyAssumptions();
+['assumeRewardQuestions','assumeAdEcpm','assumeProPrice','assumeProQuestions','assumeCadUsd','assumePayPalPct','assumePayPalFixed'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>renderMonetization(lastAnalyticsData));
+});
+
 async function load(){
  const key=keyInput.value.trim()||sessionStorage.getItem(STORAGE)||'';
  if(!key){status.textContent='Enter your developer analytics key first.';content.hidden=true;return;}
@@ -162,6 +317,8 @@ async function load(){
     '<tr><td><span class="rank">'+(i+1)+'</span></td><td>'+esc(r.topic||'Unclassified')+'</td><td>'+n(r.questions)+'</td></tr>'
   ).join('') || '<tr><td colspan="3" class="empty">New questions will begin populating top topics.</td></tr>';
 
+  lastAnalyticsData=data;
+  renderMonetization(data);
   content.hidden=false;status.textContent='Private analytics loaded • '+new Date(data.generated_at).toLocaleString();
  }catch(e){content.hidden=true;status.textContent=e.message||'Could not load analytics.';}
 }
