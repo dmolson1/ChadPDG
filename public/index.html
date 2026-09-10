@@ -1122,8 +1122,52 @@ body {
     text-align: center;
 }
 
+.chad-quick-picks {
+    margin-top: 14px;
+    padding: 16px 18px;
+    border: 1px solid #d7d7d7;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.chad-quick-picks-title {
+    font-size: 15px;
+    font-weight: 900;
+    margin-bottom: 10px;
+}
+
+.chad-quick-picks-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#chad-app a.chad-quick-pick-link {
+    display: inline-block;
+    padding: 9px 12px;
+    border: 1px solid #111;
+    border-radius: 8px;
+    background: #111;
+    color: #fff;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+#chad-app a.chad-quick-pick-link:hover,
+#chad-app a.chad-quick-pick-link:focus {
+    opacity: .88;
+}
+
+.chad-quick-picks-disclosure {
+    margin-top: 9px;
+    font-size: 10px;
+    color: #777;
+    line-height: 1.3;
+}
+
 .chad-shopping-result {
-    margin-top: 16px;
+    margin-top: 12px;
     padding: 18px;
     border: 1px solid #ddd;
     border-radius: 10px;
@@ -3654,6 +3698,61 @@ body {
     }
 
 
+    function buildQuickAffiliateLinks(
+        links
+    ) {
+
+        if (
+            !Array.isArray(links) ||
+            !links.length
+        ) {
+            return '';
+        }
+
+        let output =
+            '<div class="chad-quick-picks">' +
+            '<div class="chad-quick-picks-title">' +
+            'CHAD\\'S PICKS' +
+            '</div>' +
+            '<div class="chad-quick-picks-links">';
+
+        links.slice(0, 3).forEach(
+            function (item) {
+
+                if (
+                    !item ||
+                    !item.label ||
+                    !item.url
+                ) {
+                    return;
+                }
+
+                output +=
+                    '<a class="chad-quick-pick-link" ' +
+                    'href="' +
+                    escapeHtml(item.url) +
+                    '" ' +
+                    'target="_blank" ' +
+                    'rel="noopener sponsored" ' +
+                    'data-chad-quick-query="' +
+                    escapeHtml(item.query || '') +
+                    '">' +
+                    escapeHtml(item.label) +
+                    ' →</a>';
+            }
+        );
+
+        output +=
+            '</div>' +
+            '<div class="chad-quick-picks-disclosure">' +
+            'As an Amazon Associate I earn from qualifying purchases.' +
+            '</div>' +
+            '</div>';
+
+        return output;
+    }
+
+
     async function buildShoppingList(
         wrapper,
         question,
@@ -3671,23 +3770,9 @@ body {
             return;
         }
 
-        const loadingCopy = {
-            project:
-                'Chad is checking the project list and tool aisle... try to look busy.',
-            diagnostic:
-                'Chad is checking diagnostic tools... because replacing random parts is not a strategy.',
-            product_recommendation:
-                'Chad is checking real product options... this is the part where your wallet gets nervous.',
-            replacement_part:
-                'Chad is checking the actual replacement part... revolutionary concept, apparently.',
-            none:
-                ''
-        }[monetizationMode] ||
-            'Chad is checking the useful stuff...';
-
         resultBox.innerHTML =
             '<div class="chad-shopping-loading">' +
-            escapeHtml(loadingCopy) +
+            'Finding exact picks…' +
             '</div>';
 
         let turnstileToken = '';
@@ -4209,25 +4294,11 @@ body {
             const monetizationMode =
                 data.monetization_opportunity || 'project';
 
-            const researchCopy = {
-                project:
-                    'Fine. Chad is building the project list and checking the tool aisle while you read.',
-                diagnostic:
-                    'Chad is checking the diagnostic gear. Apparently guessing wildly is not a troubleshooting method.',
-                product_recommendation:
-                    'Chad is checking real product options and useful accessories. Try not to buy the shiny one just because it is shiny.',
-                replacement_part:
-                    'Chad is hunting down the actual replacement part instead of making you buy the parts cannon.',
-                none:
-                    ''
-            }[monetizationMode] ||
-                'Chad is checking the useful stuff while you read.';
-
             afterHtml +=
                 '<div class="chad-shopping-wrap">' +
-                '<div class="chad-shopping-subtext">' +
-                escapeHtml(researchCopy) +
-                '</div>' +
+                buildQuickAffiliateLinks(
+                    data.quick_affiliate_links || []
+                ) +
                 '<div class="chad-shopping-result" aria-live="polite"></div>' +
                 '</div>';
         }
@@ -4254,6 +4325,37 @@ body {
 
         chat.appendChild(
             wrapper
+        );
+
+
+        const quickPickLinks =
+            wrapper.querySelectorAll(
+                '.chad-quick-pick-link'
+            );
+
+        quickPickLinks.forEach(
+            function (quickLink) {
+
+                quickLink.addEventListener(
+                    'click',
+                    function () {
+
+                        trackAnalyticsEvent(
+                            'product_click',
+                            {
+                                product_name:
+                                    quickLink.getAttribute(
+                                        'data-chad-quick-query'
+                                    ) || 'Amazon search',
+                                metadata: {
+                                    status:
+                                        'quick_affiliate_search'
+                                }
+                            }
+                        );
+                    }
+                );
+            }
         );
 
 
