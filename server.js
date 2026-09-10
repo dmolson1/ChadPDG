@@ -26,7 +26,7 @@ const SHOPPING_TOKEN_TTL_SECONDS = 1800;
 const AUTH_SESSION_DAYS = 30;
 const PRIVACY_POLICY_VERSION = "2026-09-09";
 const TERMS_VERSION = "2026-09-09";
-const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 const EMAIL_VERIFY_TTL_HOURS = 24;
 const PASSWORD_RESET_TTL_MINUTES = 60;
@@ -147,7 +147,7 @@ app.get("/verify-email", (req, res) => {
 
 app.get("/reset-password", (req, res) => {
     const token = String(req.query.token || "").replace(/[^A-Za-z0-9_-]/g, "");
-    res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset ChadPDChee Password</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="width:min(92vw,520px);padding:32px"><h1>Reset password</h1><form id="f"><label>New password<br><input id="p" type="password" minlength="12" maxlength="128" required style="width:100%;box-sizing:border-box;padding:12px;margin:8px 0 16px"></label><button style="padding:12px 18px">Set new password</button></form><p id="msg"></p><script>document.getElementById('f').addEventListener('submit',async(e)=>{e.preventDefault();const msg=document.getElementById('msg');msg.textContent='Resetting...';try{const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)},password:document.getElementById('p').value})});const d=await r.json();msg.textContent=d.success?'Password changed. You can return to ChadPDChee and sign in.':(d.error||'Reset failed.');if(d.success)e.target.remove();}catch(err){msg.textContent='Reset failed. Please try again.';}});</script></main></body></html>`);
+    res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset ChadPDChee Password</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="width:min(92vw,520px);padding:32px"><h1>Reset password</h1><form id="f"><label>New password<br><input id="p" type="password" minlength="8" maxlength="128" required style="width:100%;box-sizing:border-box;padding:12px;margin:8px 0 16px"></label><button style="padding:12px 18px">Set new password</button></form><p id="msg"></p><script>document.getElementById('f').addEventListener('submit',async(e)=>{e.preventDefault();const msg=document.getElementById('msg');msg.textContent='Resetting...';try{const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)},password:document.getElementById('p').value})});const d=await r.json();msg.textContent=d.success?'Password changed. You can return to ChadPDChee and sign in.':(d.error||'Reset failed.');if(d.success)e.target.remove();}catch(err){msg.textContent='Reset failed. Please try again.';}});</script></main></body></html>`);
 });
 
 app.use(express.static("public"));
