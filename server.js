@@ -880,6 +880,34 @@ async function loadConversationMemory(id) {
     }));
 }
 
+
+function makeConversationTitle(userText) {
+    let text = String(userText || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!text) return "New Project";
+
+    text = text
+        .replace(/^(hey|hi|hello)\s+chad[\s,.:;!?-]*/i, "")
+        .replace(/^(can|could|would)\s+you\s+/i, "")
+        .replace(/^(how\s+do\s+i|how\s+can\s+i)\s+/i, "")
+        .replace(/^(what('?s| is)|where('?s| is)|why|when|who)\s+/i, "")
+        .replace(/[?!.]+$/g, "")
+        .trim();
+
+    if (!text) text = String(userText || "").replace(/\s+/g, " ").trim();
+
+    const words = text.split(/\s+/).slice(0, 7);
+    let title = words.join(" ");
+
+    if (title.length > 52) {
+        title = title.slice(0, 49).trimEnd() + "...";
+    }
+
+    return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 async function saveConversationTurn(id, userText, assistantText) {
     const client = await pool.connect();
     try {
@@ -893,9 +921,9 @@ async function saveConversationTurn(id, userText, assistantText) {
         await client.query(
             `UPDATE chad_conversations
              SET updated_at = NOW(),
-                 title = COALESCE(NULLIF(title, ''), LEFT($2, 157))
+                 title = COALESCE(NULLIF(title, ''), $2)
              WHERE id = $1`,
-            [id, String(userText || '').replace(/\s+/g, ' ').trim()]
+            [id, makeConversationTitle(userText)]
         );
         await client.query("COMMIT");
     } catch (error) {
@@ -2898,6 +2926,82 @@ async function handleConversationMessages(req, res) {
     }
 }
 
+
+async function handleConversationRename(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const id = String(req.body?.conversation_id || "");
+        const title = String(req.body?.title || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80);
+
+        if (!validUuid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid project." });
+        }
+
+        if (!title) {
+            return res.status(400).json({ success: false, error: "Project name cannot be empty." });
+        }
+
+        const result = await pool.query(
+            `UPDATE chad_conversations
+             SET title = $1, updated_at = NOW()
+             WHERE id = $2 AND user_id = $3
+             RETURNING id, title, updated_at`,
+            [title, id, user.id]
+        );
+
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, error: "Project not found." });
+        }
+
+        return res.json({ success: true, conversation: result.rows[0] });
+    } catch (error) {
+        console.error("Conversation rename error:", error);
+        return res.status(500).json({ success: false, error: "Could not rename that project." });
+    }
+}
+
+async function handleConversationDelete(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const id = String(req.body?.conversation_id || "");
+
+        if (!validUuid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid project." });
+        }
+
+        const owned = await pool.query(
+            `SELECT id FROM chad_conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
+            [id, user.id]
+        );
+
+        if (!owned.rowCount) {
+            return res.status(404).json({ success: false, error: "Project not found." });
+        }
+
+        await pool.query(
+            `DELETE FROM chad_conversations WHERE id = $1 AND user_id = $2`,
+            [id, user.id]
+        );
+
+        const cookies = parseCookies(req);
+        if (cookies.chadgpt_conversation === id) {
+            clearCookie(res, "chadgpt_conversation");
+        }
+
+        return res.json({ success: true, deleted: true, conversation_id: id });
+    } catch (error) {
+        console.error("Conversation delete error:", error);
+        return res.status(500).json({ success: false, error: "Could not delete that project." });
+    }
+}
+
 async function handleAccountExport(req, res) {
     try {
         const user = await requireAuthenticatedUser(req, res);
@@ -3004,7 +3108,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-10-account-quota"
+        version: "chad-core-11-conversation-management"
     });
 });
 
@@ -3018,7 +3122,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-10-account-quota",
+        version: "chad-core-11-conversation-management",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -3045,6 +3149,8 @@ registerBoth("post", "/auth/logout", handleLogout);
 registerBoth("get", "/auth/me", handleMe);
 registerBoth("get", "/account/conversations", handleConversationList);
 registerBoth("post", "/account/conversations/select", handleConversationSelect);
+registerBoth("post", "/account/conversations/rename", handleConversationRename);
+registerBoth("post", "/account/conversations/delete", handleConversationDelete);
 registerBoth("get", "/account/conversations/messages", handleConversationMessages);
 registerBoth("get", "/account/export", handleAccountExport);
 registerBoth("post", "/account/delete", handleAccountDelete);
