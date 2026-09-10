@@ -3212,6 +3212,74 @@ async function handleConversationDelete(req, res) {
 }
 
 
+
+async function handleConversationDownload(req, res) {
+    try {
+        const user = await requireAuthenticatedUser(req, res);
+        if (!user) return;
+
+        const requestedId = String(req.query?.conversation_id || "").trim();
+        const cookies = parseCookies(req);
+        const cookieId = String(cookies.chadgpt_conversation || "").trim();
+        const id = validUuid(requestedId) ? requestedId : (validUuid(cookieId) ? cookieId : "");
+
+        if (!id) {
+            return res.status(400).type("text/plain").send("Start a conversation before saving it.");
+        }
+
+        const conversationResult = await pool.query(
+            `SELECT id, COALESCE(NULLIF(title, ''), 'ChadPDChee Conversation') AS title
+             FROM chad_conversations
+             WHERE id = $1 AND user_id = $2
+             LIMIT 1`,
+            [id, user.id]
+        );
+
+        if (!conversationResult.rowCount) {
+            return res.status(404).type("text/plain").send("Conversation not found.");
+        }
+
+        const conversation = conversationResult.rows[0];
+
+        const messagesResult = await pool.query(
+            `SELECT role, content
+             FROM chad_messages
+             WHERE conversation_id = $1
+             ORDER BY id ASC
+             LIMIT 500`,
+            [conversation.id]
+        );
+
+        const lines = [
+            conversation.title,
+            "ChadPDChee Conversation",
+            "",
+        ];
+
+        for (const message of messagesResult.rows) {
+            lines.push(message.role === "user" ? "Hammered Handyman:" : "Chad:");
+            lines.push(String(message.content || ""));
+            lines.push("");
+        }
+
+        lines.push("---");
+        lines.push("Chad P.D. Chee is for informational purposes only.");
+
+        const safeFilename = String(conversation.title || "chadpdchee-conversation")
+            .replace(/[^a-z0-9 _-]/gi, "")
+            .trim()
+            .replace(/\s+/g, "-")
+            .slice(0, 60) || "chadpdchee-conversation";
+
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}.txt"`);
+        return res.send(lines.join("\n"));
+    } catch (error) {
+        console.error("Conversation download error:", error);
+        return res.status(500).type("text/plain").send("Could not save that conversation.");
+    }
+}
+
 async function handlePublicConversationShare(req, res) {
     try {
         const token = String(req.params?.token || "").trim();
@@ -3400,7 +3468,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-12-save-share"
+        version: "chad-core-13-share-fix"
     });
 });
 
@@ -3414,7 +3482,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-12-save-share",
+        version: "chad-core-13-share-fix",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -3444,6 +3512,7 @@ registerBoth("post", "/account/conversations/select", handleConversationSelect);
 registerBoth("post", "/account/conversations/save", handleConversationSave);
 registerBoth("post", "/account/conversations/share", handleConversationShare);
 registerBoth("post", "/account/conversations/unshare", handleConversationUnshare);
+app.get("/account/conversations/download", handleConversationDownload);
 registerBoth("post", "/account/conversations/rename", handleConversationRename);
 registerBoth("post", "/account/conversations/delete", handleConversationDelete);
 registerBoth("get", "/account/conversations/messages", handleConversationMessages);
