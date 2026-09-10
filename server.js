@@ -34,6 +34,17 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const CHAD_EMAIL_FROM = process.env.CHAD_EMAIL_FROM || "Chad P.D. Chee <noreply@chadpdchee.com>";
 const APP_BASE_URL = "https://chadpdchee.com";
 
+// Sponsor platform
+const SPONSOR_PRICE_USD = 499;
+const SPONSOR_MAX_ACTIVE_SLOTS = 4;
+const SPONSOR_AGREEMENT_VERSION = "2026-09-11";
+const SPONSOR_SESSION_DAYS = 30;
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || "";
+const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET || "";
+const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID || "";
+const PAYPAL_ENV = String(process.env.PAYPAL_ENV || "sandbox").toLowerCase() === "live" ? "live" : "sandbox";
+const PAYPAL_API_BASE = PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
+
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CHAD_ADMIN_TEST_KEY = process.env.CHAD_ADMIN_TEST_KEY || "";
 const AMAZON_TAG = "dannyroymolso-20";
@@ -875,6 +886,59 @@ async function initializeDatabase() {
 
         CREATE INDEX IF NOT EXISTS chad_sponsor_leads_status_created_idx
             ON chad_sponsor_leads (status, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS chad_sponsor_accounts (
+            id UUID PRIMARY KEY,
+            company_name TEXT NOT NULL,
+            contact_name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS chad_sponsor_sessions (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            sponsor_account_id UUID NOT NULL REFERENCES chad_sponsor_accounts(id) ON DELETE CASCADE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS chad_sponsor_sessions_account_idx
+            ON chad_sponsor_sessions (sponsor_account_id, expires_at);
+
+        CREATE TABLE IF NOT EXISTS chad_sponsor_orders (
+            id UUID PRIMARY KEY,
+            sponsor_account_id UUID NOT NULL REFERENCES chad_sponsor_accounts(id) ON DELETE CASCADE,
+            slot_month DATE NOT NULL,
+            price_usd NUMERIC(10,2) NOT NULL DEFAULT 499.00,
+            currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+            status TEXT NOT NULL DEFAULT 'payment_pending',
+            agreement_version TEXT NOT NULL,
+            agreement_accepted_at TIMESTAMPTZ NOT NULL,
+            agreement_name TEXT NOT NULL,
+            agreement_ip_hash VARCHAR(64) NOT NULL,
+            website TEXT NOT NULL DEFAULT '',
+            campaign_goal TEXT NOT NULL DEFAULT '',
+            destination_url TEXT NOT NULL DEFAULT '',
+            headline TEXT NOT NULL DEFAULT '',
+            ad_copy TEXT NOT NULL DEFAULT '',
+            cta_text TEXT NOT NULL DEFAULT 'Learn more →',
+            discount_code TEXT NOT NULL DEFAULT '',
+            discount_percent NUMERIC(5,2),
+            notes TEXT NOT NULL DEFAULT '',
+            paypal_order_id TEXT UNIQUE,
+            paypal_capture_id TEXT,
+            paypal_payer_email TEXT NOT NULL DEFAULT '',
+            paid_at TIMESTAMPTZ,
+            approved_at TIMESTAMPTZ,
+            campaign_id TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS chad_sponsor_orders_slot_status_idx
+            ON chad_sponsor_orders (slot_month, status, created_at);
 
         CREATE TABLE IF NOT EXISTS chad_ad_settings (
             settings_key TEXT PRIMARY KEY,
@@ -3978,6 +4042,444 @@ async function handleAccountDelete(req, res) {
 
 
 
+
+function cleanSponsorPortalText(value, max = 500) {
+    return String(value ?? "").trim().slice(0, max);
+}
+
+function sponsorMonthKey(value) {
+    const raw = cleanSponsorPortalText(value, 20);
+    if (!/^\d{4}-\d{2}$/.test(raw)) return null;
+    const date = new Date(`${raw}-01T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return null;
+    return raw;
+}
+
+function sponsorMonthDate(monthKey) {
+    return `${monthKey}-01`;
+}
+
+function sponsorMonthBounds(monthDate) {
+    const raw = monthDate instanceof Date ? monthDate.toISOString().slice(0, 10) : String(monthDate).slice(0, 10);
+    const start = new Date(`${raw}T00:00:00Z`);
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function sponsorCookie(res, token) {
+    setPersistentCookie(res, "chad_sponsor_session", token, SPONSOR_SESSION_DAYS * 86400);
+}
+
+async function createSponsorSession(res, sponsorAccountId) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = hashSessionToken(token);
+    await pool.query(
+        `INSERT INTO chad_sponsor_sessions (token_hash, sponsor_account_id, expires_at)
+         VALUES ($1,$2,NOW() + ($3 || ' days')::interval)`,
+        [tokenHash, sponsorAccountId, SPONSOR_SESSION_DAYS]
+    );
+    sponsorCookie(res, token);
+}
+
+async function getSponsorAccount(req) {
+    const token = parseCookies(req).chad_sponsor_session || "";
+    if (!token) return null;
+    const result = await pool.query(
+        `SELECT a.*
+         FROM chad_sponsor_sessions s
+         JOIN chad_sponsor_accounts a ON a.id = s.sponsor_account_id
+         WHERE s.token_hash = $1 AND s.expires_at > NOW()
+         LIMIT 1`,
+        [hashSessionToken(token)]
+    );
+    return result.rows[0] || null;
+}
+
+async function paypalAccessToken() {
+    if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
+        throw new Error("PayPal is not configured yet.");
+    }
+    const basic = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString("base64");
+    const response = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Basic ${basic}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "grant_type=client_credentials"
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.access_token) throw new Error("Could not connect to PayPal.");
+    return data.access_token;
+}
+
+async function paypalRequest(path, options = {}) {
+    const token = await paypalAccessToken();
+    const response = await fetch(`${PAYPAL_API_BASE}${path}`, {
+        ...options,
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            ...(options.headers || {})
+        }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        console.error("PayPal API error:", response.status, JSON.stringify(data).slice(0, 1200));
+        const error = new Error(data?.message || "PayPal request failed.");
+        error.status = response.status;
+        throw error;
+    }
+    return data;
+}
+
+async function sponsorSlotCount(slotMonth) {
+    const result = await pool.query(
+        `SELECT COUNT(*)::int AS count
+         FROM chad_sponsor_orders
+         WHERE slot_month = $1::date
+           AND (
+             status IN ('paid_pending_approval','approved','live','completed')
+             OR (status = 'payment_pending' AND created_at > NOW() - INTERVAL '3 hours')
+           )`,
+        [slotMonth]
+    );
+    return Number(result.rows[0]?.count || 0);
+}
+
+async function handleSponsorAvailability(req, res) {
+    try {
+        const now = new Date();
+        const months = [];
+        for (let i = 1; i <= 7; i++) {
+            const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+            const key = d.toISOString().slice(0, 7);
+            const slotMonth = `${key}-01`;
+            const used = await sponsorSlotCount(slotMonth);
+            months.push({
+                month: key,
+                label: d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
+                used,
+                remaining: Math.max(0, SPONSOR_MAX_ACTIVE_SLOTS - used),
+                sold_out: used >= SPONSOR_MAX_ACTIVE_SLOTS
+            });
+        }
+        return res.json({
+            success: true,
+            price_usd: SPONSOR_PRICE_USD,
+            currency: "USD",
+            max_slots: SPONSOR_MAX_ACTIVE_SLOTS,
+            agreement_version: SPONSOR_AGREEMENT_VERSION,
+            paypal_configured: Boolean(PAYPAL_CLIENT_ID && PAYPAL_CLIENT_SECRET),
+            paypal_environment: PAYPAL_ENV,
+            months
+        });
+    } catch (error) {
+        console.error("Sponsor availability error:", error);
+        return res.status(500).json({ success: false, error: "Could not load sponsor availability." });
+    }
+}
+
+async function handleSponsorCheckoutCreate(req, res) {
+    const client = await pool.connect();
+    try {
+        const body = req.body || {};
+        const companyName = cleanSponsorPortalText(body.company_name, 160);
+        const contactName = cleanSponsorPortalText(body.contact_name, 160);
+        const email = cleanSponsorPortalText(body.email, 240).toLowerCase();
+        const password = String(body.password || "");
+        const agreementName = cleanSponsorPortalText(body.agreement_name, 160);
+        const monthKey = sponsorMonthKey(body.slot_month);
+        const accepted = body.agreement_accepted === true;
+        const discountPercent = body.discount_percent === "" || body.discount_percent == null
+            ? null : Number(body.discount_percent);
+
+        if (!companyName || !contactName || !/^\S+@\S+\.\S+$/.test(email)) {
+            return res.status(400).json({ success: false, error: "Company, contact name, and a valid email are required." });
+        }
+        if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+            return res.status(400).json({ success: false, error: `Sponsor password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters.` });
+        }
+        if (!monthKey) return res.status(400).json({ success: false, error: "Choose a valid sponsor month." });
+        if (!accepted || !agreementName) return res.status(400).json({ success: false, error: "The sponsorship agreement must be accepted and signed." });
+        if (discountPercent !== null && (!Number.isFinite(discountPercent) || discountPercent <= 0 || discountPercent > 100)) {
+            return res.status(400).json({ success: false, error: "Discount percent must be between 0 and 100." });
+        }
+
+        const slotMonth = sponsorMonthDate(monthKey);
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        if (monthKey <= currentMonth) return res.status(400).json({ success: false, error: "Online sponsor bookings begin with the next full calendar month." });
+
+        await client.query("BEGIN");
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`chad-sponsor-slot:${slotMonth}`]);
+        const countResult = await client.query(
+            `SELECT COUNT(*)::int AS count FROM chad_sponsor_orders
+             WHERE slot_month = $1::date
+               AND (status IN ('paid_pending_approval','approved','live','completed')
+                    OR (status='payment_pending' AND created_at > NOW() - INTERVAL '3 hours'))`,
+            [slotMonth]
+        );
+        if (Number(countResult.rows[0]?.count || 0) >= SPONSOR_MAX_ACTIVE_SLOTS) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ success: false, error: "That month is sold out. Pick another month." });
+        }
+
+        let accountResult = await client.query(`SELECT * FROM chad_sponsor_accounts WHERE email=$1 LIMIT 1`, [email]);
+        let account;
+        if (accountResult.rowCount) {
+            account = accountResult.rows[0];
+            if (!(await verifyPassword(password, account.password_hash))) {
+                await client.query("ROLLBACK");
+                return res.status(401).json({ success: false, error: "That sponsor email already has an account. Use its existing password." });
+            }
+            await client.query(
+                `UPDATE chad_sponsor_accounts SET company_name=$2, contact_name=$3, updated_at=NOW() WHERE id=$1`,
+                [account.id, companyName, contactName]
+            );
+        } else {
+            const accountId = crypto.randomUUID();
+            const passwordHash = await hashPassword(password);
+            accountResult = await client.query(
+                `INSERT INTO chad_sponsor_accounts (id,company_name,contact_name,email,password_hash)
+                 VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+                [accountId, companyName, contactName, email, passwordHash]
+            );
+            account = accountResult.rows[0];
+        }
+
+        const orderId = crypto.randomUUID();
+        await client.query(
+            `INSERT INTO chad_sponsor_orders (
+                id,sponsor_account_id,slot_month,price_usd,currency,status,
+                agreement_version,agreement_accepted_at,agreement_name,agreement_ip_hash,
+                website,campaign_goal,destination_url,headline,ad_copy,cta_text,
+                discount_code,discount_percent,notes
+             ) VALUES ($1,$2,$3,$4,'USD','payment_pending',$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            [
+                orderId, account.id, slotMonth, SPONSOR_PRICE_USD, SPONSOR_AGREEMENT_VERSION,
+                agreementName, hashValue(getClientIp(req)),
+                cleanSponsorPortalText(body.website,1000), cleanSponsorPortalText(body.campaign_goal,2000),
+                cleanSponsorPortalText(body.destination_url,1000), cleanSponsorPortalText(body.headline,220),
+                cleanSponsorPortalText(body.ad_copy,1200), cleanSponsorPortalText(body.cta_text,100) || "Learn more →",
+                cleanSponsorPortalText(body.discount_code,80), discountPercent, cleanSponsorPortalText(body.notes,2000)
+            ]
+        );
+        await client.query("COMMIT");
+
+        const paypal = await paypalRequest("/v2/checkout/orders", {
+            method: "POST",
+            headers: { "PayPal-Request-Id": orderId },
+            body: JSON.stringify({
+                intent: "CAPTURE",
+                purchase_units: [{
+                    reference_id: orderId,
+                    custom_id: orderId,
+                    description: `Chad P.D. Chee sponsor placement — ${monthKey}`,
+                    amount: { currency_code: "USD", value: SPONSOR_PRICE_USD.toFixed(2) }
+                }],
+                payment_source: {
+                    paypal: {
+                        experience_context: {
+                            brand_name: "Chad P.D. Chee",
+                            user_action: "PAY_NOW",
+                            shipping_preference: "NO_SHIPPING",
+                            return_url: `${APP_BASE_URL}/advertise.html?payment=return&order=${encodeURIComponent(orderId)}`,
+                            cancel_url: `${APP_BASE_URL}/advertise.html?payment=cancelled&order=${encodeURIComponent(orderId)}`
+                        }
+                    }
+                }
+            })
+        });
+
+        await pool.query(`UPDATE chad_sponsor_orders SET paypal_order_id=$2, updated_at=NOW() WHERE id=$1`, [orderId, paypal.id]);
+        await createSponsorSession(res, account.id);
+        const approveUrl = (paypal.links || []).find(link => link.rel === "payer-action")?.href
+            || (paypal.links || []).find(link => link.rel === "approve")?.href;
+        if (!approveUrl) throw new Error("PayPal did not return a checkout link.");
+
+        return res.json({ success: true, order_id: orderId, paypal_order_id: paypal.id, approval_url: approveUrl });
+    } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        console.error("Sponsor checkout create error:", error);
+        return res.status(500).json({ success: false, error: error.message || "Could not start sponsor checkout." });
+    } finally {
+        client.release();
+    }
+}
+
+async function markSponsorOrderPaid(orderId, captureData) {
+    const capture = captureData?.purchase_units?.[0]?.payments?.captures?.[0] || {};
+    const payerEmail = captureData?.payer?.email_address || "";
+    const result = await pool.query(
+        `UPDATE chad_sponsor_orders
+         SET status='paid_pending_approval', paypal_capture_id=COALESCE(NULLIF($2,''),paypal_capture_id),
+             paypal_payer_email=$3, paid_at=COALESCE(paid_at,NOW()), updated_at=NOW()
+         WHERE id=$1 AND status IN ('payment_pending','paid_pending_approval')
+         RETURNING *`,
+        [orderId, String(capture.id || ""), payerEmail]
+    );
+    return result.rows[0] || null;
+}
+
+async function handleSponsorCheckoutCapture(req, res) {
+    try {
+        const orderId = cleanSponsorPortalText(req.body?.order_id, 80);
+        if (!orderId) return res.status(400).json({ success:false, error:"Sponsor order ID is required." });
+        const orderResult = await pool.query(
+            `SELECT o.*, a.email, a.contact_name, a.company_name
+             FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id
+             WHERE o.id=$1 LIMIT 1`, [orderId]
+        );
+        const order = orderResult.rows[0];
+        if (!order) return res.status(404).json({ success:false, error:"Sponsor order not found." });
+        if (order.status !== 'payment_pending') {
+            return res.json({ success:true, status:order.status, dashboard_url:"/sponsor-dashboard.html" });
+        }
+        if (!order.paypal_order_id) return res.status(409).json({ success:false, error:"PayPal order is not ready." });
+
+        const data = await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(order.paypal_order_id)}/capture`, {
+            method:"POST", headers:{"PayPal-Request-Id":`capture-${order.id}`}, body:"{}"
+        });
+        if (data.status !== "COMPLETED") return res.status(409).json({ success:false, error:"PayPal payment has not completed." });
+        const paid = await markSponsorOrderPaid(order.id, data);
+        if (paid) {
+            sendChadEmail({
+                to: order.email,
+                subject: "Chad P.D. Chee sponsorship payment received",
+                text: `Payment received for your ${String(order.slot_month).slice(0,7)} Chad P.D. Chee sponsor placement. Your campaign is now awaiting approval. Sign in at ${APP_BASE_URL}/sponsor-login.html`,
+                html: `<h2>Payment received.</h2><p>Your <strong>${String(order.slot_month).slice(0,7)}</strong> Chad P.D. Chee sponsor placement is now <strong>Paid — Awaiting Approval</strong>.</p><p><a href="${APP_BASE_URL}/sponsor-login.html">Open Sponsor Portal</a></p>`
+            }).catch(err => console.error("Sponsor receipt email error:", err));
+        }
+        return res.json({ success:true, status:"paid_pending_approval", dashboard_url:"/sponsor-dashboard.html" });
+    } catch (error) {
+        console.error("Sponsor capture error:", error);
+        return res.status(500).json({ success:false, error:error.message || "Could not confirm sponsor payment." });
+    }
+}
+
+async function handleSponsorLogin(req,res) {
+    try {
+        const email=cleanSponsorPortalText(req.body?.email,240).toLowerCase();
+        const password=String(req.body?.password||"");
+        const allowed=await claimBurst("sponsor_login",`${getClientIp(req)}|${email}`,10,15*60);
+        if(!allowed) return res.status(429).json({success:false,error:"Too many login attempts. Try again later."});
+        const result=await pool.query(`SELECT * FROM chad_sponsor_accounts WHERE email=$1 LIMIT 1`,[email]);
+        const account=result.rows[0];
+        if(!account || !(await verifyPassword(password,account.password_hash))) return res.status(401).json({success:false,error:"Invalid sponsor email or password."});
+        await createSponsorSession(res,account.id);
+        return res.json({success:true,account:{company_name:account.company_name,contact_name:account.contact_name,email:account.email}});
+    } catch(error){ console.error("Sponsor login error:",error); return res.status(500).json({success:false,error:"Could not sign in."}); }
+}
+
+async function handleSponsorLogout(req,res){
+    try{
+        const token=parseCookies(req).chad_sponsor_session||"";
+        if(token) await pool.query(`DELETE FROM chad_sponsor_sessions WHERE token_hash=$1`,[hashSessionToken(token)]);
+        clearCookie(res,"chad_sponsor_session");
+        return res.json({success:true});
+    }catch{ clearCookie(res,"chad_sponsor_session"); return res.json({success:true}); }
+}
+
+async function handleSponsorMe(req,res){
+    const account=await getSponsorAccount(req);
+    if(!account) return res.status(401).json({success:false,authenticated:false});
+    return res.json({success:true,authenticated:true,account:{company_name:account.company_name,contact_name:account.contact_name,email:account.email}});
+}
+
+async function handleSponsorDashboard(req,res){
+    try{
+        const account=await getSponsorAccount(req);
+        if(!account) return res.status(401).json({success:false,error:"Sponsor sign-in required."});
+        const result=await pool.query(
+            `SELECT o.*,
+                COALESCE(a.impressions,0)::int AS impressions,
+                COALESCE(a.clicks,0)::int AS clicks
+             FROM chad_sponsor_orders o
+             LEFT JOIN (
+                SELECT metadata->>'campaign_id' AS campaign_id,
+                    COUNT(*) FILTER(WHERE event='sponsor_impression') AS impressions,
+                    COUNT(*) FILTER(WHERE event='sponsor_click') AS clicks
+                FROM chad_analytics
+                WHERE event IN ('sponsor_impression','sponsor_click')
+                GROUP BY metadata->>'campaign_id'
+             ) a ON a.campaign_id=o.campaign_id
+             WHERE o.sponsor_account_id=$1
+             ORDER BY o.slot_month DESC,o.created_at DESC`, [account.id]
+        );
+        return res.json({success:true,price_usd:SPONSOR_PRICE_USD,max_slots:SPONSOR_MAX_ACTIVE_SLOTS,campaigns:result.rows.map(row=>({
+            id:row.id,slot_month:String(row.slot_month).slice(0,10),status:(()=>{if(row.status!=='approved')return row.status;const b=sponsorMonthBounds(row.slot_month);const now=Date.now();return now>=Date.parse(b.end)?'completed':now>=Date.parse(b.start)?'live':'approved';})(),price_usd:Number(row.price_usd),currency:row.currency,
+            headline:row.headline,ad_copy:row.ad_copy,cta_text:row.cta_text,destination_url:row.destination_url,discount_code:row.discount_code,
+            discount_percent:row.discount_percent==null?null:Number(row.discount_percent),campaign_id:row.campaign_id,paid_at:row.paid_at,approved_at:row.approved_at,
+            impressions:Number(row.impressions||0),clicks:Number(row.clicks||0),ctr_percent:Number(row.impressions||0)?Number((Number(row.clicks||0)/Number(row.impressions)*100).toFixed(2)):0
+        }))});
+    }catch(error){console.error("Sponsor dashboard error:",error);return res.status(500).json({success:false,error:"Could not load sponsor dashboard."});}
+}
+
+async function handleAdminSponsorOrders(req,res){
+    try{
+        if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
+        const result=await pool.query(`SELECT o.*,a.company_name,a.contact_name,a.email FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id ORDER BY o.created_at DESC LIMIT 250`);
+        return res.json({success:true,orders:result.rows});
+    }catch(error){console.error("Admin sponsor orders error:",error);return res.status(500).json({success:false,error:"Could not load sponsor orders."});}
+}
+
+async function handleAdminSponsorOrderApprove(req,res){
+    const client=await pool.connect();
+    try{
+        if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
+        const orderId=cleanSponsorPortalText(req.body?.order_id,80);
+        await client.query("BEGIN");
+        const r=await client.query(`SELECT o.*,a.company_name FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id WHERE o.id=$1 FOR UPDATE`,[orderId]);
+        const order=r.rows[0];
+        if(!order) {await client.query("ROLLBACK");return res.status(404).json({success:false,error:"Sponsor order not found."});}
+        if(!['paid_pending_approval','approved','live'].includes(order.status)){await client.query("ROLLBACK");return res.status(409).json({success:false,error:"Only paid sponsor orders can be approved."});}
+        if(!order.destination_url || !order.headline){await client.query("ROLLBACK");return res.status(400).json({success:false,error:"Headline and destination URL are required before approval."});}
+        const campaignId=order.campaign_id || `paid-${String(order.slot_month).slice(0,7)}-${order.id.slice(0,8)}`;
+        const bounds=sponsorMonthBounds(order.slot_month);
+        await client.query(
+            `INSERT INTO chad_sponsors (id,campaign_id,advertiser,headline,body,cta,destination_url,image_url,discount_code,discount_percent,starts_at,ends_at,is_active,priority)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,'',$8,$9,$10,$11,TRUE,100)
+             ON CONFLICT(campaign_id) DO UPDATE SET advertiser=EXCLUDED.advertiser,headline=EXCLUDED.headline,body=EXCLUDED.body,cta=EXCLUDED.cta,destination_url=EXCLUDED.destination_url,discount_code=EXCLUDED.discount_code,discount_percent=EXCLUDED.discount_percent,starts_at=EXCLUDED.starts_at,ends_at=EXCLUDED.ends_at,is_active=TRUE,updated_at=NOW()`,
+            [crypto.randomUUID(),campaignId,order.company_name,order.headline,order.ad_copy,order.cta_text||'Learn more →',order.destination_url,order.discount_code||'',order.discount_percent,bounds.start,bounds.end]
+        );
+        await client.query(`UPDATE chad_sponsor_orders SET status='approved',campaign_id=$2,approved_at=COALESCE(approved_at,NOW()),updated_at=NOW() WHERE id=$1`,[orderId,campaignId]);
+        await client.query("COMMIT");
+        return res.json({success:true,campaign_id:campaignId});
+    }catch(error){try{await client.query("ROLLBACK")}catch{};console.error("Approve sponsor order error:",error);return res.status(500).json({success:false,error:"Could not approve sponsor order."});}
+    finally{client.release();}
+}
+
+async function handlePayPalWebhook(req,res){
+    try{
+        if(!PAYPAL_WEBHOOK_ID) return res.status(503).json({success:false,error:"PayPal webhook is not configured."});
+        const transmissionId=req.headers['paypal-transmission-id'];
+        const transmissionTime=req.headers['paypal-transmission-time'];
+        const certUrl=req.headers['paypal-cert-url'];
+        const authAlgo=req.headers['paypal-auth-algo'];
+        const transmissionSig=req.headers['paypal-transmission-sig'];
+        if(!transmissionId||!transmissionTime||!certUrl||!authAlgo||!transmissionSig) return res.status(400).json({success:false,error:"Missing PayPal webhook headers."});
+        const verification=await paypalRequest('/v1/notifications/verify-webhook-signature',{
+            method:'POST',body:JSON.stringify({auth_algo:authAlgo,cert_url:certUrl,transmission_id:transmissionId,transmission_sig:transmissionSig,transmission_time:transmissionTime,webhook_id:PAYPAL_WEBHOOK_ID,webhook_event:req.body})
+        });
+        if(verification.verification_status!=='SUCCESS') return res.status(400).json({success:false,error:"Invalid PayPal webhook signature."});
+        const event=req.body||{};
+        if(event.event_type==='PAYMENT.CAPTURE.COMPLETED'){
+            const customId=event.resource?.custom_id || event.resource?.supplementary_data?.related_ids?.order_id || '';
+            let orderId=customId;
+            if(!orderId && event.resource?.supplementary_data?.related_ids?.order_id){
+                const lookup=await pool.query(`SELECT id FROM chad_sponsor_orders WHERE paypal_order_id=$1 LIMIT 1`,[event.resource.supplementary_data.related_ids.order_id]);
+                orderId=lookup.rows[0]?.id||'';
+            }
+            if(orderId) await pool.query(`UPDATE chad_sponsor_orders SET status='paid_pending_approval',paypal_capture_id=COALESCE(NULLIF($2,''),paypal_capture_id),paid_at=COALESCE(paid_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='payment_pending'`,[orderId,String(event.resource?.id||'')]);
+        }
+        if(event.event_type==='PAYMENT.CAPTURE.REFUNDED' || event.event_type==='PAYMENT.CAPTURE.REVERSED'){
+            await pool.query(`UPDATE chad_sponsor_orders SET status='refunded',updated_at=NOW() WHERE paypal_capture_id=$1`,[String(event.resource?.supplementary_data?.related_ids?.capture_id||event.resource?.id||'')]);
+        }
+        return res.json({success:true});
+    }catch(error){console.error("PayPal webhook error:",error);return res.status(500).json({success:false,error:"Webhook processing failed."});}
+}
+
 const sponsorUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -4914,7 +5416,7 @@ app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "CHADPDCHEE",
-        version: "chad-core-23-sponsor-sales-funnel"
+        version: "chad-core-25-sponsor-platform"
     });
 });
 
@@ -4928,7 +5430,7 @@ app.get("/health", async (req, res) => {
     res.json({
         success: true,
         status: databaseConnected ? "healthy" : "degraded",
-        version: "chad-core-23-sponsor-sales-funnel",
+        version: "chad-core-25-sponsor-platform",
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         turnstileConfigured: Boolean(TURNSTILE_SECRET_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
@@ -4936,6 +5438,11 @@ app.get("/health", async (req, res) => {
         adminTestConfigured: Boolean(CHAD_ADMIN_TEST_KEY),
         accountsConfigured: true,
         emailDeliveryConfigured: Boolean(RESEND_API_KEY && CHAD_EMAIL_FROM),
+        sponsorPlatformConfigured: true,
+        sponsorPriceUsd: SPONSOR_PRICE_USD,
+        sponsorMaxSlots: SPONSOR_MAX_ACTIVE_SLOTS,
+        paypalConfigured: Boolean(PAYPAL_CLIENT_ID && PAYPAL_CLIENT_SECRET),
+        paypalEnvironment: PAYPAL_ENV,
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
         termsVersion: TERMS_VERSION,
         dailyLimit: DAILY_LIMIT,
@@ -4989,6 +5496,16 @@ registerBoth(
     ]),
     handleSponsorLeadSubmit
 );
+registerBoth("get", "/sponsor/availability", handleSponsorAvailability);
+registerBoth("post", "/sponsor/checkout/create", handleSponsorCheckoutCreate);
+registerBoth("post", "/sponsor/checkout/capture", handleSponsorCheckoutCapture);
+registerBoth("post", "/sponsor/auth/login", handleSponsorLogin);
+registerBoth("post", "/sponsor/auth/logout", handleSponsorLogout);
+registerBoth("get", "/sponsor/auth/me", handleSponsorMe);
+registerBoth("get", "/sponsor/dashboard", handleSponsorDashboard);
+registerBoth("post", "/paypal/webhook", handlePayPalWebhook);
+registerBoth("get", "/admin/sponsor-orders", handleAdminSponsorOrders);
+registerBoth("post", "/admin/sponsor-orders/approve", handleAdminSponsorOrderApprove);
 registerBoth("get", "/admin/sponsor-leads", handleAdminSponsorLeads);
 registerBoth("post", "/admin/sponsor-leads/status", handleAdminSponsorLeadStatus);
 registerBoth("post", "/admin/sponsor-leads/delete", handleAdminSponsorLeadDelete);
