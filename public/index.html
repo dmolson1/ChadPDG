@@ -2305,8 +2305,17 @@ body {
         padding: 10px 0 18px !important;
     }
 
+    /* Mobile: keep the composer in normal document flow.
+       A bottom-sticky composer can be shifted upward on first load when the
+       header/disclaimer make the page taller than the viewport, which makes
+       it visually float over the disclaimer. */
     #chad-input-area {
+        position: static !important;
+        bottom: auto !important;
+        z-index: auto !important;
+        margin-top: 10px !important;
         padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+        background: #fff !important;
     }
 
     #chad-question {
