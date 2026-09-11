@@ -5694,7 +5694,10 @@ body {
                     {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: chadApiHeaders(),
+                        headers: {
+                            ...chadApiHeaders(),
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({
                             text: cleanText,
                             conversation_id:
@@ -5709,7 +5712,21 @@ body {
                 );
 
                 if (!response.ok) {
-                    throw new Error('tts_failed');
+                    let message = 'Chad\'s real voice request failed.';
+
+                    try {
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                            message = String(errorData.error);
+                        }
+                    } catch (_) {}
+
+                    if (statusElement) {
+                        statusElement.textContent =
+                            '⚠️ ElevenLabs: ' + message;
+                    }
+
+                    return false;
                 }
 
                 const blob = await response.blob();
@@ -5768,10 +5785,11 @@ body {
             }
 
         } catch (error) {
-            return browserVoiceFallback(
-                cleanText,
-                statusElement
-            );
+            if (statusElement) {
+                statusElement.textContent =
+                    '⚠️ Chad\'s real voice could not connect to ElevenLabs.';
+            }
+            return false;
         }
     }
 
