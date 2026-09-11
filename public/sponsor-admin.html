@@ -250,7 +250,10 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
     <div class="panel">
         <div class="top" style="margin-bottom:10px">
             <div><h2 style="margin:0">Paid Sponsor Orders</h2><div class="sub">PayPal purchases, contract acceptance, and approval queue.</div></div>
-            <button class="light" id="refreshPaidOrders">Refresh Orders</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                <button class="light" id="refreshPaidOrders">Refresh Orders</button>
+                <button id="cleanupPrelaunchTests" style="background:#7a271a;color:#fff;border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer">Clean Pre-Launch Test Data</button>
+            </div>
         </div>
         <table>
             <thead><tr><th>Month</th><th>Sponsor</th><th>Payment</th><th>Status</th><th>Creative</th><th>Agreement</th><th>Action</th></tr></thead>
@@ -627,6 +630,25 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
    const status=$('paidOrderStatus');status.textContent='Approving sponsor…';
    try{const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/approve',{method:'POST',headers:adminHeaders(),body:JSON.stringify({order_id:id})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Approval failed.');status.textContent='Approved. Campaign '+d.campaign_id+' is scheduled for a full 30-day run'+(d.shifted_from_reserved?' using the next available start date.':'.');await loadOrders();document.getElementById('refreshSponsors').click()}catch(e){status.textContent=e.message}
  }
+ async function cleanupPrelaunchTests(){
+   const phrase='DELETE PRELAUNCH TEST SPONSORS';
+   const warning=`PRE-LAUNCH CLEANUP ONLY\n\nThis permanently deletes self-serve sponsor orders, generated paid campaigns, related sponsor analytics, sessions, and test sponsor accounts created before the locked cutoff.\n\nIt does NOT delete manually-created campaigns such as Bath Depot, Giraffe Tools, or Kaiweets unless they were linked to a self-serve order.\n\nType this exact phrase to continue:\n${phrase}`;
+   const entered=prompt(warning,'');
+   if(entered===null)return;
+   if(entered.trim()!==phrase){alert('Cleanup cancelled — confirmation phrase did not match.');return;}
+   if(!confirm('Last chance. Permanently delete the pre-launch sponsor test data now?'))return;
+   const status=$('paidOrderStatus');status.textContent='Cleaning pre-launch sponsor test data…';
+   try{
+     const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/cleanup-prelaunch-tests',{method:'POST',headers:adminHeaders(),body:JSON.stringify({confirmation:phrase})});
+     const d=await r.json();
+     if(!r.ok||!d.success)throw new Error(d.error||'Cleanup failed.');
+     const x=d.deleted||{};
+     status.textContent=`Cleanup complete: ${x.orders||0} orders, ${x.campaigns||0} generated campaigns, ${x.analytics||0} analytics events, ${x.accounts||0} sponsor accounts removed.`;
+     await loadOrders();
+     document.getElementById('refreshSponsors').click();
+   }catch(e){status.textContent=e.message}
+ }
+
  async function refundOrder(id,amount){
    if(!confirm(`Refund $${amount} USD to this sponsor through PayPal?\n\nThis will also disable the campaign immediately. This cannot be undone from ChadPDChee.`))return;
    const status=$('paidOrderStatus');status.textContent='Sending refund to PayPal…';
@@ -640,6 +662,7 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
    }catch(e){status.textContent=e.message}
  }
  $('refreshPaidOrders').addEventListener('click',loadOrders);
+ $('cleanupPrelaunchTests').addEventListener('click',cleanupPrelaunchTests);
  $('saveKey').addEventListener('click',()=>setTimeout(loadOrders,50));
  if($('adminKey').value.trim())loadOrders();
 })();
