@@ -35,15 +35,15 @@ const CHAD_EMAIL_FROM = process.env.CHAD_EMAIL_FROM || "Chad P.D. Chee <noreply@
 const APP_BASE_URL = "https://chadpdchee.com";
 
 // Sponsor platform
-const SPONSOR_PRICE_USD = 5;
+const SPONSOR_PRICE_USD = 149;
 const SPONSOR_MAX_ACTIVE_SLOTS = 4;
-const SPONSOR_AGREEMENT_VERSION = "2026-09-11-30DAY-LIVE5TEST";
+const SPONSOR_AGREEMENT_VERSION = "2026-09-11-30DAY-FOUNDING149";
 const SPONSOR_DURATION_DAYS = 30;
-const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11-30DAY-LIVE5TEST
+const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11-30DAY-FOUNDING149
 
 This agreement is between Hammered Handyman Media ("Publisher") and the company or brand identified in this order ("Sponsor").
 
-Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for $5 USD for 30 consecutive days. The placement participates in the site's rotating direct-sponsor inventory, with no more than four active paid sponsor positions scheduled at the same time. This is a one-time purchase and does not automatically renew.
+Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for $149 USD for 30 consecutive days. The placement participates in the site's rotating direct-sponsor inventory, with no more than four active paid sponsor positions scheduled at the same time. This is a one-time purchase and does not automatically renew.
 
 Approval. Payment does not cause automatic publication. Publisher may review, edit with Sponsor approval, reject, suspend, or remove creative that is inaccurate, unlawful, unsafe, misleading, technically harmful, incompatible with the audience, or reasonably likely to damage the Publisher or Chad P.D. Chee brand. If Publisher rejects a campaign before it runs and the parties cannot agree on acceptable creative, the sponsorship fee will be refunded.
 
@@ -933,7 +933,7 @@ async function initializeDatabase() {
             id UUID PRIMARY KEY,
             sponsor_account_id UUID NOT NULL REFERENCES chad_sponsor_accounts(id) ON DELETE CASCADE,
             slot_month DATE NOT NULL,
-            price_usd NUMERIC(10,2) NOT NULL DEFAULT 499.00,
+            price_usd NUMERIC(10,2) NOT NULL DEFAULT 149.00,
             currency VARCHAR(3) NOT NULL DEFAULT 'USD',
             status TEXT NOT NULL DEFAULT 'payment_pending',
             agreement_version TEXT NOT NULL,
@@ -4593,6 +4593,97 @@ async function handleSponsorDashboard(req,res){
     }catch(error){console.error("Sponsor dashboard error:",error);return res.status(500).json({success:false,error:"Could not load sponsor dashboard."});}
 }
 
+const SPONSOR_TEST_CLEANUP_CUTOFF = new Date("2026-09-11T03:30:00Z");
+
+async function handleAdminSponsorTestCleanup(req,res){
+    if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
+    const confirmation=String(req.body?.confirmation||"").trim();
+    if(confirmation!=="DELETE PRELAUNCH TEST SPONSORS") {
+        return res.status(400).json({success:false,error:"Confirmation phrase did not match."});
+    }
+
+    const client=await pool.connect();
+    try{
+        await client.query("BEGIN");
+
+        // This cleanup is intentionally time-locked to pre-launch data only.
+        // Anything created after the cutoff can never be deleted by this endpoint.
+        const orderRows=await client.query(
+            `SELECT id,sponsor_account_id,campaign_id
+             FROM chad_sponsor_orders
+             WHERE created_at < $1
+             FOR UPDATE`,
+            [SPONSOR_TEST_CLEANUP_CUTOFF]
+        );
+
+        const orderIds=orderRows.rows.map(r=>r.id);
+        const accountIds=[...new Set(orderRows.rows.map(r=>r.sponsor_account_id).filter(Boolean))];
+        const campaignIds=[...new Set(orderRows.rows.map(r=>r.campaign_id).filter(Boolean))];
+
+        let analyticsDeleted=0;
+        let campaignsDeleted=0;
+        let ordersDeleted=0;
+        let sessionsDeleted=0;
+        let accountsDeleted=0;
+
+        if(campaignIds.length){
+            const a=await client.query(
+                `DELETE FROM chad_analytics
+                 WHERE metadata->>'campaign_id' = ANY($1::text[])`,
+                [campaignIds]
+            );
+            analyticsDeleted=a.rowCount||0;
+
+            const c=await client.query(
+                `DELETE FROM chad_sponsors
+                 WHERE campaign_id = ANY($1::text[])`,
+                [campaignIds]
+            );
+            campaignsDeleted=c.rowCount||0;
+        }
+
+        if(orderIds.length){
+            const o=await client.query(
+                `DELETE FROM chad_sponsor_orders WHERE id = ANY($1::uuid[])`,
+                [orderIds]
+            );
+            ordersDeleted=o.rowCount||0;
+        }
+
+        if(accountIds.length){
+            const s=await client.query(
+                `DELETE FROM chad_sponsor_sessions WHERE sponsor_account_id = ANY($1::uuid[])`,
+                [accountIds]
+            );
+            sessionsDeleted=s.rowCount||0;
+
+            // Only remove accounts that no longer have any orders. This keeps the cleanup safe
+            // if an account somehow has a post-cutoff production order.
+            const ac=await client.query(
+                `DELETE FROM chad_sponsor_accounts a
+                 WHERE a.id = ANY($1::uuid[])
+                   AND NOT EXISTS (SELECT 1 FROM chad_sponsor_orders o WHERE o.sponsor_account_id=a.id)`,
+                [accountIds]
+            );
+            accountsDeleted=ac.rowCount||0;
+        }
+
+        await client.query("COMMIT");
+        console.log("Prelaunch sponsor cleanup:", {ordersDeleted,campaignsDeleted,analyticsDeleted,sessionsDeleted,accountsDeleted});
+        return res.json({
+            success:true,
+            cutoff:SPONSOR_TEST_CLEANUP_CUTOFF.toISOString(),
+            deleted:{orders:ordersDeleted,campaigns:campaignsDeleted,analytics:analyticsDeleted,sessions:sessionsDeleted,accounts:accountsDeleted}
+        });
+    }catch(error){
+        await client.query("ROLLBACK");
+        console.error("Prelaunch sponsor cleanup error:",error);
+        return res.status(500).json({success:false,error:"Could not clean pre-launch sponsor test data."});
+    }finally{
+        client.release();
+    }
+}
+
 async function handleAdminSponsorOrders(req,res){
     try{
         if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
@@ -5814,6 +5905,7 @@ registerBoth("get", "/admin/sponsor-orders", handleAdminSponsorOrders);
 registerBoth("get", "/admin/sponsor-orders/contract", handleAdminSponsorContract);
 registerBoth("post", "/admin/sponsor-orders/approve", handleAdminSponsorOrderApprove);
 registerBoth("post", "/admin/sponsor-orders/refund", handleAdminSponsorOrderRefund);
+registerBoth("post", "/admin/sponsor-orders/cleanup-prelaunch-tests", handleAdminSponsorTestCleanup);
 registerBoth("get", "/admin/sponsor-leads", handleAdminSponsorLeads);
 registerBoth("post", "/admin/sponsor-leads/status", handleAdminSponsorLeadStatus);
 registerBoth("post", "/admin/sponsor-leads/delete", handleAdminSponsorLeadDelete);
