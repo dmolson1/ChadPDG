@@ -19,9 +19,8 @@ const BURST_WINDOW_SECONDS = 60;
 const TRANSLATE_BURST_LIMIT = 20;
 const SHOPPING_BURST_LIMIT = 10;
 const TTS_BURST_LIMIT = 30;
-const CHAD_TTS_MODEL = process.env.CHAD_TTS_MODEL || "gpt-4o-mini-tts";
-const CHAD_TTS_VOICE = process.env.CHAD_TTS_VOICE || "onyx";
-const CHAD_TTS_VOICE_ID = process.env.CHAD_TTS_VOICE_ID || "";
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "N05TMgsJRGbeDJrG7CwC";
+const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || "eleven_flash_v2_5";
 const MAX_MESSAGE_LENGTH = 3000;
 const MEMORY_DAYS = 30;
 const VISITOR_COOKIE_DAYS = 365;
@@ -3399,7 +3398,9 @@ function normalizeTtsComparable(value) {
 
 async function handleChadTts(req, res) {
     try {
-        if (!process.env.OPENAI_API_KEY) {
+        if (!process.env.ELEVENLABS_API_KEY) {
+            console.error("ELEVENLABS_API_KEY is not configured.");
+
             return res.status(503).json({
                 success: false,
                 error: "Chad's voice is temporarily unavailable."
@@ -3417,6 +3418,7 @@ async function handleChadTts(req, res) {
 
         if (!burstAllowed) {
             res.setHeader("Retry-After", String(BURST_WINDOW_SECONDS));
+
             return res.status(429).json({
                 success: false,
                 error: "Chad has been talking enough for one minute, Bro."
@@ -3424,9 +3426,11 @@ async function handleChadTts(req, res) {
         }
 
         const text = normalizeTtsComparable(req.body?.text);
-        const conversationId = typeof req.body?.conversation_id === "string"
-            ? req.body.conversation_id.trim()
-            : "";
+
+        const conversationId =
+            typeof req.body?.conversation_id === "string"
+                ? req.body.conversation_id.trim()
+                : "";
 
         if (!text || text.length > 1200 || !conversationId) {
             return res.status(400).json({
@@ -3435,6 +3439,11 @@ async function handleChadTts(req, res) {
             });
         }
 
+        /*
+         * Only generate audio for a walkthrough step that Chad actually
+         * produced in this conversation. This keeps the endpoint from
+         * becoming a public text-to-speech proxy against Dan's credits.
+         */
         const recent = await pool.query(
             `SELECT message_meta
              FROM chad_messages
@@ -3453,7 +3462,12 @@ async function handleChadTts(req, res) {
                 ? walkthrough.steps
                 : [];
 
-            if (steps.some(step => normalizeTtsComparable(step) === text)) {
+            if (
+                steps.some(
+                    step =>
+                        normalizeTtsComparable(step) === text
+                )
+            ) {
                 allowed = true;
                 break;
             }
@@ -3466,37 +3480,30 @@ async function handleChadTts(req, res) {
             });
         }
 
-        const voice = CHAD_TTS_VOICE_ID
-            ? { id: CHAD_TTS_VOICE_ID }
-            : CHAD_TTS_VOICE;
+        const voiceId = ELEVENLABS_VOICE_ID;
 
-        const openaiResponse = await fetch(
-            "https://api.openai.com/v1/audio/speech",
+        const elevenResponse = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
             {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "xi-api-key": process.env.ELEVENLABS_API_KEY,
                     "Content-Type": "application/json",
-                    "OpenAI-Safety-Identifier":
-                        hashValue(`tts:${visitorId}`).slice(0, 64)
+                    "Accept": "audio/mpeg"
                 },
                 body: JSON.stringify({
-                    model: CHAD_TTS_MODEL,
-                    voice,
-                    input: text,
-                    instructions:
-                        "Speak as Chad P.D. Chee: a confident Canadian blue-collar handyman in his late 30s or 40s. Masculine, relaxed, warm, slightly smug, dry sarcastic bro energy, conversational and natural. He sounds like he has spent years in garages and job sites. Never cartoonish, never announcer-like, never angry, never rushed. Give practical instructions clearly with small knowing pauses, like he cannot believe the listener needed help but is helping anyway.",
-                    response_format: "mp3",
-                    speed: 0.96
+                    text,
+                    model_id: ELEVENLABS_MODEL_ID
                 })
             }
         );
 
-        if (!openaiResponse.ok) {
-            const detail = (await openaiResponse.text()).slice(0, 1000);
+        if (!elevenResponse.ok) {
+            const detail = (await elevenResponse.text()).slice(0, 1500);
+
             console.error(
-                "Chad TTS OpenAI error:",
-                openaiResponse.status,
+                "ElevenLabs Chad TTS error:",
+                elevenResponse.status,
                 detail
             );
 
@@ -3506,20 +3513,20 @@ async function handleChadTts(req, res) {
             });
         }
 
-        const audio = Buffer.from(await openaiResponse.arrayBuffer());
+        const audio = Buffer.from(
+            await elevenResponse.arrayBuffer()
+        );
 
         res.setHeader("Content-Type", "audio/mpeg");
         res.setHeader("Content-Length", String(audio.length));
         res.setHeader("Cache-Control", "private, max-age=86400");
-        res.setHeader(
-            "X-Chad-Voice",
-            CHAD_TTS_VOICE_ID ? "custom" : CHAD_TTS_VOICE
-        );
+        res.setHeader("X-Chad-Voice", voiceId);
+        res.setHeader("X-Chad-TTS-Provider", "elevenlabs");
 
         return res.status(200).send(audio);
 
     } catch (error) {
-        console.error("Chad TTS error:", error);
+        console.error("Chad ElevenLabs TTS error:", error);
 
         return res.status(500).json({
             success: false,
