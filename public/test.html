@@ -718,13 +718,14 @@ body.chad-test-enabled .chad-dev-title{
     <div id="chad-input-area">
 
         <div class="chad-composer-row">
-            <button type="button" id="chad-camera-button" class="chad-camera-button" aria-label="Take or choose a photo" title="Take or choose a photo">📷</button>
+            <div class="chad-plus-wrap"><button type="button" id="chad-plus-button" class="chad-plus-button" aria-label="Add to your message" aria-expanded="false">+</button><div id="chad-plus-menu" class="chad-plus-menu" hidden><button type="button" id="chad-take-photo"><span>📷</span><span>Take Photo</span></button><button type="button" id="chad-choose-photo"><span>🖼️</span><span>Choose Photo</span></button></div></div>
             <textarea
                 id="chad-question"
                 placeholder="Ask Chad..."
                 rows="3"
             ></textarea>
             <input id="chad-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+            <input id="chad-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         </div>
         <div id="chad-photo-preview" class="chad-photo-preview" hidden>
             <img id="chad-photo-preview-image" alt="Photo ready to send">
@@ -2595,8 +2596,8 @@ body {
 @media(max-width:600px){#chad-auth-overlay{padding:0;align-items:flex-end}#chad-auth-modal{width:100%;max-height:92vh;border-radius:20px 20px 0 0;padding:24px 18px max(24px,env(safe-area-inset-bottom))}}
 
 
-.chad-composer-row{display:flex;gap:10px;align-items:stretch}.chad-composer-row #chad-question{flex:1;min-width:0}.chad-camera-button{flex:0 0 48px;width:48px;border:2px solid #20262c;border-radius:12px;background:#fff;color:#111;font-size:22px;cursor:pointer}.chad-camera-button:hover{background:#f3f4f5}.chad-photo-preview{display:grid;grid-template-columns:78px minmax(0,1fr) 34px;gap:11px;align-items:center;margin:10px 0;padding:9px;border:1px solid #d4d8dc;border-radius:12px;background:#f8f9fa}.chad-photo-preview[hidden]{display:none!important}.chad-photo-preview img{width:78px;height:78px;object-fit:cover;border-radius:9px}.chad-photo-preview-meta{display:grid;gap:3px;font:12px/1.35 Arial,Helvetica,sans-serif;color:#555}.chad-photo-preview-meta strong{font-size:13px;color:#111}.chad-photo-preview button{width:32px;height:32px;border:0;border-radius:50%;background:#20262c;color:#fff;font-size:21px;cursor:pointer}.chad-user-photo{display:block;max-width:min(360px,100%);max-height:420px;object-fit:contain;border-radius:12px;margin:0 0 8px auto}.chad-copy-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100500;background:#20262c;color:#fff;border-radius:999px;padding:10px 15px;font:700 12px Arial,Helvetica,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28)}
-@media(max-width:600px){.chad-camera-button{flex-basis:46px;width:46px}.chad-photo-preview{grid-template-columns:64px minmax(0,1fr) 34px}.chad-photo-preview img{width:64px;height:64px}}
+.chad-composer-row{position:relative;display:flex;gap:8px;align-items:flex-end}.chad-composer-row #chad-question{flex:1;min-width:0}.chad-plus-wrap{position:relative;flex:0 0 42px}.chad-plus-button{width:42px;height:42px;border:1px solid #cfd4d8;border-radius:50%;background:#fff;color:#20262c;font:400 30px/38px Arial,Helvetica,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}.chad-plus-button:hover,.chad-plus-button:focus{background:#f3f4f5}.chad-plus-menu{position:absolute;left:0;bottom:50px;z-index:10020;min-width:176px;padding:6px;background:#fff;border:1px solid #d8dde1;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}.chad-plus-menu[hidden]{display:none!important}.chad-plus-menu button{width:100%;display:flex;align-items:center;gap:10px;border:0;background:transparent;border-radius:10px;padding:10px 12px;text-align:left;font:700 13px Arial,Helvetica,sans-serif;color:#20262c;cursor:pointer}.chad-plus-menu button:hover,.chad-plus-menu button:focus{background:#f1f3f4}.chad-plus-menu button span:first-child{font-size:18px;width:22px;text-align:center}.chad-photo-preview{display:grid;grid-template-columns:78px minmax(0,1fr) 34px;gap:11px;align-items:center;margin:10px 0;padding:9px;border:1px solid #d4d8dc;border-radius:12px;background:#f8f9fa}.chad-photo-preview[hidden]{display:none!important}.chad-photo-preview img{width:78px;height:78px;object-fit:cover;border-radius:9px}.chad-photo-preview-meta{display:grid;gap:3px;font:12px/1.35 Arial,Helvetica,sans-serif;color:#555}.chad-photo-preview-meta strong{font-size:13px;color:#111}.chad-photo-preview button{width:32px;height:32px;border:0;border-radius:50%;background:#20262c;color:#fff;font-size:21px;cursor:pointer}.chad-user-photo{display:block;max-width:min(360px,100%);max-height:420px;object-fit:contain;border-radius:12px;margin:0 0 8px auto}.chad-copy-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100500;background:#20262c;color:#fff;border-radius:999px;padding:10px 15px;font:700 12px Arial,Helvetica,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+@media(max-width:600px){.chad-plus-wrap{flex-basis:40px}.chad-plus-button{width:40px;height:40px;font-size:28px}.chad-photo-preview{grid-template-columns:64px minmax(0,1fr) 34px}.chad-photo-preview img{width:64px;height:64px}}
 </style>
 
 
@@ -5926,13 +5927,17 @@ body {
         return data;
     }
 
-    document.getElementById('chad-camera-button')?.addEventListener('click',()=>document.getElementById('chad-camera-input')?.click());
-    document.getElementById('chad-camera-input')?.addEventListener('change',async function(){
-        const file=this.files&&this.files[0]; if(!file)return;
-        try{ setPhotoPreview(await resizeChatPhoto(file)); if(!questionInput.value.trim()) questionInput.placeholder='Ask Chad about this photo...'; }
-        catch(e){ addError(e.message||'Could not prepare that photo.'); }
-        finally{ this.value=''; }
-    });
+    const plusButton=document.getElementById('chad-plus-button');
+    const plusMenu=document.getElementById('chad-plus-menu');
+    function closePlusMenu(){if(plusMenu)plusMenu.hidden=true;if(plusButton)plusButton.setAttribute('aria-expanded','false');}
+    function togglePlusMenu(){if(!plusMenu||!plusButton)return;plusMenu.hidden=!plusMenu.hidden;plusButton.setAttribute('aria-expanded',plusMenu.hidden?'false':'true');}
+    plusButton?.addEventListener('click',function(e){e.stopPropagation();togglePlusMenu();});
+    document.getElementById('chad-take-photo')?.addEventListener('click',function(){closePlusMenu();document.getElementById('chad-camera-input')?.click();});
+    document.getElementById('chad-choose-photo')?.addEventListener('click',function(){closePlusMenu();document.getElementById('chad-photo-input')?.click();});
+    document.addEventListener('click',function(e){if(plusMenu&&!plusMenu.hidden&&!e.target.closest('.chad-plus-wrap'))closePlusMenu();});
+    async function handleChatPhotoInput(input){const file=input.files&&input.files[0];if(!file)return;try{setPhotoPreview(await resizeChatPhoto(file));if(!questionInput.value.trim())questionInput.placeholder='Ask Chad about this photo...';}catch(e){addError(e.message||'Could not prepare that photo.');}finally{input.value='';}}
+    document.getElementById('chad-camera-input')?.addEventListener('change',function(){handleChatPhotoInput(this);});
+    document.getElementById('chad-photo-input')?.addEventListener('change',function(){handleChatPhotoInput(this);});
     document.getElementById('chad-photo-remove')?.addEventListener('click',()=>{ setPhotoPreview(''); questionInput.placeholder='Ask Chad...'; });
 
     async function askChad() {
