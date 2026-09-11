@@ -99,7 +99,7 @@ const ALLOWED_TURNSTILE_HOSTS = new Set([
     "www.chadpdchee.com"
 ]);
 
-app.use(express.json({ limit: "12kb" }));
+app.use(express.json({ limit: "3mb" }));
 
 app.use((req, res, next) => {
     const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
@@ -6801,3 +6801,4 @@ async function startServer() {
 }
 
 startServer();
+
