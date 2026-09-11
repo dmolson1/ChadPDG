@@ -6912,6 +6912,14 @@ body {
 const overlay=document.getElementById('chad-auth-overlay'),closeButton=document.getElementById('chad-auth-close'),accountButton=document.getElementById('chad-account-button'),accountTitle=document.getElementById('chad-account-title'),accountSubtitle=document.getElementById('chad-account-subtitle'),recentList=document.getElementById('chad-recent-list'),authMessage=document.getElementById('chad-auth-message'),chat=document.getElementById('chad-chat');
 let currentUser=null,currentConversationId=null,lastAuthView='signin',pendingAuthFeature='';
 
+window.CHAD_GET_CURRENT_USER = function(){
+    return currentUser;
+};
+
+window.CHAD_GET_CURRENT_CONVERSATION_ID = function(){
+    return currentConversationId;
+};
+
 function api(path,options){return fetch(path,Object.assign({credentials:'same-origin'},options||{})).then(async r=>{let d={};try{d=await r.json()}catch(_){ }if(!r.ok||d.success===false){const e=new Error(d.error||'Something went sideways.');e.status=r.status;e.data=d;throw e}return d})}
 function jsonOptions(method,body){return{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}}
 function refreshQuestionLimit(){try{if(typeof window.CHADPDG_SYNC_QUESTION_LIMIT==='function'){window.CHADPDG_SYNC_QUESTION_LIMIT()}}catch(_){}}
@@ -6933,6 +6941,9 @@ function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accou
 function signedIn(){if(!currentUser)return signedOut();accountTitle.textContent=currentUser.display_name||'Account';accountSubtitle.textContent=currentUser.email;accountButton.classList.add('chad-sidebar-signedin')}
 
 async function loadMe(){try{const d=await api('/auth/me');currentUser=d.authenticated?d.user:null;if(currentUser){signedIn();renderAccount();await loadRecent()}else signedOut();refreshQuestionLimit()}catch(_){currentUser=null;signedOut();refreshQuestionLimit()}}
+window.CHAD_OPEN_AUTH = function(view){
+    try{ openAuth(view || 'signin'); }catch(_){}
+};
 function closeRecentMenus(){document.querySelectorAll('.chad-recent-menu').forEach(m=>m.hidden=true)}
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
@@ -7477,8 +7488,13 @@ loadMe();
     }
     async function createLiveSession(sdp){
         const payload = { sdp:sdp };
-        if(typeof currentConversationId !== 'undefined' && currentConversationId){
-            payload.conversation_id = currentConversationId;
+        const activeConversationId =
+            typeof window.CHAD_GET_CURRENT_CONVERSATION_ID === 'function'
+                ? window.CHAD_GET_CURRENT_CONVERSATION_ID()
+                : null;
+
+        if(activeConversationId){
+            payload.conversation_id = activeConversationId;
         }
         const response = await fetch('/voice/session',{
             method:'POST',
@@ -7539,11 +7555,15 @@ loadMe();
             return;
         }
 
-        if(typeof currentUser === 'undefined' || !currentUser){
+        const activeUser =
+            typeof window.CHAD_GET_CURRENT_USER === 'function'
+                ? window.CHAD_GET_CURRENT_USER()
+                : null;
+
+        if(!activeUser){
             setStatus('Sign in to use live voice chat.');
-            if(typeof openAuth === 'function'){
-                openAuth('signin');
-                if(typeof msg === 'function') msg('Sign in first, then tap the microphone to talk to Chad.','success');
+            if(typeof window.CHAD_OPEN_AUTH === 'function'){
+                window.CHAD_OPEN_AUTH('signin');
             }
             return;
         }
