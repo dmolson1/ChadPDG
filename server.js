@@ -4197,8 +4197,27 @@ async function paypalAccessToken() {
         },
         body: "grant_type=client_credentials"
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.access_token) throw new Error("Could not connect to PayPal.");
+    const raw = await response.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+
+    if (!response.ok || !data.access_token) {
+        // Safe diagnostics only: never log the Client ID, Secret, Authorization header,
+        // or any access token. This logs only PayPal's HTTP status and error fields.
+        const paypalError = String(data?.error || "unknown_error").slice(0, 200);
+        const paypalDescription = String(data?.error_description || data?.message || "No PayPal error description returned.").slice(0, 500);
+        console.error(
+            "PayPal OAuth error:",
+            `env=${PAYPAL_ENV}`,
+            `status=${response.status}`,
+            `error=${paypalError}`,
+            `description=${paypalDescription}`
+        );
+        const error = new Error(`Could not connect to PayPal. OAuth ${response.status}: ${paypalError}`);
+        error.status = response.status;
+        throw error;
+    }
+
     return data.access_token;
 }
 
