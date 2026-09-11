@@ -6851,7 +6851,13 @@ ${walkthroughText}
 `.trim();
 
     try {
-        const openaiResponse = await fetch("https://api.openai.com/v1/live/sessions", {
+        /*
+         * Use the established Realtime WebRTC call endpoint for the first
+         * production voice rollout. GPT-Live-1 is brand new and its Live
+         * session surface is still evolving; Realtime calls are documented
+         * specifically for browser WebRTC SDP offer/answer negotiation.
+         */
+        const openaiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -6859,32 +6865,27 @@ ${walkthroughText}
                 "OpenAI-Safety-Identifier": hashValue(user ? `voice-user:${user.id}` : "voice-admin-test").slice(0, 64)
             },
             body: JSON.stringify({
+                sdp,
                 session: {
-                    type: "live",
-                    model: "gpt-live-1",
+                    type: "realtime",
+                    model: "gpt-realtime-2.1-mini",
                     instructions: voiceInstructions
-                },
-                transport: {
-                    type: "webrtc",
-                    sdp
                 }
             })
         });
 
         const raw = await openaiResponse.text();
-        let data = {};
-        try {
-            data = raw ? JSON.parse(raw) : {};
-        } catch {
-            data = {};
-        }
 
         if (!openaiResponse.ok) {
-            console.error("GPT-Live session creation failed:", openaiResponse.status, raw.slice(0, 2000));
+            let data = {};
+            try { data = raw ? JSON.parse(raw) : {}; } catch {}
+
+            console.error("Realtime voice call creation failed:", openaiResponse.status, raw.slice(0, 2000));
 
             const upstreamMessage =
                 data?.error?.message ||
                 data?.message ||
+                raw ||
                 "";
 
             const upstreamCode =
@@ -6899,27 +6900,43 @@ ${walkthroughText}
             ).json({
                 success: false,
                 error: adminTest && upstreamMessage
-                    ? `GPT-Live ${openaiResponse.status}: ${upstreamMessage}${upstreamCode ? ` (${upstreamCode})` : ""}`
+                    ? `Realtime ${openaiResponse.status}: ${String(upstreamMessage).slice(0, 800)}${upstreamCode ? ` (${upstreamCode})` : ""}`
                     : "Chad couldn't start voice mode. Try again in a moment."
             });
         }
 
-        if (!data?.transport?.sdp || !data?.session?.id) {
-            console.error("GPT-Live returned an incomplete session response.");
+        // /v1/realtime/calls returns the SDP answer as plain text.
+        if (!raw || !raw.startsWith("v=")) {
+            console.error("Realtime returned an unexpected SDP response:", raw.slice(0, 1000));
             return res.status(502).json({
                 success: false,
-                error: "Chad's voice connection came back incomplete."
+                error: adminTest
+                    ? `Realtime returned an unexpected response: ${raw.slice(0, 500)}`
+                    : "Chad's voice connection came back incomplete."
             });
         }
+
+        const location = openaiResponse.headers.get("location") || "";
+        const sessionId = location.split("/").filter(Boolean).pop() || "realtime-webrtc";
 
         trackAnalyticsEvent(req, "voice_session_started", {
             authenticated: Boolean(user),
             admin_test_mode: adminTest,
             has_conversation: Boolean(conversationId),
-            has_walkthrough: Boolean(walkthrough?.steps?.length)
+            has_walkthrough: Boolean(walkthrough?.steps?.length),
+            voice_transport: "webrtc",
+            voice_model: "gpt-realtime-2.1-mini"
         }).catch(() => {});
 
-        return res.status(201).json(data);
+        return res.status(201).json({
+            success: true,
+            session: { id: sessionId },
+            transport: {
+                type: "webrtc",
+                sdp: raw
+            },
+            voice_model: "gpt-realtime-2.1-mini"
+        });
     } catch (error) {
         console.error("Voice session error:", error);
         return res.status(502).json({
