@@ -531,38 +531,19 @@ body.chad-test-enabled .chad-dev-title{
 }
 
 
-    .chad-voice-control {
-        display: flex;
-        justify-content: center;
-        margin-top: 10px;
+    #chad-voice-toggle.chad-voice-toggle {
+        min-width: 42px;
+        width: 42px;
+        padding-left: 0;
+        padding-right: 0;
+        font-size: 16px;
+        line-height: 1;
     }
 
-    #chad-voice-toggle {
-        border: 1px solid rgba(255,255,255,.22);
-        border-radius: 999px;
-        padding: 8px 14px;
-        background: rgba(0,0,0,.28);
-        color: inherit;
-        font: inherit;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: .04em;
-        cursor: pointer;
-        transition: transform .15s ease, opacity .15s ease, background .15s ease;
+    #chad-voice-toggle.chad-voice-toggle[data-muted="1"] {
+        opacity: .68;
     }
 
-    #chad-voice-toggle:hover {
-        transform: translateY(-1px);
-    }
-
-    #chad-voice-toggle[data-muted="1"] {
-        opacity: .72;
-    }
-
-    @media (max-width: 700px) {
-        .chad-voice-control {
-            margin-top: 8px;
-        }
 
         #chad-voice-toggle {
             padding: 7px 12px;
@@ -822,11 +803,6 @@ body {
             <span aria-hidden="true"> · </span>
             <a href="/sponsor-login.html">Sponsor Login</a>
         </div>
-        <div class="chad-voice-control">
-            <button type="button" id="chad-voice-toggle" aria-pressed="false" title="Mute or unmute Chad">
-                🔊 CHAD VOICE ON
-            </button>
-        </div>
     </div>
 
     <div id="chad-disclaimer">
@@ -904,6 +880,17 @@ body {
                 title="Copy this conversation to your clipboard"
             >
                 COPY
+            </button>
+
+            <button
+                type="button"
+                id="chad-voice-toggle"
+                class="chad-secondary-action chad-voice-toggle"
+                aria-pressed="false"
+                title="Mute Chad"
+                aria-label="Mute Chad"
+            >
+                🔊
             </button>
 
         </div>
@@ -5438,7 +5425,12 @@ body {
         return {
             wrapper: wrapper,
             answer: wrapper.querySelector('.chad-answer'),
-            text: ''
+            text: '',
+            voiceBuffer: '',
+            voiceQueue: [],
+            voiceSpeaking: false,
+            voiceGeneration: 0,
+            voiceFinished: false
         };
     }
 
@@ -5453,6 +5445,12 @@ body {
          * settle into their final layout as the answer arrives.
          */
         state.answer.innerHTML = formatAnswer(state.text);
+
+        /*
+         * Start Chad's voice while the written answer is still streaming.
+         * We wait for a sensible sentence boundary, not for the whole answer.
+         */
+        queueStreamingChadVoice(state, delta, false);
     }
 
 
@@ -5471,10 +5469,11 @@ body {
 
         state.mainFinalized = true;
 
-        if (!state.autoVoiceStarted) {
-            state.autoVoiceStarted = true;
-            speakChadAnswer(answer);
-        }
+        /*
+         * Flush whatever text is left after the streaming voice queue has
+         * already started. This avoids reading the whole answer twice.
+         */
+        queueStreamingChadVoice(state, '', true);
     }
 
 
@@ -5643,12 +5642,14 @@ body {
 
         button.dataset.muted = chadVoiceMuted ? '1' : '0';
         button.setAttribute('aria-pressed', chadVoiceMuted ? 'true' : 'false');
-        button.textContent = chadVoiceMuted
-            ? '🔇 CHAD MUTED'
-            : '🔊 CHAD VOICE ON';
+        button.textContent = chadVoiceMuted ? '🔇' : '🔊';
         button.title = chadVoiceMuted
             ? "Turn Chad\'s voice back on"
             : 'Mute Chad and stop voice API calls';
+        button.setAttribute(
+            'aria-label',
+            chadVoiceMuted ? "Turn Chad\'s voice back on" : 'Mute Chad'
+        );
     }
 
     function setChadVoiceMuted(muted) {
@@ -5823,6 +5824,159 @@ body {
             });
         });
     }
+
+    function takeStreamingVoiceChunk(state, force) {
+        if (!state || !state.voiceBuffer) return '';
+
+        const buffer = state.voiceBuffer;
+        const minimumFirstChunk = 70;
+        const preferredChunk = 260;
+        const hardChunk = 420;
+
+        /*
+         * Prefer a complete spoken sentence. This gets Chad talking quickly
+         * without firing the TTS API for every tiny stream delta.
+         */
+        let boundary = -1;
+        const sentenceRegex = /[.!?](?:["')\]]*)?(?=\s|$)/g;
+        let match;
+
+        while ((match = sentenceRegex.exec(buffer)) !== null) {
+            const end = match.index + match[0].length;
+
+            if (end >= minimumFirstChunk) {
+                boundary = end;
+                if (end >= preferredChunk) break;
+            }
+        }
+
+        /*
+         * A paragraph/bullet break is also a natural place to speak.
+         */
+        if (boundary < 0 && buffer.length >= minimumFirstChunk) {
+            const newline = buffer.lastIndexOf('\n', preferredChunk);
+            if (newline >= minimumFirstChunk) {
+                boundary = newline + 1;
+            }
+        }
+
+        /*
+         * Don't let a giant punctuation-free paragraph hold the voice hostage.
+         */
+        if (boundary < 0 && buffer.length >= hardChunk) {
+            const space = buffer.lastIndexOf(' ', hardChunk);
+            boundary = space > minimumFirstChunk ? space : hardChunk;
+        }
+
+        if (force && boundary < 0 && buffer.trim()) {
+            boundary = buffer.length;
+        }
+
+        if (boundary < 0) return '';
+
+        const raw = buffer.slice(0, boundary);
+        state.voiceBuffer = buffer.slice(boundary);
+
+        return speechText(raw);
+    }
+
+
+    function queueStreamingChadVoice(state, delta, force) {
+        if (!state) return;
+
+        /*
+         * Muted means muted: don't queue text and, most importantly,
+         * don't make a new ElevenLabs request.
+         */
+        if (chadVoiceMuted) {
+            state.voiceBuffer = '';
+            state.voiceQueue = [];
+            return;
+        }
+
+        if (delta) {
+            state.voiceBuffer += delta;
+        }
+
+        let chunk = '';
+        do {
+            chunk = takeStreamingVoiceChunk(state, force === true);
+            if (chunk) state.voiceQueue.push(chunk);
+
+            /*
+             * On a normal stream tick, queue at most one fresh chunk.
+             * On final flush, drain the remaining buffer.
+             */
+            if (!force) break;
+        } while (chunk && state.voiceBuffer.trim());
+
+        if (!state.voiceQueue.length) return;
+
+        if (!state.voiceGeneration) {
+            state.voiceGeneration = ++chadSpeechGeneration;
+        }
+
+        pumpStreamingChadVoice(state);
+    }
+
+
+    async function pumpStreamingChadVoice(state) {
+        if (!state || state.voiceSpeaking) return;
+        if (chadVoiceMuted) return;
+        if (!state.voiceQueue || !state.voiceQueue.length) return;
+
+        const generation = state.voiceGeneration;
+
+        if (!generation || generation !== chadSpeechGeneration) return;
+
+        state.voiceSpeaking = true;
+
+        try {
+            while (
+                state.voiceQueue.length &&
+                !chadVoiceMuted &&
+                generation === chadSpeechGeneration
+            ) {
+                const text = state.voiceQueue.shift();
+                if (!text) continue;
+
+                let audioUrl = '';
+
+                try {
+                    audioUrl = await fetchChadVoiceAudio(text);
+                } catch (error) {
+                    console.warn('Chad streaming voice generation failed:', error);
+                    state.voiceQueue = [];
+                    state.voiceBuffer = '';
+                    return;
+                }
+
+                if (
+                    chadVoiceMuted ||
+                    generation !== chadSpeechGeneration
+                ) {
+                    return;
+                }
+
+                const played = await playChadAudioUrl(audioUrl, generation);
+                if (!played) return;
+            }
+        } finally {
+            state.voiceSpeaking = false;
+
+            /*
+             * A new chunk may have arrived during the final await.
+             */
+            if (
+                state.voiceQueue.length &&
+                !chadVoiceMuted &&
+                generation === chadSpeechGeneration
+            ) {
+                pumpStreamingChadVoice(state);
+            }
+        }
+    }
+
 
     async function speakChadAnswer(text) {
         if (chadVoiceMuted) return false;
@@ -7269,6 +7423,8 @@ body {
      * Allow the separate account UI to refresh the live quota counter
      * immediately after sign-in, sign-up, sign-out, or account deletion.
      */
+    bindChadVoiceToggle();
+
     window.CHADPDG_SYNC_QUESTION_LIMIT = syncQuestionLimit;
 
 })();
