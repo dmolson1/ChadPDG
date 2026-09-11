@@ -5037,8 +5037,10 @@ body {
                 }
             );
 
-            button.textContent =
-                'SHOPPING LIST BUILT';
+            if (button) {
+                button.textContent =
+                    'SHOPPING LIST BUILT';
+            }
 
             const firstResult =
                 resultBox.querySelector(
