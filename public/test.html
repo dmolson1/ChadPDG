@@ -2698,6 +2698,22 @@ body {
 @media(max-width:600px){.chad-plus-wrap{flex-basis:40px}.chad-plus-button{width:40px;height:40px;font-size:28px}.chad-photo-preview{grid-template-columns:64px minmax(0,1fr) 34px}.chad-photo-preview img{width:64px;height:64px}}
 </style>
 
+<style id="chad-guided-walkthrough-styles">
+.chad-walkthrough-offer{margin-top:16px;padding:14px 15px;border:1px solid #d8dde1;border-radius:14px;background:#f7f8f9;font-family:Arial,Helvetica,sans-serif}
+.chad-walkthrough-question{font-size:14px;line-height:1.45;font-weight:800;color:#20262c;margin-bottom:11px}
+.chad-walkthrough-actions,.chad-guide-controls{display:flex;flex-wrap:wrap;gap:8px}
+.chad-walkthrough-actions button,.chad-guide-controls button{min-height:42px;border-radius:10px;border:1px solid #c9cfd4;background:#fff;color:#20262c;padding:9px 13px;font:800 12px/1.2 Arial,Helvetica,sans-serif;cursor:pointer}
+.chad-walkthrough-actions .chad-walkthrough-yes,.chad-guide-controls .chad-guide-next{border-color:#20262c;background:#20262c;color:#fff}
+.chad-walkthrough-actions button:hover,.chad-guide-controls button:hover,.chad-walkthrough-actions button:focus,.chad-guide-controls button:focus{filter:brightness(.96)}
+.chad-guide-card{margin-top:16px;padding:15px;border:1px solid #d8dde1;border-radius:14px;background:#f7f8f9;font-family:Arial,Helvetica,sans-serif}
+.chad-guide-kicker{font:900 11px/1.2 Arial,Helvetica,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#687078;margin-bottom:7px}
+.chad-guide-step{font:700 15px/1.5 Arial,Helvetica,sans-serif;color:#20262c;margin-bottom:12px}
+.chad-guide-audio-status{min-height:18px;margin-top:9px;font:600 11px/1.35 Arial,Helvetica,sans-serif;color:#687078}
+.chad-guide-complete{font:800 14px/1.45 Arial,Helvetica,sans-serif;color:#20262c}
+.chad-walkthrough-declined{font:700 12px/1.4 Arial,Helvetica,sans-serif;color:#687078}
+@media(max-width:600px){.chad-walkthrough-actions,.chad-guide-controls{display:grid;grid-template-columns:1fr 1fr}.chad-walkthrough-actions button,.chad-guide-controls button{width:100%;min-height:44px}.chad-guide-controls .chad-guide-next,.chad-guide-controls .chad-guide-stop{grid-column:auto}.chad-guide-step{font-size:16px}}
+</style>
+
 
 <script
     src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
@@ -5456,6 +5472,192 @@ body {
     }
 
 
+    function normalizeClientWalkthrough(value) {
+        const raw = value && typeof value === 'object' ? value : {};
+        const steps = Array.isArray(raw.steps)
+            ? raw.steps.map(function (step) {
+                return String(step || '').replace(/\s+/g, ' ').trim();
+            }).filter(Boolean).slice(0, 12)
+            : [];
+
+        if (!raw.offered || steps.length < 3) {
+            return { offered: false, prompt: '', steps: [] };
+        }
+
+        return {
+            offered: true,
+            prompt: String(raw.prompt || 'Want me to walk you through this out loud while you do it?').trim(),
+            steps: steps
+        };
+    }
+
+
+    function buildWalkthroughOffer(value) {
+        const walkthrough = normalizeClientWalkthrough(value);
+        if (!walkthrough.offered) return '';
+
+        return '' +
+            '<div class="chad-walkthrough-offer" aria-live="polite">' +
+                '<div class="chad-walkthrough-question">' + escapeHtml(walkthrough.prompt) + '</div>' +
+                '<div class="chad-walkthrough-actions">' +
+                    '<button type="button" class="chad-walkthrough-yes">🔊 YES — WALK ME THROUGH IT</button>' +
+                    '<button type="button" class="chad-walkthrough-no">NO — I GOT THIS</button>' +
+                '</div>' +
+            '</div>';
+    }
+
+
+    function speechText(text) {
+        return String(text || '')
+            .replace(/[*_`#>]/g, '')
+            .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+
+    function pickChadVoice() {
+        if (!('speechSynthesis' in window)) return null;
+        const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+        if (!voices || !voices.length) return null;
+
+        const preferredNames = /Daniel|Alex|Aaron|Guy|David|James|Thomas|Fred|Mark|Ryan|Microsoft Guy/i;
+        const scored = voices.map(function (voice) {
+            const lang = String(voice.lang || '').toLowerCase();
+            let score = 0;
+            if (lang === 'en-ca') score += 8;
+            else if (lang.startsWith('en-')) score += 5;
+            if (preferredNames.test(String(voice.name || ''))) score += 3;
+            if (voice.localService) score += 1;
+            return { voice: voice, score: score };
+        }).sort(function (a, b) { return b.score - a.score; });
+
+        return scored[0] && scored[0].score > 0 ? scored[0].voice : voices[0];
+    }
+
+
+    function speakWalkthroughStep(text, statusElement) {
+        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+            if (statusElement) statusElement.textContent = 'Audio is not supported in this browser, but the step-by-step guide still works.';
+            return false;
+        }
+
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(speechText(text));
+        const voice = pickChadVoice();
+        if (voice) utterance.voice = voice;
+        utterance.rate = 0.96;
+        utterance.pitch = 0.92;
+        utterance.volume = 1;
+
+        if (statusElement) statusElement.textContent = '🔊 Chad is talking. Try to contain your excitement.';
+        utterance.onend = function () {
+            if (statusElement) statusElement.textContent = 'Ready when you are, chief.';
+        };
+        utterance.onerror = function () {
+            if (statusElement) statusElement.textContent = 'Audio had a moment. The step is still right there.';
+        };
+
+        try {
+            window.speechSynthesis.speak(utterance);
+            return true;
+        } catch (error) {
+            if (statusElement) statusElement.textContent = 'Audio is not available right now. Use the on-screen step.';
+            return false;
+        }
+    }
+
+
+    function startGuidedWalkthrough(container, value) {
+        const walkthrough = normalizeClientWalkthrough(value);
+        if (!container || !walkthrough.offered) return;
+
+        let index = 0;
+
+        function stopSpeech() {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        }
+
+        function renderStep(autoSpeak) {
+            const total = walkthrough.steps.length;
+            const step = walkthrough.steps[index];
+
+            container.className = 'chad-guide-card';
+            container.innerHTML = '' +
+                '<div class="chad-guide-kicker">STEP ' + (index + 1) + ' OF ' + total + '</div>' +
+                '<div class="chad-guide-step">' + escapeHtml(step) + '</div>' +
+                '<div class="chad-guide-controls">' +
+                    '<button type="button" class="chad-guide-repeat">🔊 REPEAT</button>' +
+                    '<button type="button" class="chad-guide-back"' + (index === 0 ? ' disabled' : '') + '>← BACK</button>' +
+                    '<button type="button" class="chad-guide-next">' + (index === total - 1 ? '✓ FINISH' : 'NEXT STEP →') + '</button>' +
+                    '<button type="button" class="chad-guide-stop">STOP</button>' +
+                '</div>' +
+                '<div class="chad-guide-audio-status" aria-live="polite"></div>';
+
+            const status = container.querySelector('.chad-guide-audio-status');
+            const repeat = container.querySelector('.chad-guide-repeat');
+            const back = container.querySelector('.chad-guide-back');
+            const next = container.querySelector('.chad-guide-next');
+            const stop = container.querySelector('.chad-guide-stop');
+
+            repeat.addEventListener('click', function () {
+                speakWalkthroughStep(step, status);
+            });
+
+            back.addEventListener('click', function () {
+                if (index <= 0) return;
+                index -= 1;
+                renderStep(true);
+            });
+
+            next.addEventListener('click', function () {
+                stopSpeech();
+                if (index >= total - 1) {
+                    container.innerHTML = '<div class="chad-guide-complete">Done. Look at you, following directions and everything. Chad is cautiously impressed.</div>';
+                    return;
+                }
+                index += 1;
+                renderStep(true);
+            });
+
+            stop.addEventListener('click', function () {
+                stopSpeech();
+                container.innerHTML = '<div class="chad-walkthrough-declined">Walkthrough stopped. Apparently you have decided to freestyle it. Bold.</div>';
+            });
+
+            if (autoSpeak) speakWalkthroughStep(step, status);
+        }
+
+        renderStep(true);
+    }
+
+
+    function bindGuidedWalkthrough(wrapper, value) {
+        const walkthrough = normalizeClientWalkthrough(value);
+        if (!wrapper || !walkthrough.offered) return;
+
+        const offer = wrapper.querySelector('.chad-walkthrough-offer');
+        if (!offer) return;
+
+        const yes = offer.querySelector('.chad-walkthrough-yes');
+        const no = offer.querySelector('.chad-walkthrough-no');
+
+        yes && yes.addEventListener('click', function () {
+            startGuidedWalkthrough(offer, walkthrough);
+        });
+
+        no && no.addEventListener('click', function () {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            offer.innerHTML = '<div class="chad-walkthrough-declined">Fine. Go be independent. I’ll be right here when that becomes inconvenient.</div>';
+        });
+    }
+
+
+    window.CHADPDG_BUILD_WALKTHROUGH = buildWalkthroughOffer;
+    window.CHADPDG_BIND_WALKTHROUGH = bindGuidedWalkthrough;
+
+
     function addChadResponse(
         data,
         question
@@ -5488,6 +5690,8 @@ body {
 
 
         let afterHtml = '';
+
+        afterHtml += buildWalkthroughOffer(data.walkthrough);
 
         if (
             data.shopping_list_recommended &&
@@ -5611,6 +5815,8 @@ body {
             afterAnswer.innerHTML =
                 afterHtml;
         }
+
+        bindGuidedWalkthrough(wrapper, data.walkthrough);
 
         /*
          * Bind Amazon click tracking for cards.
@@ -6682,8 +6888,8 @@ async function renameConversation(c){const title=window.prompt('Rename project',
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
 async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
-function historyChad(text){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div>';chat.appendChild(w)}
-async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'')});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
+function historyChad(text,meta){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';const walkthrough=meta&&meta.walkthrough?meta.walkthrough:null;const offer=(window.CHADPDG_BUILD_WALKTHROUGH&&walkthrough)?window.CHADPDG_BUILD_WALKTHROUGH(walkthrough):'';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div><div class="chad-after-answer">'+offer+'</div>';chat.appendChild(w);if(window.CHADPDG_BIND_WALKTHROUGH&&walkthrough)window.CHADPDG_BIND_WALKTHROUGH(w,walkthrough)}
+async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'',m.message_meta||null)});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
 
 accountButton&&accountButton.addEventListener('click',()=>openAuth(currentUser?'account':'signin'));closeButton&&closeButton.addEventListener('click',closeAuth);overlay&&overlay.addEventListener('click',e=>{if(e.target===overlay)closeAuth()});
 document.querySelectorAll('[data-auth-view]').forEach(b=>b.addEventListener('click',()=>setView(b.getAttribute('data-auth-view'))));
