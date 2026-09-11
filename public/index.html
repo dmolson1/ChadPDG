@@ -455,19 +455,6 @@ body {
 }
 
 
-    #chad-voice-toggle.chad-voice-toggle {
-        min-width: 42px;
-        width: 42px;
-        padding-left: 0;
-        padding-right: 0;
-        font-size: 16px;
-        line-height: 1;
-    }
-
-    #chad-voice-toggle.chad-voice-toggle[data-muted="1"] {
-        opacity: .68;
-    }
-
 
         #chad-voice-toggle {
             padding: 7px 12px;
@@ -786,17 +773,6 @@ body {
                 title="Copy this conversation to your clipboard"
             >
                 COPY
-            </button>
-
-            <button
-                type="button"
-                id="chad-voice-toggle"
-                class="chad-secondary-action chad-voice-toggle"
-                aria-pressed="false"
-                title="Mute Chad"
-                aria-label="Mute Chad"
-            >
-                🔊
             </button>
 
         </div>
@@ -2638,6 +2614,8 @@ body {
 
 <style id="chad-guided-walkthrough-styles">
 .chad-walkthrough-offer{margin-top:16px;padding:14px 15px;border:1px solid #d8dde1;border-radius:14px;background:#f7f8f9;font-family:Arial,Helvetica,sans-serif}
+.chad-extras-loading{margin-top:14px;padding:13px 14px;border:1px solid #d8dde1;border-radius:12px;background:#fafafa;color:#687078;font:600 12px/1.45 Arial,Helvetica,sans-serif}
+.chad-extras-loading strong{color:#20262c;font-weight:900;letter-spacing:.02em}
 .chad-walkthrough-question{font-size:14px;line-height:1.45;font-weight:800;color:#20262c;margin-bottom:11px}
 .chad-walkthrough-actions,.chad-guide-controls{display:flex;flex-wrap:wrap;gap:8px}
 .chad-walkthrough-actions button,.chad-guide-controls button{min-height:42px;border-radius:10px;border:1px solid #c9cfd4;background:#fff;color:#20262c;padding:9px 13px;font:800 12px/1.2 Arial,Helvetica,sans-serif;cursor:pointer}
@@ -5323,12 +5301,7 @@ body {
         return {
             wrapper: wrapper,
             answer: wrapper.querySelector('.chad-answer'),
-            text: '',
-            voiceBuffer: '',
-            voiceQueue: [],
-            voiceSpeaking: false,
-            voiceGeneration: 0,
-            voiceFinished: false
+            text: ''
         };
     }
 
@@ -5344,11 +5317,6 @@ body {
          */
         state.answer.innerHTML = formatAnswer(state.text);
 
-        /*
-         * Start Chad's voice while the written answer is still streaming.
-         * We wait for a sensible sentence boundary, not for the whole answer.
-         */
-        queueStreamingChadVoice(state, delta, false);
     }
 
 
@@ -5367,11 +5335,18 @@ body {
 
         state.mainFinalized = true;
 
-        /*
-         * Flush whatever text is left after the streaming voice queue has
-         * already started. This avoids reading the whole answer twice.
-         */
-        queueStreamingChadVoice(state, '', true);
+        if (
+            afterAnswer &&
+            !afterAnswer.querySelector('.chad-extras-loading')
+        ) {
+            afterAnswer.insertAdjacentHTML(
+                'beforeend',
+                '<div class="chad-extras-loading" aria-live="polite">' +
+                    '<strong>CHAD\'S PICKS</strong><br>' +
+                    'Chad is grabbing the stuff that actually makes sense for this job...' +
+                '</div>'
+            );
+        }
     }
 
 
@@ -5514,10 +5489,106 @@ body {
     }
 
 
+    function fractionWords(numerator, denominator) {
+        const key = String(numerator) + '/' + String(denominator);
+        const map = {
+            '1/2': 'one half',
+            '1/3': 'one third',
+            '2/3': 'two thirds',
+            '1/4': 'one quarter',
+            '3/4': 'three quarters',
+            '1/8': 'one eighth',
+            '3/8': 'three eighths',
+            '5/8': 'five eighths',
+            '7/8': 'seven eighths'
+        };
+        return map[key] || (numerator + ' over ' + denominator);
+    }
+
+
+    function normalizeChadSpeechUnits(text) {
+        let value = String(text || '');
+
+        value = value
+            .replace(/(\d+(?:\.\d+)?)\s*(?:°|\*)\s*F\b/gi, '$1 degrees Fahrenheit')
+            .replace(/(\d+(?:\.\d+)?)\s*(?:°|\*)\s*C\b/gi, '$1 degrees Celsius');
+
+        value = value.replace(/(\d+(?:\.\d+)?)\s*[–—-]\s*(\d+(?:\.\d+)?)/g, '$1 to $2');
+
+        value = value.replace(
+            /(\d+)\s*(?:-| )\s*(\d+)\/(\d+)\s*(["'′″])/g,
+            function (_, whole, num, den, mark) {
+                const unit = (mark === "'" || mark === '′') ? 'feet' : 'inches';
+                return whole + ' and ' + fractionWords(num, den) + ' ' + unit;
+            }
+        );
+
+        value = value.replace(
+            /(\d+)\/(\d+)\s*(["'′″])/g,
+            function (_, num, den, mark) {
+                const isFoot = (mark === "'" || mark === '′');
+                const words = fractionWords(num, den);
+                const singularFraction =
+                    words === 'one half' ||
+                    words === 'one quarter' ||
+                    words === 'one third' ||
+                    words === 'one eighth';
+
+                return words + ' ' + (
+                    isFoot
+                        ? (singularFraction ? 'foot' : 'feet')
+                        : (singularFraction ? 'inch' : 'inches')
+                );
+            }
+        );
+
+        value = value
+            .replace(/(\d+(?:\.\d+)?)\s*(?:″|")/g, '$1 inches')
+            .replace(/(\d+(?:\.\d+)?)\s*(?:′|')/g, '$1 feet');
+
+        const replacements = [
+            [/(\d+(?:\.\d+)?)\s*kV\b/gi, '$1 kilovolts'],
+            [/(\d+(?:\.\d+)?)\s*mV\b/gi, '$1 millivolts'],
+            [/(\d+(?:\.\d+)?)\s*(?:VAC|V\s*AC)\b/gi, '$1 volts A C'],
+            [/(\d+(?:\.\d+)?)\s*(?:VDC|V\s*DC)\b/gi, '$1 volts D C'],
+            [/(\d+(?:\.\d+)?)\s*V\b/g, '$1 volts'],
+            [/(\d+(?:\.\d+)?)\s*mA\b/gi, '$1 milliamps'],
+            [/(\d+(?:\.\d+)?)\s*A\b/g, '$1 amps'],
+            [/(\d+(?:\.\d+)?)\s*kW\b/gi, '$1 kilowatts'],
+            [/(\d+(?:\.\d+)?)\s*W\b/g, '$1 watts'],
+            [/(\d+(?:\.\d+)?)\s*(?:Ah|A\/h)\b/gi, '$1 amp hours'],
+            [/(\d+(?:\.\d+)?)\s*(?:Wh|W\/h)\b/gi, '$1 watt hours'],
+            [/(\d+(?:\.\d+)?)\s*kHz\b/gi, '$1 kilohertz'],
+            [/(\d+(?:\.\d+)?)\s*Hz\b/gi, '$1 hertz'],
+            [/(\d+(?:\.\d+)?)\s*kΩ\b/gi, '$1 kilo ohms'],
+            [/(\d+(?:\.\d+)?)\s*MΩ\b/g, '$1 mega ohms'],
+            [/(\d+(?:\.\d+)?)\s*Ω\b/g, '$1 ohms'],
+            [/(\d+(?:\.\d+)?)\s*PSI\b/gi, '$1 P S I'],
+            [/(\d+(?:\.\d+)?)\s*GPM\b/gi, '$1 gallons per minute'],
+            [/(\d+(?:\.\d+)?)\s*CFM\b/gi, '$1 cubic feet per minute'],
+            [/(\d+(?:\.\d+)?)\s*RPM\b/gi, '$1 R P M'],
+            [/(\d+(?:\.\d+)?)\s*AWG\b/gi, '$1 gauge'],
+            [/(\d+(?:\.\d+)?)\s*(?:ft[-· ]?lb|lb[-· ]?ft)\b/gi, '$1 foot pounds'],
+            [/(\d+(?:\.\d+)?)\s*(?:in[-· ]?lb|lb[-· ]?in)\b/gi, '$1 inch pounds'],
+            [/(\d+(?:\.\d+)?)\s*N(?:·|\s|-)?m\b/g, '$1 newton meters'],
+            [/(\d+(?:\.\d+)?)\s*mm\b/gi, '$1 millimeters'],
+            [/(\d+(?:\.\d+)?)\s*cm\b/gi, '$1 centimeters']
+        ];
+
+        replacements.forEach(function (pair) {
+            value = value.replace(pair[0], pair[1]);
+        });
+
+        return value;
+    }
+
+
     function speechText(text) {
-        return String(text || '')
-            .replace(/[*_`#>]/g, '')
-            .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+        return normalizeChadSpeechUnits(
+            String(text || '')
+                .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+                .replace(/[*_`#>]/g, '')
+        )
             .replace(/\s+/g, ' ')
             .trim();
     }
@@ -5526,398 +5597,6 @@ body {
     let cachedChadVoice = null;
     let activeChadAudio = null;
     const chadTtsCache = new Map();
-
-    let chadVoiceMuted = false;
-    let chadSpeechGeneration = 0;
-
-    try {
-        chadVoiceMuted = localStorage.getItem('chad_voice_muted') === '1';
-    } catch (_) {}
-
-    function updateChadVoiceToggle() {
-        const button = document.getElementById('chad-voice-toggle');
-        if (!button) return;
-
-        button.dataset.muted = chadVoiceMuted ? '1' : '0';
-        button.setAttribute('aria-pressed', chadVoiceMuted ? 'true' : 'false');
-        button.textContent = chadVoiceMuted ? '🔇' : '🔊';
-        button.title = chadVoiceMuted
-            ? "Turn Chad\'s voice back on"
-            : 'Mute Chad and stop voice API calls';
-        button.setAttribute(
-            'aria-label',
-            chadVoiceMuted ? "Turn Chad\'s voice back on" : 'Mute Chad'
-        );
-    }
-
-    function setChadVoiceMuted(muted) {
-        chadVoiceMuted = Boolean(muted);
-        chadSpeechGeneration += 1;
-
-        try {
-            localStorage.setItem(
-                'chad_voice_muted',
-                chadVoiceMuted ? '1' : '0'
-            );
-        } catch (_) {}
-
-        if (chadVoiceMuted) {
-            stopChadAudio();
-        }
-
-        updateChadVoiceToggle();
-    }
-
-    function bindChadVoiceToggle() {
-        const button = document.getElementById('chad-voice-toggle');
-        if (!button || button.dataset.bound === '1') return;
-
-        button.dataset.bound = '1';
-        button.addEventListener('click', function () {
-            setChadVoiceMuted(!chadVoiceMuted);
-        });
-
-        updateChadVoiceToggle();
-    }
-
-    function splitChadSpeech(text, maxChars) {
-        const clean = speechText(text);
-        if (!clean) return [];
-
-        const limit = Math.max(300, Number(maxChars || 900));
-        const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [clean];
-        const chunks = [];
-        let current = '';
-
-        function pushCurrent() {
-            const value = current.trim();
-            if (value) chunks.push(value);
-            current = '';
-        }
-
-        sentences.forEach(function (sentence) {
-            const part = sentence.trim();
-            if (!part) return;
-
-            if (part.length > limit) {
-                pushCurrent();
-
-                const words = part.split(/\s+/);
-                let piece = '';
-
-                words.forEach(function (word) {
-                    const candidate = piece ? piece + ' ' + word : word;
-
-                    if (candidate.length > limit && piece) {
-                        chunks.push(piece);
-                        piece = word;
-                    } else {
-                        piece = candidate;
-                    }
-                });
-
-                if (piece) chunks.push(piece);
-                return;
-            }
-
-            const candidate = current ? current + ' ' + part : part;
-
-            if (candidate.length > limit && current) {
-                pushCurrent();
-                current = part;
-            } else {
-                current = candidate;
-            }
-        });
-
-        pushCurrent();
-        return chunks;
-    }
-
-    async function fetchChadVoiceAudio(text) {
-        if (chadVoiceMuted) return '';
-
-        const cleanText = speechText(text);
-        if (!cleanText) return '';
-
-        const cached = chadTtsCache.get(cleanText);
-        if (cached) return cached;
-
-        const response = await fetch(
-            '/wp-json/chadpgt/v1/tts',
-            {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    ...chadApiHeaders(),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    text: cleanText,
-                    conversation_id:
-                        (
-                            typeof currentConversationId !== 'undefined' &&
-                            currentConversationId
-                        )
-                            ? currentConversationId
-                            : ''
-                })
-            }
-        );
-
-        if (!response.ok) {
-            let message = "Chad\'s real voice request failed.";
-
-            try {
-                const errorData = await response.json();
-                if (errorData && errorData.error) {
-                    message = String(errorData.error);
-                }
-            } catch (_) {}
-
-            throw new Error(message);
-        }
-
-        const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        chadTtsCache.set(cleanText, audioUrl);
-        return audioUrl;
-    }
-
-    function playChadAudioUrl(audioUrl, generation) {
-        return new Promise(function (resolve) {
-            if (
-                !audioUrl ||
-                chadVoiceMuted ||
-                generation !== chadSpeechGeneration
-            ) {
-                resolve(false);
-                return;
-            }
-
-            stopChadAudio();
-
-            const audio = new Audio(audioUrl);
-            audio.preload = 'auto';
-            audio.playsInline = true;
-            activeChadAudio = audio;
-
-            function finish(value) {
-                if (activeChadAudio === audio) {
-                    activeChadAudio = null;
-                }
-                resolve(value);
-            }
-
-            audio.onended = function () {
-                finish(true);
-            };
-
-            audio.onerror = function () {
-                finish(false);
-            };
-
-            audio.play().catch(function () {
-                finish(false);
-            });
-        });
-    }
-
-    function takeStreamingVoiceChunk(state, force) {
-        if (!state || !state.voiceBuffer) return '';
-
-        const buffer = state.voiceBuffer;
-        const minimumFirstChunk = 70;
-        const preferredChunk = 260;
-        const hardChunk = 420;
-
-        /*
-         * Prefer a complete spoken sentence. This gets Chad talking quickly
-         * without firing the TTS API for every tiny stream delta.
-         */
-        let boundary = -1;
-        const sentenceRegex = /[.!?](?:["')\]]*)?(?=\s|$)/g;
-        let match;
-
-        while ((match = sentenceRegex.exec(buffer)) !== null) {
-            const end = match.index + match[0].length;
-
-            if (end >= minimumFirstChunk) {
-                boundary = end;
-                if (end >= preferredChunk) break;
-            }
-        }
-
-        /*
-         * A paragraph/bullet break is also a natural place to speak.
-         */
-        if (boundary < 0 && buffer.length >= minimumFirstChunk) {
-            const newline = buffer.lastIndexOf('\n', preferredChunk);
-            if (newline >= minimumFirstChunk) {
-                boundary = newline + 1;
-            }
-        }
-
-        /*
-         * Don't let a giant punctuation-free paragraph hold the voice hostage.
-         */
-        if (boundary < 0 && buffer.length >= hardChunk) {
-            const space = buffer.lastIndexOf(' ', hardChunk);
-            boundary = space > minimumFirstChunk ? space : hardChunk;
-        }
-
-        if (force && boundary < 0 && buffer.trim()) {
-            boundary = buffer.length;
-        }
-
-        if (boundary < 0) return '';
-
-        const raw = buffer.slice(0, boundary);
-        state.voiceBuffer = buffer.slice(boundary);
-
-        return speechText(raw);
-    }
-
-
-    function queueStreamingChadVoice(state, delta, force) {
-        if (!state) return;
-
-        /*
-         * Muted means muted: don't queue text and, most importantly,
-         * don't make a new ElevenLabs request.
-         */
-        if (chadVoiceMuted) {
-            state.voiceBuffer = '';
-            state.voiceQueue = [];
-            return;
-        }
-
-        if (delta) {
-            state.voiceBuffer += delta;
-        }
-
-        let chunk = '';
-        do {
-            chunk = takeStreamingVoiceChunk(state, force === true);
-            if (chunk) state.voiceQueue.push(chunk);
-
-            /*
-             * On a normal stream tick, queue at most one fresh chunk.
-             * On final flush, drain the remaining buffer.
-             */
-            if (!force) break;
-        } while (chunk && state.voiceBuffer.trim());
-
-        if (!state.voiceQueue.length) return;
-
-        if (!state.voiceGeneration) {
-            state.voiceGeneration = ++chadSpeechGeneration;
-        }
-
-        pumpStreamingChadVoice(state);
-    }
-
-
-    async function pumpStreamingChadVoice(state) {
-        if (!state || state.voiceSpeaking) return;
-        if (chadVoiceMuted) return;
-        if (!state.voiceQueue || !state.voiceQueue.length) return;
-
-        const generation = state.voiceGeneration;
-
-        if (!generation || generation !== chadSpeechGeneration) return;
-
-        state.voiceSpeaking = true;
-
-        try {
-            while (
-                state.voiceQueue.length &&
-                !chadVoiceMuted &&
-                generation === chadSpeechGeneration
-            ) {
-                const text = state.voiceQueue.shift();
-                if (!text) continue;
-
-                let audioUrl = '';
-
-                try {
-                    audioUrl = await fetchChadVoiceAudio(text);
-                } catch (error) {
-                    console.warn('Chad streaming voice generation failed:', error);
-                    state.voiceQueue = [];
-                    state.voiceBuffer = '';
-                    return;
-                }
-
-                if (
-                    chadVoiceMuted ||
-                    generation !== chadSpeechGeneration
-                ) {
-                    return;
-                }
-
-                const played = await playChadAudioUrl(audioUrl, generation);
-                if (!played) return;
-            }
-        } finally {
-            state.voiceSpeaking = false;
-
-            /*
-             * A new chunk may have arrived during the final await.
-             */
-            if (
-                state.voiceQueue.length &&
-                !chadVoiceMuted &&
-                generation === chadSpeechGeneration
-            ) {
-                pumpStreamingChadVoice(state);
-            }
-        }
-    }
-
-
-    async function speakChadAnswer(text) {
-        if (chadVoiceMuted) return false;
-
-        const chunks = splitChadSpeech(text, 900);
-        if (!chunks.length) return false;
-
-        const generation = ++chadSpeechGeneration;
-
-        for (const chunk of chunks) {
-            if (
-                chadVoiceMuted ||
-                generation !== chadSpeechGeneration
-            ) {
-                return false;
-            }
-
-            let audioUrl = '';
-
-            try {
-                /*
-                 * Important: this fetch happens only while voice is ON.
-                 * Muted Chad does not call ElevenLabs at all.
-                 */
-                audioUrl = await fetchChadVoiceAudio(chunk);
-            } catch (error) {
-                console.warn('Chad voice generation failed:', error);
-                return false;
-            }
-
-            if (
-                chadVoiceMuted ||
-                generation !== chadSpeechGeneration
-            ) {
-                return false;
-            }
-
-            const played = await playChadAudioUrl(audioUrl, generation);
-            if (!played) return false;
-        }
-
-        return true;
-    }
 
     function pickChadVoice() {
         if (!('speechSynthesis' in window)) return null;
@@ -6016,15 +5695,6 @@ body {
         const cleanText = speechText(text);
         if (!cleanText) return false;
 
-        if (chadVoiceMuted) {
-            if (statusElement) {
-                statusElement.textContent =
-                    '🔇 Chad is muted. The written step is still right there, chief.';
-            }
-            return false;
-        }
-
-        chadSpeechGeneration += 1;
         stopChadAudio();
 
         if (statusElement) {
@@ -6318,10 +5988,6 @@ body {
 
         const afterAnswer = wrapper.querySelector('.chad-after-answer');
 
-        if (!streamState) {
-            speakChadAnswer(data.answer || '');
-        }
-
         /*
          * The walkthrough prompt belongs immediately after Chad's answer.
          * main_done normally rendered it before enrichment finished; this is
@@ -6384,22 +6050,19 @@ body {
         function revealExtras() {
             if (!afterAnswer || wrapper.dataset.chadExtrasRevealed === '1') return;
             wrapper.dataset.chadExtrasRevealed = '1';
+
+            const loadingShell =
+                afterAnswer.querySelector('.chad-extras-loading');
+            if (loadingShell) loadingShell.remove();
+
             if (extrasHtml) {
                 afterAnswer.insertAdjacentHTML('beforeend', extrasHtml);
             }
+
             bindRevealedExtras();
         }
 
-        /*
-         * If Chad offered the hands-free walkthrough, keep Chad's Picks,
-         * shopping list, videos and sources out of the way until the user
-         * finishes/stops the walkthrough or chooses "I got this".
-         */
-        if (walkthrough.offered && wrapper.dataset.chadWalkthroughResolved !== '1') {
-            wrapper.addEventListener('chad:walkthrough-resolved', revealExtras, { once: true });
-        } else {
-            revealExtras();
-        }
+        revealExtras();
 
         trackProductImpressions(question, data.products || []);
     }
@@ -7179,7 +6842,6 @@ body {
 
         questionInput.focus();
 
-        bindChadVoiceToggle();
     syncQuestionLimit();
 
     }
@@ -7321,8 +6983,6 @@ body {
      * Allow the separate account UI to refresh the live quota counter
      * immediately after sign-in, sign-up, sign-out, or account deletion.
      */
-    bindChadVoiceToggle();
-
     window.CHADPDG_SYNC_QUESTION_LIMIT = syncQuestionLimit;
 
 })();
