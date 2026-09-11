@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChadPDChee Admin Tools</title>
+<style>
+body{margin:0;background:#f2f4f6;color:#17191c;font-family:Arial,Helvetica,sans-serif}.wrap{max-width:920px;margin:0 auto;padding:24px}.top{background:#111;color:#fff;border-radius:16px;padding:20px;margin-bottom:18px}.top h1{margin:0 0 5px;font-size:28px}.top p{margin:0;color:#cfd3d6}.card{background:#fff;border:1px solid #d9dee2;border-radius:16px;padding:18px;margin:0 0 16px;box-shadow:0 4px 18px rgba(0,0,0,.05)}h2{margin:0 0 8px;font-size:20px}.muted{color:#677078;font-size:13px;line-height:1.45}.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.field{flex:1;min-width:150px}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px}.field input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #cbd2d8;border-radius:9px;font:inherit}button{border:0;border-radius:9px;padding:11px 14px;font-weight:900;cursor:pointer;background:#111;color:#fff}.danger{background:#a52323}.secondary{background:#e8ecef;color:#111}.status{margin-top:10px;font-size:13px;font-weight:800}.ok{color:#16823a}.err{color:#a52323}.codes{margin-top:12px;display:grid;gap:8px}.code{display:flex;gap:8px;align-items:center;background:#f7f8f9;border:1px solid #e1e5e8;border-radius:9px;padding:9px}.code code{font-size:16px;font-weight:900;letter-spacing:.8px;flex:1}.code button{padding:8px 10px;background:#1677b8}.keybar{display:flex;gap:8px;margin-top:12px}.keybar input{flex:1;padding:11px;border-radius:9px;border:1px solid #555}.note{background:#fff5cf;border:1px solid #edd879;border-radius:10px;padding:10px 12px;font-size:13px;margin-top:12px}@media(max-width:600px){.wrap{padding:12px}.row,.keybar{flex-direction:column}.field{min-width:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top"><div style="margin-bottom:12px"><a href="/admin.html" style="color:#fff;font-weight:900;text-decoration:none">← ADMIN HOME</a></div><h1>CHADPDCHEE ADMIN TOOLS</h1><p>Launch cleanup + Pro code generator.</p><div class="keybar"><input id="admin-key" type="password" placeholder="Admin key"><button id="save-key">Save Admin Key</button></div></div>
+
+<div class="card">
+<h2>Reset launch analytics</h2>
+<p class="muted">Deletes Chad analytics events and OpenAI usage telemetry so your dashboard starts at zero. It does <strong>not</strong> delete users, saved conversations, sponsors, PayPal orders, chat-credit purchases, or Pro codes.</p>
+<label style="display:block;margin:12px 0;font-size:13px"><input type="checkbox" id="reset-quotas" checked> Also clear current daily question quota counters from testing</label>
+<button id="reset-analytics" class="danger">RESET ANALYTICS TO ZERO</button>
+<div class="note">This is destructive. The button will ask you to type <strong>RESET LAUNCH ANALYTICS</strong> before anything is deleted.</div>
+<div id="reset-status" class="status"></div>
+</div>
+
+<div class="card">
+<h2>Generate Chad Pro codes</h2>
+<p class="muted">Each default code can be redeemed once and adds 30 days of Chad Pro to that account. Pro currently gets <strong>50 free Chad questions per day</strong>; purchased chat credits still work after that.</p>
+<div class="row">
+<div class="field"><label>Number of codes</label><input id="qty" type="number" min="1" max="100" value="10"></div>
+<div class="field"><label>Days of Pro</label><input id="days" type="number" min="1" max="365" value="30"></div>
+<div class="field"><label>Uses per code</label><input id="uses" type="number" min="1" max="10000" value="1"></div>
+<div class="field"><label>Internal note</label><input id="note" type="text" value="Facebook subscriber"></div>
+</div>
+<div class="row"><button id="generate">GENERATE PRO CODES</button><button id="copy-all" class="secondary">Copy All</button></div>
+<div id="code-status" class="status"></div><div id="codes" class="codes"></div>
+</div>
+</div>
+<script>
+(function(){
+const key=document.getElementById('admin-key'),resetStatus=document.getElementById('reset-status'),codeStatus=document.getElementById('code-status'),codesBox=document.getElementById('codes');
+key.value=sessionStorage.getItem('chad_admin_key')||'';
+document.getElementById('save-key').onclick=()=>{sessionStorage.setItem('chad_admin_key',key.value.trim());alert('Admin key saved for this browser session.');};
+function headers(){const k=key.value.trim();if(!k)throw new Error('Enter your admin key first.');sessionStorage.setItem('chad_admin_key',k);return {'Content-Type':'application/json','X-Chad-Admin-Key':k};}
+async function api(path,body){const r=await fetch(path,{method:'POST',headers:headers(),body:JSON.stringify(body||{})});let d={};try{d=await r.json()}catch(_){}if(!r.ok||d.success===false)throw new Error(d.error||'Request failed.');return d;}
+document.getElementById('reset-analytics').onclick=async()=>{const typed=prompt('Type RESET LAUNCH ANALYTICS to permanently clear the test analytics.');if(typed!=='RESET LAUNCH ANALYTICS')return;resetStatus.textContent='Resetting…';resetStatus.className='status';try{const d=await api('/admin/analytics/reset',{confirm:typed,reset_daily_quotas:document.getElementById('reset-quotas').checked});resetStatus.textContent='Done. Analytics deleted: '+(d.deleted?.analytics||0)+', OpenAI usage rows: '+(d.deleted?.openai_usage||0)+'. Dashboard is clean.';resetStatus.className='status ok';}catch(e){resetStatus.textContent=e.message;resetStatus.className='status err';}};
+let latest=[];
+function renderCodes(arr){latest=arr||[];codesBox.innerHTML='';latest.forEach(c=>{const row=document.createElement('div');row.className='code';const code=document.createElement('code');code.textContent=c;const b=document.createElement('button');b.textContent='Copy';b.onclick=async()=>{await navigator.clipboard.writeText(c);b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1000)};row.append(code,b);codesBox.appendChild(row)});}
+document.getElementById('generate').onclick=async()=>{codeStatus.textContent='Generating…';codeStatus.className='status';try{const d=await api('/admin/pro-codes/create',{quantity:Number(document.getElementById('qty').value||1),duration_days:Number(document.getElementById('days').value||30),max_redemptions:Number(document.getElementById('uses').value||1),note:document.getElementById('note').value});renderCodes(d.codes||[]);codeStatus.textContent=(d.codes||[]).length+' Pro code(s) created.';codeStatus.className='status ok';}catch(e){codeStatus.textContent=e.message;codeStatus.className='status err';}};
+document.getElementById('copy-all').onclick=async()=>{if(!latest.length)return;await navigator.clipboard.writeText(latest.join('\n'));codeStatus.textContent='All codes copied.';codeStatus.className='status ok';};
+})();
+</script>
+</body>
+</html>
