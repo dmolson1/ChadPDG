@@ -20,7 +20,7 @@ const TRANSLATE_BURST_LIMIT = 20;
 const SHOPPING_BURST_LIMIT = 10;
 const TTS_BURST_LIMIT = 30;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "N05TMgsJRGbeDJrG7CwC";
-const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || "eleven_flash_v2_5";
+const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
 const MAX_MESSAGE_LENGTH = 3000;
 const MEMORY_DAYS = 30;
 const VISITOR_COOKIE_DAYS = 365;
@@ -3432,52 +3432,54 @@ async function handleChadTts(req, res) {
                 ? req.body.conversation_id.trim()
                 : "";
 
-        if (!text || text.length > 1200 || !conversationId) {
+        if (!text || text.length > 1200) {
             return res.status(400).json({
                 success: false,
-                error: "Chad could not read that step."
+                error: "Chad did not receive a readable walkthrough step."
             });
         }
 
         /*
-         * Only generate audio for a walkthrough step that Chad actually
-         * produced in this conversation. This keeps the endpoint from
-         * becoming a public text-to-speech proxy against Dan's credits.
+         * A brand-new/test conversation can legitimately reach the guide
+         * before it has a persisted conversation id. Do not reject TTS for
+         * that. Saved conversations still get a best-effort metadata check.
          */
-        const recent = await pool.query(
-            `SELECT message_meta
-             FROM chad_messages
-             WHERE conversation_id = $1
-               AND role = 'assistant'
-             ORDER BY id DESC
-             LIMIT 8`,
-            [conversationId]
-        );
+        if (conversationId) {
+            const recent = await pool.query(
+                `SELECT message_meta
+                 FROM chad_messages
+                 WHERE conversation_id = $1
+                   AND role = 'assistant'
+                 ORDER BY id DESC
+                 LIMIT 8`,
+                [conversationId]
+            );
 
-        let allowed = false;
+            let allowed = false;
 
-        for (const row of recent.rows) {
-            const walkthrough = row?.message_meta?.walkthrough;
-            const steps = Array.isArray(walkthrough?.steps)
-                ? walkthrough.steps
-                : [];
+            for (const row of recent.rows) {
+                const walkthrough = row?.message_meta?.walkthrough;
+                const steps = Array.isArray(walkthrough?.steps)
+                    ? walkthrough.steps
+                    : [];
 
-            if (
-                steps.some(
-                    step =>
-                        normalizeTtsComparable(step) === text
-                )
-            ) {
-                allowed = true;
-                break;
+                if (
+                    steps.some(
+                        step =>
+                            normalizeTtsComparable(step) === text
+                    )
+                ) {
+                    allowed = true;
+                    break;
+                }
             }
-        }
 
-        if (!allowed) {
-            return res.status(403).json({
-                success: false,
-                error: "That is not one of Chad's current walkthrough steps."
-            });
+            if (!allowed) {
+                console.warn(
+                    "TTS step not found in persisted walkthrough metadata; " +
+                    "allowing active-session playback."
+                );
+            }
         }
 
         const voiceId = ELEVENLABS_VOICE_ID;
@@ -3507,9 +3509,20 @@ async function handleChadTts(req, res) {
                 detail
             );
 
+            let publicReason = "ElevenLabs rejected the voice request.";
+
+            try {
+                const parsed = JSON.parse(detail);
+                publicReason =
+                    parsed?.detail?.message ||
+                    parsed?.detail?.status ||
+                    parsed?.message ||
+                    publicReason;
+            } catch (_) {}
+
             return res.status(502).json({
                 success: false,
-                error: "Chad cleared his throat and somehow made it worse."
+                error: publicReason
             });
         }
 
