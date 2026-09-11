@@ -5576,23 +5576,75 @@ body {
     }
 
 
+    let cachedChadVoice = null;
+
     function pickChadVoice() {
         if (!('speechSynthesis' in window)) return null;
-        const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
-        if (!voices || !voices.length) return null;
 
-        const preferredNames = /Daniel|Alex|Aaron|Guy|David|James|Thomas|Fred|Mark|Ryan|Microsoft Guy/i;
+        const voices = window.speechSynthesis.getVoices
+            ? window.speechSynthesis.getVoices()
+            : [];
+
+        if (!voices || !voices.length) return cachedChadVoice;
+
+        /*
+         * Give Chad a consistent "blue-collar bro" sound without paying for
+         * another voice API. Browsers expose different voice names, so we score
+         * the best masculine English voice available on each device.
+         *
+         * Name preference matters MORE than Canadian locale. The old version
+         * could accidentally choose the first en-CA voice even if it was not
+         * remotely Chad-like.
+         */
+        const topTierNames = /Microsoft Guy|Guy Online|Microsoft Mark|Mark Desktop|Daniel|Aaron|Alex|David|James|Thomas|Ryan|Fred|Evan|Nathan|Reed|Rocko|Ralph|Bruce|Lee/i;
+        const goodMaleNames = /Guy|Mark|Daniel|Aaron|Alex|David|James|Thomas|Ryan|Fred|Evan|Nathan|Reed|Rocko|Ralph|Bruce|Lee|Male/i;
+        const avoidNames = /Samantha|Victoria|Karen|Moira|Tessa|Zira|Susan|Hazel|Aria|Jenny|Siri Female|Female/i;
+
         const scored = voices.map(function (voice) {
+            const name = String(voice.name || '');
             const lang = String(voice.lang || '').toLowerCase();
             let score = 0;
-            if (lang === 'en-ca') score += 8;
-            else if (lang.startsWith('en-')) score += 5;
-            if (preferredNames.test(String(voice.name || ''))) score += 3;
-            if (voice.localService) score += 1;
-            return { voice: voice, score: score };
-        }).sort(function (a, b) { return b.score - a.score; });
 
-        return scored[0] && scored[0].score > 0 ? scored[0].voice : voices[0];
+            if (topTierNames.test(name)) score += 50;
+            else if (goodMaleNames.test(name)) score += 30;
+
+            if (avoidNames.test(name)) score -= 40;
+
+            if (lang === 'en-ca') score += 12;
+            else if (lang === 'en-us') score += 10;
+            else if (lang === 'en-gb') score += 8;
+            else if (lang.startsWith('en-')) score += 6;
+            else if (lang === 'en') score += 5;
+
+            if (/Natural|Premium|Enhanced/i.test(name)) score += 8;
+            if (voice.localService) score += 2;
+
+            return { voice: voice, score: score };
+        }).sort(function (a, b) {
+            return b.score - a.score;
+        });
+
+        cachedChadVoice =
+            scored[0] && scored[0].score > 0
+                ? scored[0].voice
+                : voices[0];
+
+        return cachedChadVoice;
+    }
+
+    // Safari/Chrome may populate the system voice list a moment after page load.
+    // Cache Chad's preferred voice as soon as the list becomes available.
+    if ('speechSynthesis' in window) {
+        try {
+            window.speechSynthesis.addEventListener('voiceschanged', function () {
+                cachedChadVoice = null;
+                pickChadVoice();
+            });
+        } catch (_) {}
+        setTimeout(function () {
+            cachedChadVoice = null;
+            pickChadVoice();
+        }, 250);
     }
 
 
@@ -5607,11 +5659,11 @@ body {
         const utterance = new SpeechSynthesisUtterance(speechText(text));
         const voice = pickChadVoice();
         if (voice) utterance.voice = voice;
-        utterance.rate = 0.96;
-        utterance.pitch = 0.92;
+        utterance.rate = 0.93;
+        utterance.pitch = 0.82;
         utterance.volume = 1;
 
-        if (statusElement) statusElement.textContent = '🔊 Chad is talking. Try to contain your excitement.';
+        if (statusElement) statusElement.textContent = '🔊 Chad is talking. Try not to screw anything up while he does.';
         utterance.onend = function () {
             if (statusElement) statusElement.textContent = 'Ready when you are, chief.';
         };
