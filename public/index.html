@@ -7318,7 +7318,9 @@ loadMe();
         const response = await fetch('/voice/session',{
             method:'POST',
             credentials:'same-origin',
-            headers:{'Content-Type':'application/json'},
+            headers: typeof chadApiHeaders === 'function'
+                ? chadApiHeaders()
+                : {'Content-Type':'application/json'},
             body:JSON.stringify(payload)
         });
         let data = {};
@@ -7368,6 +7370,8 @@ loadMe();
     async function startVoiceChat(){
         if(peer || finalizing) return;
         showPanel();
+        const voicePanel = el('chad-live-voice-panel');
+        if(voicePanel) voicePanel.classList.remove('has-error');
 
         if(!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
             setStatus('This browser does not support live voice chat.');
@@ -7465,6 +7469,8 @@ loadMe();
                 ? 'Microphone permission was blocked. Allow microphone access, then try again.'
                 : (error && error.message ? error.message : 'Chad could not start voice mode.');
             cleanupVoice(text);
+            const panel = el('chad-live-voice-panel');
+            if(panel) panel.classList.add('has-error');
         }
     }
     function endVoiceChat(){
