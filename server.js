@@ -4522,6 +4522,17 @@ async function handleSponsorLogout(req,res){
     }catch{ clearCookie(res,"chad_sponsor_session"); return res.json({success:true}); }
 }
 
+async function expireAbandonedSponsorOrders() {
+    // Keep abandoned checkout attempts for admin/audit history, but mark them expired
+    // after the same 3-hour hold window used by sponsor inventory.
+    await pool.query(`
+        UPDATE chad_sponsor_orders
+        SET status='expired', updated_at=NOW()
+        WHERE status='payment_pending'
+          AND created_at <= NOW() - INTERVAL '3 hours'
+    `);
+}
+
 async function handleSponsorMe(req,res){
     const account=await getSponsorAccount(req);
     if(!account) return res.status(401).json({success:false,authenticated:false});
@@ -4532,6 +4543,7 @@ async function handleSponsorDashboard(req,res){
     try{
         const account=await getSponsorAccount(req);
         if(!account) return res.status(401).json({success:false,error:"Sponsor sign-in required."});
+        await expireAbandonedSponsorOrders();
         const result=await pool.query(
             `SELECT o.*,
                 COALESCE(a.impressions,0)::int AS impressions,
@@ -4546,6 +4558,7 @@ async function handleSponsorDashboard(req,res){
                 GROUP BY metadata->>'campaign_id'
              ) a ON a.campaign_id=o.campaign_id
              WHERE o.sponsor_account_id=$1
+               AND o.status <> 'expired'
              ORDER BY COALESCE(o.reserved_start_at,o.slot_month::timestamp AT TIME ZONE 'UTC') DESC,o.created_at DESC`, [account.id]
         );
         return res.json({success:true,price_usd:SPONSOR_PRICE_USD,max_slots:SPONSOR_MAX_ACTIVE_SLOTS,duration_days:SPONSOR_DURATION_DAYS,campaigns:result.rows.map(row=>{
@@ -4574,6 +4587,7 @@ async function handleSponsorDashboard(req,res){
 async function handleAdminSponsorOrders(req,res){
     try{
         if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
+        await expireAbandonedSponsorOrders();
         const result=await pool.query(`SELECT o.*,a.company_name,a.contact_name,a.email FROM chad_sponsor_orders o JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id ORDER BY o.created_at DESC LIMIT 250`);
         return res.json({success:true,orders:result.rows});
     }catch(error){console.error("Admin sponsor orders error:",error);return res.status(500).json({success:false,error:"Could not load sponsor orders."});}
