@@ -7480,7 +7480,7 @@ loadMe();
         if(typeof currentConversationId !== 'undefined' && currentConversationId){
             payload.conversation_id = currentConversationId;
         }
-        const response = await fetch('/voice/session',{
+        const response = await fetch('/wp-json/chadpgt/v1/voice/session',{
             method:'POST',
             credentials:'same-origin',
             headers: typeof chadApiHeaders === 'function'
