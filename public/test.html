@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chad P.D. Chee</title>
+<title>ChadPDChee Developer Test — Unlimited</title>
 <style>
 html {
     scroll-behavior: smooth;
@@ -326,6 +326,91 @@ body {
 }
 
 
+
+/* DEVELOPER TEST PAGE */
+#chad-dev-panel{
+    width:100%;
+    max-width:900px;
+    margin:14px auto 10px;
+    padding:12px 14px;
+    border:1px solid #8dbbd7;
+    border-radius:10px;
+    background:#eef7fc;
+    font-family:Arial,Helvetica,sans-serif;
+    box-sizing:border-box
+}
+#chad-dev-panel *{box-sizing:border-box}
+.chad-dev-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:9px
+}
+.chad-dev-title{
+    font-size:12px;
+    font-weight:900;
+    color:#0D5F91;
+    letter-spacing:.5px
+}
+.chad-dev-home{
+    color:#0D5F91;
+    font-size:12px;
+    font-weight:900;
+    text-decoration:none
+}
+.chad-dev-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap
+}
+#chad-dev-key{
+    flex:1;
+    min-width:220px;
+    padding:9px 10px;
+    border:1px solid #9ebdce;
+    border-radius:7px;
+    background:#fff;
+    font-size:13px
+}
+#chad-dev-enable,
+#chad-dev-clear{
+    padding:9px 12px;
+    border-radius:7px;
+    font-weight:900;
+    cursor:pointer;
+    font-size:12px
+}
+#chad-dev-enable{
+    border:0;
+    background:#1677B8;
+    color:#fff
+}
+#chad-dev-clear{
+    border:1px solid #b9c8d1;
+    background:#fff;
+    color:#222
+}
+#chad-dev-status{
+    margin-top:7px;
+    color:#4d6574;
+    font-size:11px;
+    font-weight:800
+}
+body.chad-test-enabled #chad-dev-panel{
+    background:#eaf8ef;
+    border-color:#8bc49d
+}
+body.chad-test-enabled .chad-dev-title{
+    color:#176b38
+}
+@media(max-width:600px){
+    #chad-dev-panel{margin:8px auto 8px;padding:10px}
+    .chad-dev-top{align-items:flex-start}
+    #chad-dev-key{min-width:100%}
+}
+
+
 /* =========================================================
    SPONSOR BANNER — STABLE IMAGE + MOBILE TEXT FIX
    ========================================================= */
@@ -540,6 +625,24 @@ body {
 
             <button type="button" id="chad-mobile-new" aria-label="New project">＋</button>
         </header>
+
+        <div id="chad-dev-panel">
+            <div class="chad-dev-top">
+                <div class="chad-dev-title">DEVELOPER TEST PAGE — UNLIMITED QUESTIONS</div>
+                <a class="chad-dev-home" href="/admin.html">Admin Home →</a>
+            </div>
+            <div class="chad-dev-row">
+                <input
+                    id="chad-dev-key"
+                    type="password"
+                    placeholder="Admin test key"
+                    autocomplete="off"
+                >
+                <button id="chad-dev-enable" type="button">ENABLE TEST MODE</button>
+                <button id="chad-dev-clear" type="button">CLEAR KEY</button>
+            </div>
+            <div id="chad-dev-status"></div>
+        </div>
 
         <div id="chad-app">
 
@@ -1394,11 +1497,24 @@ body {
 
 @media (max-width: 820px) {
     .chad-human-check-notice:not([hidden]) {
-        display: block !important;
-        position: sticky;
-        bottom: calc(8px + env(safe-area-inset-bottom));
-        z-index: 50;
+        display: none !important;
     }
+}
+
+.chad-human-check-chat {
+    align-items: flex-start;
+}
+
+.chad-human-check-card {
+    max-width: 560px;
+}
+
+.chad-human-check-copy {
+    margin-bottom: 10px;
+}
+
+.chad-human-check-widget {
+    min-height: 66px;
 }
 
 
@@ -2536,22 +2652,80 @@ body {
     let dailyLimitLocked = false;
 
 
+    let humanCheckChatMessage = null;
+    const turnstileHome = document.createComment('turnstile-home');
+    if (turnstileContainer.parentNode) {
+        turnstileContainer.parentNode.insertBefore(turnstileHome, turnstileContainer);
+    }
+
     function setHumanCheckNotice(show) {
         const notice = document.getElementById('chad-human-check-notice');
-        if (!notice) return;
-        notice.hidden = !show;
+        if (notice) notice.hidden = !show;
+    }
+
+    function showHumanCheckInChat() {
+        setHumanCheckNotice(false);
+        chat.classList.add('chad-chat-visible');
+
+        if (!humanCheckChatMessage) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chad-message chad-answer-wrapper chad-human-check-chat';
+            wrapper.innerHTML =
+                '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+                '<div class="chad-name">Chad:</div>' +
+                '<div class="chad-answer chad-human-check-card">' +
+                    '<div class="chad-human-check-copy">Jebus. Apparently I have to make sure you’re actually human before I’m allowed to answer this one.</div>' +
+                    '<div class="chad-human-check-widget"></div>' +
+                '</div>';
+            chat.appendChild(wrapper);
+            humanCheckChatMessage = wrapper;
+        }
+
+        const host = humanCheckChatMessage.querySelector('.chad-human-check-widget');
+        if (host && turnstileContainer.parentNode !== host) {
+            host.appendChild(turnstileContainer);
+        }
+
+        if (!window.matchMedia('(max-width: 820px)').matches) {
+            scrollToChadAnswer(humanCheckChatMessage);
+        }
+    }
+
+    function hideHumanCheckInChat(success) {
+        if (turnstileHome.parentNode && turnstileContainer.parentNode !== turnstileHome.parentNode) {
+            turnstileHome.parentNode.insertBefore(turnstileContainer, turnstileHome.nextSibling);
+        }
+
+        if (humanCheckChatMessage) {
+            if (success) {
+                const copy = humanCheckChatMessage.querySelector('.chad-human-check-copy');
+                if (copy) copy.textContent = 'Fine. Human enough. Where were we?';
+                const widget = humanCheckChatMessage.querySelector('.chad-human-check-widget');
+                if (widget) widget.remove();
+                const doneMessage = humanCheckChatMessage;
+                humanCheckChatMessage = null;
+                window.setTimeout(function () {
+                    if (doneMessage && doneMessage.parentNode) doneMessage.remove();
+                }, 1200);
+            } else {
+                humanCheckChatMessage.remove();
+                humanCheckChatMessage = null;
+            }
+        }
+        setHumanCheckNotice(false);
     }
 
     function jumpToHumanCheck() {
+        if (humanCheckChatMessage) {
+            humanCheckChatMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
         const target = document.getElementById('chad-turnstile');
-        if (!target) return;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     const humanCheckJump = document.getElementById('chad-human-check-jump');
-    if (humanCheckJump) {
-        humanCheckJump.addEventListener('click', jumpToHumanCheck);
-    }
+    if (humanCheckJump) humanCheckJump.addEventListener('click', jumpToHumanCheck);
 
 
     function initializeTurnstile() {
@@ -2598,18 +2772,18 @@ body {
 
                     'before-interactive-callback':
                         function () {
-                            setHumanCheckNotice(true);
+                            showHumanCheckInChat();
                         },
 
                     'after-interactive-callback':
                         function () {
-                            setHumanCheckNotice(false);
+                            /* Keep the in-chat challenge visible until Turnstile returns a token. */
                         },
 
                     callback:
                         function (token) {
 
-                            setHumanCheckNotice(false);
+                            hideHumanCheckInChat(true);
 
                             if (turnstileResolve) {
 
@@ -2631,7 +2805,7 @@ body {
                     'error-callback':
                         function () {
 
-                            setHumanCheckNotice(false);
+                            hideHumanCheckInChat(false);
 
                             if (turnstileReject) {
 
@@ -2900,14 +3074,14 @@ body {
                     questionInput.disabled = true;
                     questionInput.placeholder =
                         data.authenticated === true
-                            ? 'Sorry Bro… Chad is out until tomorrow.'
+                            ? 'Out of free chats — get Chat Credits to keep going.'
                             : 'Create a free account for more Chad questions.';
                 }
 
-                if (
-                    data.authenticated !== true
-                ) {
+                if (data.authenticated !== true) {
                     showFreeAccountLimitPrompt(data);
+                } else {
+                    showPaidChatLimitPrompt(data);
                 }
 
             } else {
@@ -4250,6 +4424,16 @@ body {
                 window.CHADPDG_DEV.devToken;
         }
 
+        const adminTestKey =
+            sessionStorage.getItem('chad_admin_key') ||
+            sessionStorage.getItem('chadpdg_admin_test_key') ||
+            '';
+
+        if (adminTestKey) {
+            headers['X-Chad-Admin-Key'] =
+                adminTestKey;
+        }
+
         return headers;
     }
 
@@ -5320,9 +5504,10 @@ body {
     }
 
 
-    function lockQuestionLimitUI() {
+    function lockQuestionLimitUI(data) {
 
         dailyLimitLocked = true;
+        const signedIn = !!(data && data.authenticated === true);
 
         if (askButton) {
             askButton.disabled = true;
@@ -5330,13 +5515,14 @@ body {
                 'chad-limit-reached'
             );
             askButton.textContent =
-                'OUT OF QUESTIONS';
+                signedIn ? 'GET CHAT CREDITS' : 'OUT OF QUESTIONS';
         }
 
         if (questionInput) {
             questionInput.disabled = true;
-            questionInput.placeholder =
-                'Create a free account for more Chad questions.';
+            questionInput.placeholder = signedIn
+                ? 'Out of free chats — get Chat Credits to keep going.'
+                : 'Create a free account for more Chad questions.';
         }
     }
 
@@ -5526,7 +5712,7 @@ body {
                 : 5
         );
 
-        lockQuestionLimitUI();
+        lockQuestionLimitUI(data);
         showFreeAccountLimitPrompt(data);
         if (data && data.authenticated === true) showPaidChatLimitPrompt(data);
     }
@@ -5785,12 +5971,12 @@ body {
             if (
                 Number(data.remaining) <= 0 && Number(data.credit_balance || 0) <= 0
             ) {
-                lockQuestionLimitUI();
+                lockQuestionLimitUI(data);
 
-                if (
-                    data.authenticated !== true
-                ) {
+                if (data.authenticated !== true) {
                     showFreeAccountLimitPrompt(data);
+                } else {
+                    showPaidChatLimitPrompt(data);
                 }
             }
 
@@ -6354,6 +6540,12 @@ loadMe();
    try{button.disabled=true;status.textContent='Sending you to PayPal…';const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/create',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({pack_id:packId})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not start checkout.');sessionStorage.setItem('chad_chat_purchase',d.purchase_id);location.href=d.approval_url;}catch(e){status.textContent=e.message;button.disabled=false;}
  }
  window.CHAD_OPEN_CHAT_PACKS=async()=>{modal.classList.add('open');try{await load()}catch(e){status.textContent=e.message||'Could not load chat packs.'}};
+ const askCreditsButton=document.getElementById('chad-ask');
+ askCreditsButton?.addEventListener('click',()=>{
+   if(askCreditsButton.textContent.trim()==='GET CHAT CREDITS'){
+     window.CHAD_OPEN_CHAT_PACKS?.();
+   }
+ });
  document.getElementById('chad-menu-chat-credits')?.addEventListener('click',()=>{
    document.body.classList.remove('chad-menu-open');
    window.CHAD_OPEN_CHAT_PACKS?.();
@@ -6361,7 +6553,19 @@ loadMe();
  document.getElementById('chad-pack-close')?.addEventListener('click',()=>modal.classList.remove('open'));
  modal?.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
  async function finishReturn(){
-   const q=new URLSearchParams(location.search);if(q.get('chat_payment')!=='return')return;const purchase=q.get('purchase')||sessionStorage.getItem('chad_chat_purchase')||'';if(!purchase)return;
+   const q=new URLSearchParams(location.search);
+   const paymentState=q.get('chat_payment');
+   if(paymentState==='cancelled'){
+     sessionStorage.removeItem('chad_chat_purchase');
+     history.replaceState({},'',location.pathname);
+     modal.classList.add('open');
+     try{await load();}catch(e){}
+     status.textContent='Payment cancelled — nothing was charged. Pick a pack whenever you want to keep arguing with Chad.';
+     if(typeof syncQuestionLimit==='function')syncQuestionLimit();
+     return;
+   }
+   if(paymentState!=='return')return;
+   const purchase=q.get('purchase')||sessionStorage.getItem('chad_chat_purchase')||'';if(!purchase)return;
    modal.classList.add('open');status.textContent='Finishing your PayPal payment…';
    try{const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/capture',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({purchase_id:purchase})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not finish payment.');window.CHAD_CREDIT_BALANCE=Number(d.balance||0);balance.textContent='Paid chats: '+window.CHAD_CREDIT_BALANCE;status.textContent='Success — '+d.credits+' chats added. Chad has reluctantly returned to work.';sessionStorage.removeItem('chad_chat_purchase');history.replaceState({},'',location.pathname);if(typeof syncQuestionLimit==='function')syncQuestionLimit();setTimeout(()=>{const ask=document.getElementById('chad-ask'),input=document.getElementById('chad-question');if(ask){ask.disabled=false;ask.classList.remove('chad-limit-reached');ask.textContent='ASK CHAD';}if(input){input.disabled=false;input.placeholder='Ask Chad...';}if(typeof dailyLimitLocked!=='undefined')dailyLimitLocked=false;},50);}catch(e){status.textContent=e.message||'Payment return failed.';}
  }
@@ -6378,6 +6582,67 @@ loadMe();
   <span aria-hidden="true"> · </span>
   <a href="/privacy.html" style="color:inherit">Privacy Policy</a>
 </div>
+
+
+
+<script>
+(function(){
+    'use strict';
+
+    const PRIMARY_KEY='chad_admin_key';
+    const LEGACY_KEY='chadpdg_admin_test_key';
+
+    function currentKey(){
+        return sessionStorage.getItem(PRIMARY_KEY) ||
+               sessionStorage.getItem(LEGACY_KEY) ||
+               '';
+    }
+
+    function refreshDevPanel(){
+        const input=document.getElementById('chad-dev-key');
+        const status=document.getElementById('chad-dev-status');
+        if(!input||!status)return;
+
+        const key=currentKey();
+        input.value=key;
+
+        if(key){
+            document.body.classList.add('chad-test-enabled');
+            status.textContent='Test mode enabled. Chad requests use the admin bypass, so public daily question limits do not apply.';
+        }else{
+            document.body.classList.remove('chad-test-enabled');
+            status.textContent='Enter your admin test key to enable unlimited testing.';
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded',function(){
+        const input=document.getElementById('chad-dev-key');
+        const enable=document.getElementById('chad-dev-enable');
+        const clear=document.getElementById('chad-dev-clear');
+
+        refreshDevPanel();
+
+        enable.addEventListener('click',function(){
+            const value=input.value.trim();
+
+            if(!value){
+                document.getElementById('chad-dev-status').textContent='Enter the admin test key first.';
+                return;
+            }
+
+            sessionStorage.setItem(PRIMARY_KEY,value);
+            sessionStorage.setItem(LEGACY_KEY,value);
+            refreshDevPanel();
+        });
+
+        clear.addEventListener('click',function(){
+            sessionStorage.removeItem(PRIMARY_KEY);
+            sessionStorage.removeItem(LEGACY_KEY);
+            refreshDevPanel();
+        });
+    });
+})();
+</script>
 
 </body>
 </html>
