@@ -5577,6 +5577,8 @@ body {
 
 
     let cachedChadVoice = null;
+    let activeChadAudio = null;
+    const chadTtsCache = new Map();
 
     function pickChadVoice() {
         if (!('speechSynthesis' in window)) return null;
@@ -5587,99 +5589,191 @@ body {
 
         if (!voices || !voices.length) return cachedChadVoice;
 
-        /*
-         * Give Chad a consistent "blue-collar bro" sound without paying for
-         * another voice API. Browsers expose different voice names, so we score
-         * the best masculine English voice available on each device.
-         *
-         * Name preference matters MORE than Canadian locale. The old version
-         * could accidentally choose the first en-CA voice even if it was not
-         * remotely Chad-like.
-         */
-        const topTierNames = /Microsoft Guy|Guy Online|Microsoft Mark|Mark Desktop|Daniel|Aaron|Alex|David|James|Thomas|Ryan|Fred|Evan|Nathan|Reed|Rocko|Ralph|Bruce|Lee/i;
-        const goodMaleNames = /Guy|Mark|Daniel|Aaron|Alex|David|James|Thomas|Ryan|Fred|Evan|Nathan|Reed|Rocko|Ralph|Bruce|Lee|Male/i;
-        const avoidNames = /Samantha|Victoria|Karen|Moira|Tessa|Zira|Susan|Hazel|Aria|Jenny|Siri Female|Female/i;
+        const preferred =
+            /Microsoft Guy|Guy Online|Microsoft Mark|Mark Desktop|Daniel|Aaron|Alex|David|James|Thomas|Ryan|Fred|Evan|Nathan|Reed|Rocko|Ralph|Bruce|Lee/i;
 
         const scored = voices.map(function (voice) {
             const name = String(voice.name || '');
             const lang = String(voice.lang || '').toLowerCase();
-            let score = 0;
+            let score = preferred.test(name) ? 30 : 0;
 
-            if (topTierNames.test(name)) score += 50;
-            else if (goodMaleNames.test(name)) score += 30;
-
-            if (avoidNames.test(name)) score -= 40;
-
-            if (lang === 'en-ca') score += 12;
-            else if (lang === 'en-us') score += 10;
-            else if (lang === 'en-gb') score += 8;
+            if (lang === 'en-ca') score += 10;
             else if (lang.startsWith('en-')) score += 6;
-            else if (lang === 'en') score += 5;
-
-            if (/Natural|Premium|Enhanced/i.test(name)) score += 8;
-            if (voice.localService) score += 2;
 
             return { voice: voice, score: score };
         }).sort(function (a, b) {
             return b.score - a.score;
         });
 
-        cachedChadVoice =
-            scored[0] && scored[0].score > 0
-                ? scored[0].voice
-                : voices[0];
-
+        cachedChadVoice = scored[0] ? scored[0].voice : voices[0];
         return cachedChadVoice;
     }
 
-    // Safari/Chrome may populate the system voice list a moment after page load.
-    // Cache Chad's preferred voice as soon as the list becomes available.
-    if ('speechSynthesis' in window) {
-        try {
-            window.speechSynthesis.addEventListener('voiceschanged', function () {
-                cachedChadVoice = null;
-                pickChadVoice();
-            });
-        } catch (_) {}
-        setTimeout(function () {
-            cachedChadVoice = null;
-            pickChadVoice();
-        }, 250);
+    function stopChadAudio() {
+        if (activeChadAudio) {
+            try {
+                activeChadAudio.pause();
+                activeChadAudio.currentTime = 0;
+            } catch (_) {}
+            activeChadAudio = null;
+        }
+
+        if ('speechSynthesis' in window) {
+            try {
+                window.speechSynthesis.cancel();
+            } catch (_) {}
+        }
     }
 
-
-    function speakWalkthroughStep(text, statusElement) {
-        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-            if (statusElement) statusElement.textContent = 'Audio is not supported in this browser, but the step-by-step guide still works.';
+    function browserVoiceFallback(text, statusElement) {
+        if (
+            !('speechSynthesis' in window) ||
+            !('SpeechSynthesisUtterance' in window)
+        ) {
+            if (statusElement) {
+                statusElement.textContent =
+                    'Audio is not available right now. The written step is still here.';
+            }
             return false;
         }
 
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(speechText(text));
-        const voice = pickChadVoice();
-        if (voice) utterance.voice = voice;
-        utterance.rate = 0.93;
-        utterance.pitch = 0.82;
-        utterance.volume = 1;
-
-        if (statusElement) statusElement.textContent = '🔊 Chad is talking. Try not to screw anything up while he does.';
-        utterance.onend = function () {
-            if (statusElement) statusElement.textContent = 'Ready when you are, chief.';
-        };
-        utterance.onerror = function () {
-            if (statusElement) statusElement.textContent = 'Audio had a moment. The step is still right there.';
-        };
-
         try {
+            window.speechSynthesis.cancel();
+
+            const utterance =
+                new SpeechSynthesisUtterance(speechText(text));
+
+            const voice = pickChadVoice();
+            if (voice) utterance.voice = voice;
+
+            utterance.rate = 0.93;
+            utterance.pitch = 0.82;
+            utterance.volume = 1;
+
+            if (statusElement) {
+                statusElement.textContent =
+                    '🔊 Chad is using the backup voice. Apparently technology needed supervision.';
+            }
+
+            utterance.onend = function () {
+                if (statusElement) {
+                    statusElement.textContent = 'Ready when you are, chief.';
+                }
+            };
+
             window.speechSynthesis.speak(utterance);
             return true;
-        } catch (error) {
-            if (statusElement) statusElement.textContent = 'Audio is not available right now. Use the on-screen step.';
+
+        } catch (_) {
+            if (statusElement) {
+                statusElement.textContent =
+                    'Audio is not available right now. Use the on-screen step.';
+            }
             return false;
         }
     }
 
+    async function speakWalkthroughStep(text, statusElement) {
+        const cleanText = speechText(text);
+        if (!cleanText) return false;
+
+        stopChadAudio();
+
+        if (statusElement) {
+            statusElement.textContent =
+                '🎙️ Chad is getting his actual voice ready. Try not to age visibly.';
+        }
+
+        try {
+            let audioUrl =
+                chadTtsCache.get(cleanText) || '';
+
+            if (!audioUrl) {
+                const response = await fetch(
+                    '/wp-json/chadpgt/v1/tts',
+                    {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: chadApiHeaders(),
+                        body: JSON.stringify({
+                            text: cleanText,
+                            conversation_id:
+                                (
+                                    typeof currentConversationId !== 'undefined' &&
+                                    currentConversationId
+                                )
+                                    ? currentConversationId
+                                    : ''
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('tts_failed');
+                }
+
+                const blob = await response.blob();
+                audioUrl = URL.createObjectURL(blob);
+                chadTtsCache.set(cleanText, audioUrl);
+            }
+
+            const audio = new Audio(audioUrl);
+            audio.preload = 'auto';
+            audio.playsInline = true;
+            activeChadAudio = audio;
+
+            audio.onplay = function () {
+                if (statusElement) {
+                    statusElement.textContent =
+                        '🔊 Chad is talking. Yes, he sounds pleased with himself.';
+                }
+            };
+
+            audio.onended = function () {
+                if (activeChadAudio === audio) {
+                    activeChadAudio = null;
+                }
+
+                if (statusElement) {
+                    statusElement.textContent =
+                        'Ready when you are, chief.';
+                }
+            };
+
+            audio.onerror = function () {
+                if (activeChadAudio === audio) {
+                    activeChadAudio = null;
+                }
+
+                browserVoiceFallback(
+                    cleanText,
+                    statusElement
+                );
+            };
+
+            try {
+                await audio.play();
+                return true;
+
+            } catch (playError) {
+                if (statusElement) {
+                    statusElement.textContent =
+                        'Chad loaded his real voice. Tap REPEAT if Safari got precious about autoplay.';
+                }
+
+                return browserVoiceFallback(
+                    cleanText,
+                    statusElement
+                );
+            }
+
+        } catch (error) {
+            return browserVoiceFallback(
+                cleanText,
+                statusElement
+            );
+        }
+    }
 
     function buildFullWalkthroughText(value) {
         const walkthrough = normalizeClientWalkthrough(value);
@@ -5712,7 +5806,7 @@ body {
         let index = 0;
 
         function stopSpeech() {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopChadAudio();
         }
 
         function renderStep(autoSpeak) {
@@ -5790,7 +5884,7 @@ body {
         const no = offer.querySelector('.chad-walkthrough-no');
 
         yes && yes.addEventListener('click', function () {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopChadAudio();
             offer.innerHTML = buildFullWalkthroughText(walkthrough);
 
             const startGuide = offer.querySelector('.chad-guide-start');
@@ -5806,7 +5900,7 @@ body {
             });
 
             skipGuide && skipGuide.addEventListener('click', function () {
-                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                stopChadAudio();
                 const guideOffer = offer.querySelector('.chad-walkthrough-guide-offer');
                 if (guideOffer) {
                     guideOffer.innerHTML = '<div class="chad-walkthrough-declined">Perfect. The full walkthrough stays here in the conversation whenever you need it.</div>';
@@ -5817,7 +5911,7 @@ body {
         });
 
         no && no.addEventListener('click', function () {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            stopChadAudio();
             offer.innerHTML = '<div class="chad-walkthrough-declined">Fine. Go be independent. I’ll be right here when that becomes inconvenient.</div>';
             wrapper.dataset.chadWalkthroughResolved = '1';
             wrapper.dispatchEvent(new CustomEvent('chad:walkthrough-resolved'));
