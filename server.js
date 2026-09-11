@@ -3095,6 +3095,19 @@ async function handleAsk(req, res) {
 
         const walkthrough = normalizeWalkthrough(decoded.walkthrough);
 
+        /*
+         * The answer and walkthrough decision are ready BEFORE Chad's Picks
+         * enrichment. Tell the streaming frontend immediately so it can finish
+         * formatting the answer and show the audio-walkthrough prompt without
+         * waiting on product/video research.
+         */
+        if (streamMode && streamStarted) {
+            writeStreamEvent({
+                type: "main_done",
+                data: { answer, walkthrough }
+            });
+        }
+
         let products = [];
         let videos = [];
         let productSources = [];
