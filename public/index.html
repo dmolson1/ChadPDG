@@ -509,19 +509,11 @@ body {
                 </span>
             </a>
 
-            <button type="button" class="chad-sidebar-row chad-placeholder-control">
-                <span class="chad-sidebar-icon">★</span>
+            <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">✦</span>
                 <span>
-                    <strong>Upgrade</strong>
-                    <small>Plans coming soon</small>
-                </span>
-            </button>
-
-            <button type="button" class="chad-sidebar-row chad-placeholder-control">
-                <span class="chad-sidebar-icon">▣</span>
-                <span>
-                    <strong>Billing</strong>
-                    <small>Coming soon</small>
+                    <strong>Get Chat Credits</strong>
+                    <small>Buy prepaid chats · never expire</small>
                 </span>
             </button>
         </div>
@@ -6362,6 +6354,10 @@ loadMe();
    try{button.disabled=true;status.textContent='Sending you to PayPal…';const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/create',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({pack_id:packId})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not start checkout.');sessionStorage.setItem('chad_chat_purchase',d.purchase_id);location.href=d.approval_url;}catch(e){status.textContent=e.message;button.disabled=false;}
  }
  window.CHAD_OPEN_CHAT_PACKS=async()=>{modal.classList.add('open');try{await load()}catch(e){status.textContent=e.message||'Could not load chat packs.'}};
+ document.getElementById('chad-menu-chat-credits')?.addEventListener('click',()=>{
+   document.body.classList.remove('chad-menu-open');
+   window.CHAD_OPEN_CHAT_PACKS?.();
+ });
  document.getElementById('chad-pack-close')?.addEventListener('click',()=>modal.classList.remove('open'));
  modal?.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
  async function finishReturn(){
