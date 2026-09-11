@@ -598,16 +598,17 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
  const $=id=>document.getElementById(id);
  function adminHeaders(){return {'Content-Type':'application/json','X-Chad-Admin-Key':$('adminKey').value.trim()}}
  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
- function label(s){return ({payment_pending:'Payment Pending',paid_pending_approval:'Paid — Awaiting Approval',approved:'Approved / Scheduled',live:'Live',completed:'Completed',refunded:'Refunded'})[s]||s}
+ function label(s){return ({payment_pending:'Payment Pending',paid_pending_approval:'Paid — Awaiting Approval',approved:'Approved / Scheduled',live:'Live',completed:'Completed',refund_pending:'Refund Pending',refunded:'Refunded',expired:'Expired'})[s]||s}
  async function loadOrders(){
    const tbody=$('paidOrderRows'),status=$('paidOrderStatus');
    if(!$('adminKey').value.trim()){tbody.innerHTML='<tr><td colspan="7" class="empty">Enter your admin key first.</td></tr>';return}
    status.textContent='Loading paid sponsor orders…';
    try{
      const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders',{headers:adminHeaders()});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not load orders.');
-     tbody.innerHTML=d.orders.length?d.orders.map(o=>`<tr><td>${esc(o.reserved_start_at?new Date(o.reserved_start_at).toISOString().slice(0,10):String(o.slot_month).slice(0,10))}<br><small>through ${esc(o.reserved_end_at?new Date(new Date(o.reserved_end_at).getTime()-86400000).toISOString().slice(0,10):'legacy schedule')}</small></td><td><strong>${esc(o.company_name)}</strong><br>${esc(o.contact_name)}<br><small>${esc(o.email)}</small></td><td>$${Number(o.price_usd).toFixed(2)} ${esc(o.currency)}<br><small>${o.paid_at?'Paid '+esc(new Date(o.paid_at).toLocaleString()):'Not paid'}</small></td><td><span class="badge ${['approved','live'].includes(o.status)?'on':'off'}">${esc(label(o.status))}</span></td><td><strong>${esc(o.headline||'Headline missing')}</strong><br><small>${esc(o.destination_url||'Destination missing')}</small>${o.discount_code?'<br><small>Offer: '+esc(o.discount_percent||'')+'% · '+esc(o.discount_code)+'</small>':''}</td><td>v${esc(o.agreement_version)}<br><small>Signed by ${esc(o.agreement_name)}<br>${esc(o.agreement_accepted_at?new Date(o.agreement_accepted_at).toLocaleString():'')}</small><br><button class="light" style="margin-top:7px" data-contract="${esc(o.id)}">View Contract</button></td><td>${o.status==='paid_pending_approval'?`<button class="primary" data-approve="${esc(o.id)}">Approve & Publish</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No sponsor orders yet.</td></tr>';
+     tbody.innerHTML=d.orders.length?d.orders.map(o=>`<tr><td>${esc(o.reserved_start_at?new Date(o.reserved_start_at).toISOString().slice(0,10):String(o.slot_month).slice(0,10))}<br><small>through ${esc(o.reserved_end_at?new Date(new Date(o.reserved_end_at).getTime()-86400000).toISOString().slice(0,10):'legacy schedule')}</small></td><td><strong>${esc(o.company_name)}</strong><br>${esc(o.contact_name)}<br><small>${esc(o.email)}</small></td><td>$${Number(o.price_usd).toFixed(2)} ${esc(o.currency)}<br><small>${o.paid_at?'Paid '+esc(new Date(o.paid_at).toLocaleString()):'Not paid'}</small></td><td><span class="badge ${['approved','live'].includes(o.status)?'on':'off'}">${esc(label(o.status))}</span></td><td><strong>${esc(o.headline||'Headline missing')}</strong><br><small>${esc(o.destination_url||'Destination missing')}</small>${o.discount_code?'<br><small>Offer: '+esc(o.discount_percent||'')+'% · '+esc(o.discount_code)+'</small>':''}</td><td>v${esc(o.agreement_version)}<br><small>Signed by ${esc(o.agreement_name)}<br>${esc(o.agreement_accepted_at?new Date(o.agreement_accepted_at).toLocaleString():'')}</small><br><button class="light" style="margin-top:7px" data-contract="${esc(o.id)}">View Contract</button></td><td>${o.status==='paid_pending_approval'?`<button class="primary" data-approve="${esc(o.id)}">Approve & Publish</button><br>`:''}${['paid_pending_approval','approved','live','completed'].includes(o.status)?`<button style="margin-top:7px;background:#b42318;color:#fff;border:0;border-radius:8px;padding:9px 12px;font-weight:800;cursor:pointer" data-refund="${esc(o.id)}" data-amount="${Number(o.price_usd).toFixed(2)}">Refund</button>`:(o.status==='refund_pending'?'<small>Refund pending</small>':'—')}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">No sponsor orders yet.</td></tr>';
      status.textContent=`${d.orders.length} sponsor order${d.orders.length===1?'':'s'} loaded.`;
      tbody.querySelectorAll('[data-approve]').forEach(btn=>btn.addEventListener('click',()=>approve(btn.dataset.approve)));
+     tbody.querySelectorAll('[data-refund]').forEach(btn=>btn.addEventListener('click',()=>refundOrder(btn.dataset.refund,btn.dataset.amount)));
      tbody.querySelectorAll('[data-contract]').forEach(btn=>btn.addEventListener('click',()=>viewContract(btn.dataset.contract)));
    }catch(e){status.textContent=e.message;tbody.innerHTML='<tr><td colspan="7" class="empty">Could not load orders.</td></tr>'}
  }
@@ -625,6 +626,18 @@ th{font-size:10px;color:#677581;text-transform:uppercase}
    if(!confirm('Approve this paid sponsor and publish it into the scheduled rotation?'))return;
    const status=$('paidOrderStatus');status.textContent='Approving sponsor…';
    try{const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/approve',{method:'POST',headers:adminHeaders(),body:JSON.stringify({order_id:id})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Approval failed.');status.textContent='Approved. Campaign '+d.campaign_id+' is scheduled for a full 30-day run'+(d.shifted_from_reserved?' using the next available start date.':'.');await loadOrders();document.getElementById('refreshSponsors').click()}catch(e){status.textContent=e.message}
+ }
+ async function refundOrder(id,amount){
+   if(!confirm(`Refund $${amount} USD to this sponsor through PayPal?\n\nThis will also disable the campaign immediately. This cannot be undone from ChadPDChee.`))return;
+   const status=$('paidOrderStatus');status.textContent='Sending refund to PayPal…';
+   try{
+     const r=await fetch('/wp-json/chadpgt/v1/admin/sponsor-orders/refund',{method:'POST',headers:adminHeaders(),body:JSON.stringify({order_id:id})});
+     const d=await r.json();
+     if(!r.ok||!d.success)throw new Error(d.error||'Refund failed.');
+     status.textContent=d.status==='refunded'?'Refund completed through PayPal. Campaign disabled.':'PayPal accepted the refund and it is pending. Campaign disabled.';
+     await loadOrders();
+     document.getElementById('refreshSponsors').click();
+   }catch(e){status.textContent=e.message}
  }
  $('refreshPaidOrders').addEventListener('click',loadOrders);
  $('saveKey').addEventListener('click',()=>setTimeout(loadOrders,50));
