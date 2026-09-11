@@ -472,6 +472,90 @@ body {
 @media(max-width:600px){.chad-install-card{padding:21px 18px}.chad-install-card h2{font-size:21px}}
 </style>
 
+
+<style id="chad-continuous-page-layout">
+/* =========================================================
+   CONTINUOUS CONVERSATION PAGE
+   The page itself scrolls. #chad-chat never becomes an
+   independently scrolling panel.
+   ========================================================= */
+html,
+body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+}
+
+#chad-shell,
+#chad-main,
+#chad-app {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+#chad-shell,
+#chad-main {
+    min-height: 100vh !important;
+}
+
+#chad-app {
+    min-height: 100vh !important;
+}
+
+#chad-chat,
+#chad-chat.chad-chat-visible {
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: auto !important;
+    contain: none !important;
+    scrollbar-width: auto !important;
+}
+
+/* The history sidebar may scroll independently; the conversation may not. */
+.chad-sidebar-scroll {
+    overflow-y: auto !important;
+}
+
+/* Desktop keeps the composer available while the document scrolls. */
+@media (min-width: 821px) {
+    #chad-input-area {
+        position: sticky !important;
+        bottom: 0 !important;
+    }
+}
+
+/* Mobile stays in normal document flow to avoid Safari keyboard jumps. */
+@media (max-width: 820px) {
+    html,
+    body,
+    #chad-shell,
+    #chad-main,
+    #chad-app,
+    #chad-chat,
+    #chad-chat.chad-chat-visible {
+        height: auto !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
+    body {
+        overflow-y: auto !important;
+    }
+
+    #chad-input-area {
+        position: static !important;
+        bottom: auto !important;
+    }
+}
+</style>
+
 </head>
 <body>
 
