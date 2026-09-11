@@ -692,6 +692,60 @@ body {
     }
 }
 
+
+/* =========================================================
+   CENTERED ASK CHAD BUTTON — composer stays clean
+   ========================================================= */
+#chad-app .chad-centered-ask-wrap{
+    display:flex !important;
+    justify-content:center !important;
+    align-items:center !important;
+    margin:9px 0 0 !important;
+}
+
+#chad-app .chad-centered-ask-button{
+    appearance:none !important;
+    -webkit-appearance:none !important;
+    width:auto !important;
+    min-width:132px !important;
+    min-height:40px !important;
+    padding:10px 20px !important;
+    border:1px solid #0066cc !important;
+    border-radius:10px !important;
+    background:#0066cc !important;
+    background-color:#0066cc !important;
+    color:#fff !important;
+    font:900 12px/1 Arial,Helvetica,sans-serif !important;
+    letter-spacing:.02em !important;
+    box-shadow:none !important;
+    cursor:pointer !important;
+}
+
+#chad-app .chad-centered-ask-button:hover,
+#chad-app .chad-centered-ask-button:focus{
+    background:#0052a3 !important;
+    background-color:#0052a3 !important;
+    border-color:#0052a3 !important;
+    color:#fff !important;
+    transform:none !important;
+}
+
+#chad-app .chad-centered-ask-button:disabled{
+    opacity:.55 !important;
+    color:#fff !important;
+    cursor:not-allowed !important;
+}
+
+@media (max-width:600px){
+    #chad-app .chad-centered-ask-wrap{
+        margin-top:8px !important;
+    }
+
+    #chad-app .chad-centered-ask-button{
+        min-width:126px !important;
+    }
+}
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
@@ -968,14 +1022,17 @@ body {
                     rows="1"
                 ></textarea>
 
-                <button
-                    type="button"
-                    id="chad-ask"
-                    class="chad-send-button"
-                    aria-label="Send message"
-                    title="Send"
-                >↑</button>
             </div>
+        </div>
+
+        <div class="chad-centered-ask-wrap">
+            <button
+                type="button"
+                id="chad-ask"
+                class="chad-centered-ask-button"
+            >
+                ASK CHAD
+            </button>
         </div>
 
         <button
