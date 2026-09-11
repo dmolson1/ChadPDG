@@ -530,6 +530,46 @@ body.chad-test-enabled .chad-dev-title{
     }
 }
 
+
+    .chad-voice-control {
+        display: flex;
+        justify-content: center;
+        margin-top: 10px;
+    }
+
+    #chad-voice-toggle {
+        border: 1px solid rgba(255,255,255,.22);
+        border-radius: 999px;
+        padding: 8px 14px;
+        background: rgba(0,0,0,.28);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        cursor: pointer;
+        transition: transform .15s ease, opacity .15s ease, background .15s ease;
+    }
+
+    #chad-voice-toggle:hover {
+        transform: translateY(-1px);
+    }
+
+    #chad-voice-toggle[data-muted="1"] {
+        opacity: .72;
+    }
+
+    @media (max-width: 700px) {
+        .chad-voice-control {
+            margin-top: 8px;
+        }
+
+        #chad-voice-toggle {
+            padding: 7px 12px;
+            font-size: 11px;
+        }
+    }
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
@@ -781,6 +821,11 @@ body {
             <a href="/advertise.html">Advertise with Chad</a>
             <span aria-hidden="true"> · </span>
             <a href="/sponsor-login.html">Sponsor Login</a>
+        </div>
+        <div class="chad-voice-control">
+            <button type="button" id="chad-voice-toggle" aria-pressed="false" title="Mute or unmute Chad">
+                🔊 CHAD VOICE ON
+            </button>
         </div>
     </div>
 
@@ -5425,6 +5470,11 @@ body {
         }
 
         state.mainFinalized = true;
+
+        if (!state.autoVoiceStarted) {
+            state.autoVoiceStarted = true;
+            speakChadAnswer(answer);
+        }
     }
 
 
@@ -5580,6 +5630,243 @@ body {
     let activeChadAudio = null;
     const chadTtsCache = new Map();
 
+    let chadVoiceMuted = false;
+    let chadSpeechGeneration = 0;
+
+    try {
+        chadVoiceMuted = localStorage.getItem('chad_voice_muted') === '1';
+    } catch (_) {}
+
+    function updateChadVoiceToggle() {
+        const button = document.getElementById('chad-voice-toggle');
+        if (!button) return;
+
+        button.dataset.muted = chadVoiceMuted ? '1' : '0';
+        button.setAttribute('aria-pressed', chadVoiceMuted ? 'true' : 'false');
+        button.textContent = chadVoiceMuted
+            ? '🔇 CHAD MUTED'
+            : '🔊 CHAD VOICE ON';
+        button.title = chadVoiceMuted
+            ? "Turn Chad\'s voice back on"
+            : 'Mute Chad and stop voice API calls';
+    }
+
+    function setChadVoiceMuted(muted) {
+        chadVoiceMuted = Boolean(muted);
+        chadSpeechGeneration += 1;
+
+        try {
+            localStorage.setItem(
+                'chad_voice_muted',
+                chadVoiceMuted ? '1' : '0'
+            );
+        } catch (_) {}
+
+        if (chadVoiceMuted) {
+            stopChadAudio();
+        }
+
+        updateChadVoiceToggle();
+    }
+
+    function bindChadVoiceToggle() {
+        const button = document.getElementById('chad-voice-toggle');
+        if (!button || button.dataset.bound === '1') return;
+
+        button.dataset.bound = '1';
+        button.addEventListener('click', function () {
+            setChadVoiceMuted(!chadVoiceMuted);
+        });
+
+        updateChadVoiceToggle();
+    }
+
+    function splitChadSpeech(text, maxChars) {
+        const clean = speechText(text);
+        if (!clean) return [];
+
+        const limit = Math.max(300, Number(maxChars || 900));
+        const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [clean];
+        const chunks = [];
+        let current = '';
+
+        function pushCurrent() {
+            const value = current.trim();
+            if (value) chunks.push(value);
+            current = '';
+        }
+
+        sentences.forEach(function (sentence) {
+            const part = sentence.trim();
+            if (!part) return;
+
+            if (part.length > limit) {
+                pushCurrent();
+
+                const words = part.split(/\s+/);
+                let piece = '';
+
+                words.forEach(function (word) {
+                    const candidate = piece ? piece + ' ' + word : word;
+
+                    if (candidate.length > limit && piece) {
+                        chunks.push(piece);
+                        piece = word;
+                    } else {
+                        piece = candidate;
+                    }
+                });
+
+                if (piece) chunks.push(piece);
+                return;
+            }
+
+            const candidate = current ? current + ' ' + part : part;
+
+            if (candidate.length > limit && current) {
+                pushCurrent();
+                current = part;
+            } else {
+                current = candidate;
+            }
+        });
+
+        pushCurrent();
+        return chunks;
+    }
+
+    async function fetchChadVoiceAudio(text) {
+        if (chadVoiceMuted) return '';
+
+        const cleanText = speechText(text);
+        if (!cleanText) return '';
+
+        const cached = chadTtsCache.get(cleanText);
+        if (cached) return cached;
+
+        const response = await fetch(
+            '/wp-json/chadpgt/v1/tts',
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    ...chadApiHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: cleanText,
+                    conversation_id:
+                        (
+                            typeof currentConversationId !== 'undefined' &&
+                            currentConversationId
+                        )
+                            ? currentConversationId
+                            : ''
+                })
+            }
+        );
+
+        if (!response.ok) {
+            let message = "Chad\'s real voice request failed.";
+
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                    message = String(errorData.error);
+                }
+            } catch (_) {}
+
+            throw new Error(message);
+        }
+
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        chadTtsCache.set(cleanText, audioUrl);
+        return audioUrl;
+    }
+
+    function playChadAudioUrl(audioUrl, generation) {
+        return new Promise(function (resolve) {
+            if (
+                !audioUrl ||
+                chadVoiceMuted ||
+                generation !== chadSpeechGeneration
+            ) {
+                resolve(false);
+                return;
+            }
+
+            stopChadAudio();
+
+            const audio = new Audio(audioUrl);
+            audio.preload = 'auto';
+            audio.playsInline = true;
+            activeChadAudio = audio;
+
+            function finish(value) {
+                if (activeChadAudio === audio) {
+                    activeChadAudio = null;
+                }
+                resolve(value);
+            }
+
+            audio.onended = function () {
+                finish(true);
+            };
+
+            audio.onerror = function () {
+                finish(false);
+            };
+
+            audio.play().catch(function () {
+                finish(false);
+            });
+        });
+    }
+
+    async function speakChadAnswer(text) {
+        if (chadVoiceMuted) return false;
+
+        const chunks = splitChadSpeech(text, 900);
+        if (!chunks.length) return false;
+
+        const generation = ++chadSpeechGeneration;
+
+        for (const chunk of chunks) {
+            if (
+                chadVoiceMuted ||
+                generation !== chadSpeechGeneration
+            ) {
+                return false;
+            }
+
+            let audioUrl = '';
+
+            try {
+                /*
+                 * Important: this fetch happens only while voice is ON.
+                 * Muted Chad does not call ElevenLabs at all.
+                 */
+                audioUrl = await fetchChadVoiceAudio(chunk);
+            } catch (error) {
+                console.warn('Chad voice generation failed:', error);
+                return false;
+            }
+
+            if (
+                chadVoiceMuted ||
+                generation !== chadSpeechGeneration
+            ) {
+                return false;
+            }
+
+            const played = await playChadAudioUrl(audioUrl, generation);
+            if (!played) return false;
+        }
+
+        return true;
+    }
+
     function pickChadVoice() {
         if (!('speechSynthesis' in window)) return null;
 
@@ -5677,6 +5964,15 @@ body {
         const cleanText = speechText(text);
         if (!cleanText) return false;
 
+        if (chadVoiceMuted) {
+            if (statusElement) {
+                statusElement.textContent =
+                    '🔇 Chad is muted. The written step is still right there, chief.';
+            }
+            return false;
+        }
+
+        chadSpeechGeneration += 1;
         stopChadAudio();
 
         if (statusElement) {
@@ -5969,6 +6265,10 @@ body {
         }
 
         const afterAnswer = wrapper.querySelector('.chad-after-answer');
+
+        if (!streamState) {
+            speakChadAnswer(data.answer || '');
+        }
 
         /*
          * The walkthrough prompt belongs immediately after Chad's answer.
@@ -6827,7 +7127,8 @@ body {
 
         questionInput.focus();
 
-        syncQuestionLimit();
+        bindChadVoiceToggle();
+    syncQuestionLimit();
 
     }
 
