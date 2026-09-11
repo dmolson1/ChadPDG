@@ -536,6 +536,162 @@ body {
     }
 }
 
+
+/* =========================================================
+   CHATGPT-STYLE COMPOSER + MESSAGE ACTIONS
+   ========================================================= */
+#chad-app #chad-input-area{
+    width:min(820px, calc(100% - 24px)) !important;
+    margin:22px auto 0 !important;
+}
+
+#chad-app .chad-chatgpt-composer{
+    background:#fff !important;
+    border:1px solid #d9dde2 !important;
+    border-radius:26px !important;
+    box-shadow:0 1px 3px rgba(0,0,0,.06),0 8px 28px rgba(0,0,0,.05) !important;
+    padding:8px !important;
+}
+
+#chad-app .chad-chatgpt-composer-row{
+    display:flex !important;
+    align-items:flex-end !important;
+    gap:8px !important;
+    min-height:48px !important;
+}
+
+#chad-app .chad-chatgpt-composer #chad-question{
+    flex:1 1 auto !important;
+    width:auto !important;
+    min-width:0 !important;
+    min-height:44px !important;
+    max-height:180px !important;
+    resize:none !important;
+    overflow-y:auto !important;
+    border:0 !important;
+    outline:0 !important;
+    box-shadow:none !important;
+    background:transparent !important;
+    padding:11px 4px 9px !important;
+    margin:0 !important;
+    color:#202123 !important;
+    font:400 16px/1.45 Arial,Helvetica,sans-serif !important;
+}
+
+#chad-app .chad-chatgpt-composer #chad-question::placeholder{
+    color:#7b8188 !important;
+}
+
+#chad-app .chad-chatgpt-composer .chad-plus-wrap{
+    flex:0 0 40px !important;
+    width:40px !important;
+    align-self:flex-end !important;
+}
+
+#chad-app .chad-chatgpt-composer .chad-plus-button{
+    width:40px !important;
+    height:40px !important;
+    border:0 !important;
+    border-radius:50% !important;
+    background:transparent !important;
+    color:#444 !important;
+    font:300 28px/40px Arial,Helvetica,sans-serif !important;
+}
+
+#chad-app .chad-chatgpt-composer .chad-plus-button:hover,
+#chad-app .chad-chatgpt-composer .chad-plus-button:focus{
+    background:#f1f1f1 !important;
+}
+
+#chad-app .chad-send-button{
+    flex:0 0 40px !important;
+    width:40px !important;
+    height:40px !important;
+    min-height:40px !important;
+    align-self:flex-end !important;
+    border:0 !important;
+    border-radius:50% !important;
+    padding:0 !important;
+    background:#111 !important;
+    color:#fff !important;
+    font:700 22px/40px Arial,Helvetica,sans-serif !important;
+    text-align:center !important;
+    box-shadow:none !important;
+    cursor:pointer !important;
+}
+
+#chad-app .chad-send-button:hover,
+#chad-app .chad-send-button:focus{
+    background:#2a2a2a !important;
+}
+
+#chad-app .chad-send-button:disabled{
+    opacity:.35 !important;
+    cursor:not-allowed !important;
+}
+
+#chad-app .chad-chatgpt-composer .chad-photo-preview{
+    margin:0 0 6px !important;
+    border:0 !important;
+    background:#f7f7f7 !important;
+    border-radius:18px !important;
+}
+
+#chad-app .chad-message-actions{
+    display:flex;
+    align-items:center;
+    gap:2px;
+    margin:7px 0 0 48px;
+    min-height:30px;
+}
+
+#chad-app .chad-message-action{
+    width:32px;
+    height:32px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:0;
+    border-radius:8px;
+    background:transparent;
+    color:#6b7075;
+    cursor:pointer;
+    padding:0;
+    font:600 15px/1 Arial,Helvetica,sans-serif;
+}
+
+#chad-app .chad-message-action:hover,
+#chad-app .chad-message-action:focus{
+    background:#f1f2f3;
+    color:#202124;
+}
+
+#chad-app .chad-message-action svg{
+    width:18px;
+    height:18px;
+    display:block;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.8;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+}
+
+@media (max-width:700px){
+    #chad-app #chad-input-area{
+        width:calc(100% - 16px) !important;
+        margin-top:14px !important;
+    }
+
+    #chad-app .chad-chatgpt-composer{
+        border-radius:24px !important;
+    }
+
+    #chad-app .chad-message-actions{
+        margin-left:38px;
+    }
+}
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
@@ -790,57 +946,62 @@ body {
 
     <div id="chad-input-area">
 
-        <div class="chad-composer-row">
-            <div class="chad-plus-wrap"><button type="button" id="chad-plus-button" class="chad-plus-button" aria-label="Add to your message" aria-expanded="false">+</button><div id="chad-plus-menu" class="chad-plus-menu" hidden><button type="button" id="chad-take-photo"><span>📷</span><span>Take Photo</span></button><button type="button" id="chad-choose-photo"><span>🖼️</span><span>Choose Photo</span></button></div></div>
-            <textarea
-                id="chad-question"
-                placeholder="Ask Chad..."
-                rows="3"
-            ></textarea>
-            <input id="chad-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
-            <input id="chad-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <div class="chad-chatgpt-composer">
+            <div id="chad-photo-preview" class="chad-photo-preview" hidden>
+                <img id="chad-photo-preview-image" alt="Photo ready to send">
+                <div class="chad-photo-preview-meta"><strong>Photo ready.</strong><span>Chad will inspect this with your next question.</span></div>
+                <button type="button" id="chad-photo-remove" aria-label="Remove photo">×</button>
+            </div>
+
+            <div class="chad-chatgpt-composer-row">
+                <div class="chad-plus-wrap">
+                    <button type="button" id="chad-plus-button" class="chad-plus-button" aria-label="Add photo" aria-expanded="false">+</button>
+                    <div id="chad-plus-menu" class="chad-plus-menu" hidden>
+                        <button type="button" id="chad-take-photo"><span>📷</span><span>Take Photo</span></button>
+                        <button type="button" id="chad-choose-photo"><span>🖼️</span><span>Choose Photo</span></button>
+                    </div>
+                </div>
+
+                <textarea
+                    id="chad-question"
+                    placeholder="Ask Chad..."
+                    rows="1"
+                ></textarea>
+
+                <button
+                    type="button"
+                    id="chad-ask"
+                    class="chad-send-button"
+                    aria-label="Send message"
+                    title="Send"
+                >↑</button>
+            </div>
         </div>
-        <div id="chad-photo-preview" class="chad-photo-preview" hidden>
-            <img id="chad-photo-preview-image" alt="Photo ready to send">
-            <div class="chad-photo-preview-meta"><strong>Photo ready.</strong><span>Chad will inspect this with your next question.</span></div>
-            <button type="button" id="chad-photo-remove" aria-label="Remove photo">×</button>
-        </div>
 
-        <div id="chad-buttons">
+        <button
+            type="button"
+            id="chad-reset"
+            class="chad-hidden-new-conversation"
+            hidden
+        >
+            NEW CONVERSATION
+        </button>
 
-            <button
-                type="button"
-                id="chad-ask"
-            >
-                ASK CHAD
-            </button>
+        <button
+            type="button"
+            id="chad-share-conversation"
+            hidden
+            aria-hidden="true"
+            tabindex="-1"
+        >SHARE</button>
 
-            <button
-                type="button"
-                id="chad-reset"
-            >
-                NEW CONVERSATION
-            </button>
-
-            <button
-                type="button"
-                id="chad-share-conversation"
-                class="chad-secondary-action"
-                title="Share this conversation"
-            >
-                SHARE
-            </button>
-
-            <button
-                type="button"
-                id="chad-copy-conversation"
-                class="chad-secondary-action"
-                title="Copy this conversation to your clipboard"
-            >
-                COPY
-            </button>
-
-        </div>
+        <button
+            type="button"
+            id="chad-copy-conversation"
+            hidden
+            aria-hidden="true"
+            tabindex="-1"
+        >COPY</button>
 
     <div id="chad-sponsor-slot" class="chad-sponsor-slot" aria-label="Sponsor" hidden>
         <div class="chad-sponsor-slider">
@@ -5351,6 +5512,67 @@ body {
 
 
 
+    function chadActionIcon(type) {
+        if (type === 'share') {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+                '<path d="M12 16V4"></path>' +
+                '<path d="M7.5 8.5 12 4l4.5 4.5"></path>' +
+                '<path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"></path>' +
+            '</svg>';
+        }
+
+        return '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+            '<rect x="8" y="8" width="11" height="11" rx="2"></rect>' +
+            '<path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>' +
+        '</svg>';
+    }
+
+
+    function ensureChadMessageActions(wrapper) {
+        if (!wrapper || wrapper.querySelector('.chad-message-actions')) return;
+
+        const actions = document.createElement('div');
+        actions.className = 'chad-message-actions';
+        actions.innerHTML =
+            '<button type="button" class="chad-message-action chad-copy-answer" aria-label="Copy Chad response" title="Copy response">' +
+                chadActionIcon('copy') +
+            '</button>' +
+            '<button type="button" class="chad-message-action chad-share-answer" aria-label="Share conversation" title="Share conversation">' +
+                chadActionIcon('share') +
+            '</button>';
+
+        wrapper.appendChild(actions);
+
+        const copyButton = actions.querySelector('.chad-copy-answer');
+        const shareButton = actions.querySelector('.chad-share-answer');
+
+        copyButton && copyButton.addEventListener('click', async function () {
+            const answer = wrapper.querySelector('.chad-answer');
+            const text = (answer && answer.innerText ? answer.innerText : '').trim();
+            if (!text) return;
+
+            try {
+                await navigator.clipboard.writeText(text);
+                showCopyToast('Chad response copied.');
+            } catch (error) {
+                window.alert('Could not copy that response.');
+            }
+        });
+
+        shareButton && shareButton.addEventListener('click', function () {
+            if (!currentUser) {
+                showSignupForFeature('share');
+                return;
+            }
+
+            shareConversation({
+                id: currentConversationId || '',
+                title: document.title || 'ChadPDChee conversation'
+            });
+        });
+    }
+
+
     function beginStreamingChadResponse() {
 
         const wrapper = document.createElement('div');
@@ -5399,6 +5621,7 @@ body {
         }
 
         state.mainFinalized = true;
+        ensureChadMessageActions(state.wrapper);
 
         if (
             afterAnswer &&
@@ -6020,6 +6243,7 @@ body {
     }
 
 
+    window.ensureChadMessageActions = ensureChadMessageActions;
     window.CHADPDG_BUILD_WALKTHROUGH = buildWalkthroughOffer;
     window.CHADPDG_BUILD_FULL_WALKTHROUGH = buildFullWalkthroughText;
     window.CHADPDG_BIND_WALKTHROUGH = bindGuidedWalkthrough;
@@ -6052,6 +6276,7 @@ body {
         }
 
         const afterAnswer = wrapper.querySelector('.chad-after-answer');
+        ensureChadMessageActions(wrapper);
 
         /*
          * The walkthrough prompt belongs immediately after Chad's answer.
@@ -7048,6 +7273,30 @@ body {
      * Allow the separate account UI to refresh the live quota counter
      * immediately after sign-in, sign-up, sign-out, or account deletion.
      */
+    const chadComposerInput = document.getElementById('chad-question');
+
+    function resizeChadComposer() {
+        if (!chadComposerInput) return;
+        chadComposerInput.style.height = 'auto';
+        chadComposerInput.style.height =
+            Math.min(chadComposerInput.scrollHeight, 180) + 'px';
+    }
+
+    if (chadComposerInput) {
+        chadComposerInput.addEventListener('input', resizeChadComposer);
+        chadComposerInput.addEventListener('keydown', function (event) {
+            if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.isComposing
+            ) {
+                event.preventDefault();
+                document.getElementById('chad-ask')?.click();
+            }
+        });
+        resizeChadComposer();
+    }
+
     window.CHADPDG_SYNC_QUESTION_LIMIT = syncQuestionLimit;
 
 })();
@@ -7160,7 +7409,7 @@ async function renameConversation(c){const title=window.prompt('Rename project',
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
 async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
-function historyChad(text,meta){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';const walkthrough=meta&&meta.walkthrough?meta.walkthrough:null;const offer=(window.CHADPDG_BUILD_WALKTHROUGH&&walkthrough)?window.CHADPDG_BUILD_WALKTHROUGH(walkthrough):'';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div><div class="chad-after-answer">'+offer+'</div>';chat.appendChild(w);if(window.CHADPDG_BIND_WALKTHROUGH&&walkthrough)window.CHADPDG_BIND_WALKTHROUGH(w,walkthrough)}
+function historyChad(text,meta){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';const walkthrough=meta&&meta.walkthrough?meta.walkthrough:null;const offer=(window.CHADPDG_BUILD_WALKTHROUGH&&walkthrough)?window.CHADPDG_BUILD_WALKTHROUGH(walkthrough):'';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div><div class="chad-after-answer">'+offer+'</div>';chat.appendChild(w);if(window.CHADPDG_BIND_WALKTHROUGH&&walkthrough)window.CHADPDG_BIND_WALKTHROUGH(w,walkthrough);if(window.ensureChadMessageActions)window.ensureChadMessageActions(w)}
 async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'',m.message_meta||null)});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
 
 accountButton&&accountButton.addEventListener('click',()=>openAuth(currentUser?'account':'signin'));closeButton&&closeButton.addEventListener('click',closeAuth);overlay&&overlay.addEventListener('click',e=>{if(e.target===overlay)closeAuth()});
