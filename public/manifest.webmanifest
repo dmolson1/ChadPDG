@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "ChadPDChee",
+  "short_name": "ChadPDChee",
+  "description": "DIY advice from an AI who is annoyingly confident about everything.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
