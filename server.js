@@ -67,6 +67,16 @@ const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID || "";
 const PAYPAL_ENV = String(process.env.PAYPAL_ENV || "sandbox").toLowerCase() === "live" ? "live" : "sandbox";
 const PAYPAL_API_BASE = PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
 
+// Prepaid Chad chat packs. Credits never expire and are only attached to signed-in accounts.
+const CHAT_PACKS = Object.freeze({
+    starter: { id: "starter", chats: 50, priceUsd: 2.99, label: "50 Chad Chats" },
+    popular: { id: "popular", chats: 150, priceUsd: 5.99, label: "150 Chad Chats" },
+    value: { id: "value", chats: 500, priceUsd: 14.99, label: "500 Chad Chats" }
+});
+const DIGITALOCEAN_MONTHLY_USD = Number(process.env.DIGITALOCEAN_MONTHLY_USD || 12);
+const PAYPAL_EST_PERCENT = Number(process.env.PAYPAL_EST_PERCENT || 2.9);
+const PAYPAL_EST_FIXED_USD = Number(process.env.PAYPAL_EST_FIXED_USD || 0.30);
+
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CHAD_ADMIN_TEST_KEY = process.env.CHAD_ADMIN_TEST_KEY || "";
 const AMAZON_TAG = "dannyroymolso-20";
@@ -807,6 +817,47 @@ async function initializeDatabase() {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             PRIMARY KEY (visitor_hash, usage_date)
         )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_chat_credit_purchases (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            pack_id VARCHAR(30) NOT NULL,
+            credits INTEGER NOT NULL CHECK (credits > 0),
+            amount_usd NUMERIC(10,2) NOT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'payment_pending',
+            paypal_order_id TEXT UNIQUE,
+            paypal_capture_id TEXT UNIQUE,
+            paypal_refund_id TEXT,
+            paid_at TIMESTAMPTZ,
+            refunded_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_chat_credit_purchases_user_created
+        ON chad_chat_credit_purchases(user_id, created_at DESC)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_chat_credit_ledger (
+            id BIGSERIAL PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            delta INTEGER NOT NULL,
+            entry_type VARCHAR(30) NOT NULL,
+            purchase_id UUID NULL REFERENCES chad_chat_credit_purchases(id) ON DELETE SET NULL,
+            reference_key TEXT UNIQUE,
+            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chad_chat_credit_ledger_user_created
+        ON chad_chat_credit_ledger(user_id, created_at DESC)
     `);
 
     await pool.query(`
@@ -2141,6 +2192,80 @@ function analyticsToken(visitorHash, conversationId) {
         .digest("hex");
 }
 
+async function getChatCreditBalance(userId, client = pool) {
+    if (!userId) return 0;
+    const result = await client.query(
+        `SELECT COALESCE(SUM(delta),0)::int AS balance
+         FROM chad_chat_credit_ledger WHERE user_id=$1`, [userId]
+    );
+    return Math.max(0, Number(result.rows[0]?.balance || 0));
+}
+
+async function consumeChatCredit(userId) {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`chat-credit:${userId}`]);
+        const balance = await getChatCreditBalance(userId, client);
+        if (balance <= 0) { await client.query("ROLLBACK"); return { allowed:false, balance:0 }; }
+        const referenceKey = `use:${userId}:${crypto.randomUUID()}`;
+        await client.query(
+            `INSERT INTO chad_chat_credit_ledger (user_id,delta,entry_type,reference_key)
+             VALUES ($1,-1,'usage',$2)`, [userId, referenceKey]
+        );
+        await client.query("COMMIT");
+        return { allowed:true, balance:balance-1, referenceKey };
+    } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        throw error;
+    } finally { client.release(); }
+}
+
+async function restoreChatCredit(userId, referenceKey) {
+    if (!userId || !referenceKey) return;
+    await pool.query(
+        `INSERT INTO chad_chat_credit_ledger (user_id,delta,entry_type,reference_key,metadata)
+         VALUES ($1,1,'usage_reversal',$2,$3::jsonb)
+         ON CONFLICT (reference_key) DO NOTHING`,
+        [userId, `reverse:${referenceKey}`, JSON.stringify({ reversed_reference: referenceKey })]
+    );
+}
+
+function publicChatPacks() {
+    return Object.values(CHAT_PACKS).map(p => ({ id:p.id, chats:p.chats, price_usd:p.priceUsd, label:p.label }));
+}
+
+async function grantChatPurchaseCredits(purchaseId, captureId = "") {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(
+            `SELECT * FROM chad_chat_credit_purchases WHERE id=$1 FOR UPDATE`, [purchaseId]
+        );
+        const purchase = result.rows[0];
+        if (!purchase) { await client.query("ROLLBACK"); return null; }
+        const referenceKey = `purchase:${purchase.id}`;
+        await client.query(
+            `INSERT INTO chad_chat_credit_ledger (user_id,delta,entry_type,purchase_id,reference_key,metadata)
+             VALUES ($1,$2,'purchase',$3,$4,$5::jsonb)
+             ON CONFLICT (reference_key) DO NOTHING`,
+            [purchase.user_id, purchase.credits, purchase.id, referenceKey, JSON.stringify({ pack_id: purchase.pack_id })]
+        );
+        await client.query(
+            `UPDATE chad_chat_credit_purchases
+             SET status='paid', paypal_capture_id=COALESCE(NULLIF($2,''),paypal_capture_id),
+                 paid_at=COALESCE(paid_at,NOW()), updated_at=NOW()
+             WHERE id=$1`, [purchase.id, captureId]
+        );
+        const balance = await getChatCreditBalance(purchase.user_id, client);
+        await client.query("COMMIT");
+        return { purchase, balance };
+    } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        throw error;
+    } finally { client.release(); }
+}
+
 async function handleStatus(req, res) {
     try {
         const visitorId = getOrCreateVisitorId(req, res);
@@ -2168,6 +2293,7 @@ async function handleStatus(req, res) {
 
         const used = await getDailyUsed(quotaHash, torontoDateKey());
         const remaining = Math.max(0, dailyLimit - used);
+        const creditBalance = user ? await getChatCreditBalance(user.id) : 0;
 
         return res.json({
             success: true,
@@ -2176,6 +2302,9 @@ async function handleStatus(req, res) {
             limit_reached: remaining <= 0,
             admin_test_mode: false,
             authenticated: Boolean(user),
+            credit_balance: creditBalance,
+            chat_packs: user ? publicChatPacks() : [],
+            can_buy_chat_credits: Boolean(user),
             account_daily_limit: SIGNED_IN_DAILY_LIMIT,
             guest_daily_limit: DAILY_LIMIT,
             ...reset
@@ -2267,6 +2396,11 @@ async function handleAsk(req, res) {
     let quotaDailyLimit = DAILY_LIMIT;
     let ipHash = "";
     let day = torontoDateKey();
+    let paidCreditReserved = false;
+    let paidCreditReference = "";
+    let paidCreditUserId = "";
+    let paidCreditBalance = 0;
+    let usageSource = "free";
 
     try {
         if (!process.env.OPENAI_API_KEY) {
@@ -2342,34 +2476,55 @@ async function handleAsk(req, res) {
             if (!quota.allowed) {
                 const reset = getTorontoResetInfo();
                 if (quota.reason === "visitor") {
-                    if (!isTestPageRequest(req)) {
+                    // Signed-in users may continue with prepaid credits after today's free allowance.
+                    if (authenticatedUser) {
+                        const paid = await consumeChatCredit(authenticatedUser.id);
+                        if (paid.allowed) {
+                            paidCreditReserved = true;
+                            paidCreditReference = paid.referenceKey;
+                            paidCreditUserId = authenticatedUser.id;
+                            paidCreditBalance = paid.balance;
+                            usageSource = "paid_credit";
+                            quota = { allowed:true, remaining:0 };
+                            quotaReserved = false;
+                        }
+                    }
+                    if (!paidCreditReserved && !isTestPageRequest(req)) {
                         await safeRecordAnalyticsEvent({
                             event: "limit_hit",
                             visitorHash,
                             metadata: { reason: "daily_visitor_limit" }
                         });
                     }
+                    if (!paidCreditReserved) {
+                        const creditBalance = authenticatedUser ? await getChatCreditBalance(authenticatedUser.id) : 0;
+                        return res.status(429).json({
+                            success: false,
+                            error: authenticatedUser
+                                ? `That is your ${SIGNED_IN_DAILY_LIMIT} free Chad questions for today, Bro. Buy a chat pack to keep going or come back tomorrow.`
+                                : `That is your ${DAILY_LIMIT} free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Sign in for ${SIGNED_IN_DAILY_LIMIT} a day or come back tomorrow.`,
+                            limit_reached: true,
+                            daily_limit: quotaDailyLimit,
+                            remaining: 0,
+                            credit_balance: creditBalance,
+                            chat_packs: authenticatedUser ? publicChatPacks() : [],
+                            can_buy_chat_credits: Boolean(authenticatedUser),
+                            admin_test_mode: false,
+                            authenticated: Boolean(authenticatedUser),
+                            account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+                            guest_daily_limit: DAILY_LIMIT,
+                            ...reset
+                        });
+                    }
+                }
+                if (!paidCreditReserved) {
                     return res.status(429).json({
                         success: false,
-                        error: authenticatedUser
-                            ? `That is your ${SIGNED_IN_DAILY_LIMIT} Chad questions for today, Bro. Even Chad has workplace standards. Come back tomorrow.`
-                            : `That is your ${DAILY_LIMIT} free Chad questions for today, Bro. Chad has officially done enough unpaid labour. Sign in for ${SIGNED_IN_DAILY_LIMIT} a day or come back tomorrow.`,
-                        limit_reached: true,
-                        daily_limit: quotaDailyLimit,
-                        remaining: 0,
-                        admin_test_mode: false,
-                        authenticated: Boolean(authenticatedUser),
-                        account_daily_limit: SIGNED_IN_DAILY_LIMIT,
-                        guest_daily_limit: DAILY_LIMIT,
-                        ...reset
+                        error: "Chad is taking a break from this connection for today."
                     });
                 }
-                return res.status(429).json({
-                    success: false,
-                    error: "Chad is taking a break from this connection for today."
-                });
             }
-            quotaReserved = true;
+            if (!paidCreditReserved) quotaReserved = true;
         }
 
         const conversationId = await getOrCreateConversationId(req, res);
@@ -2476,6 +2631,12 @@ async function handleAsk(req, res) {
             admin_test_mode: admin,
             daily_limit: quotaDailyLimit,
             remaining,
+            usage_source: usageSource,
+            credit_balance: authenticatedUser
+                ? (paidCreditReserved ? paidCreditBalance : await getChatCreditBalance(authenticatedUser.id))
+                : 0,
+            chat_packs: authenticatedUser ? publicChatPacks() : [],
+            can_buy_chat_credits: Boolean(authenticatedUser),
             authenticated: Boolean(authenticatedUser),
             account_daily_limit: SIGNED_IN_DAILY_LIMIT,
             guest_daily_limit: DAILY_LIMIT,
@@ -2485,6 +2646,9 @@ async function handleAsk(req, res) {
         console.error("Ask error:", error);
         if (quotaReserved) {
             await releaseDailyQuestion(quotaHash || visitorHash, ipHash, day);
+        }
+        if (paidCreditReserved) {
+            await restoreChatCredit(paidCreditUserId, paidCreditReference).catch(() => {});
         }
         return res.status(500).json({
             success: false,
@@ -2960,6 +3124,26 @@ async function handleAnalyticsDashboard(req, res) {
         const sponsorImpressions = Number(summary.sponsor_impressions || 0);
         const sponsorClicks = Number(summary.sponsor_clicks || 0);
 
+        const chatEconomicsResult = await pool.query(`
+            SELECT
+              COUNT(*) FILTER (WHERE status='paid')::int AS paid_purchases,
+              COALESCE(SUM(amount_usd) FILTER (WHERE status='paid'),0)::numeric AS gross_chat_revenue_usd,
+              COALESCE(SUM(credits) FILTER (WHERE status='paid'),0)::bigint AS credits_sold
+            FROM chad_chat_credit_purchases
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        `,[days]);
+        const creditUsageResult = await pool.query(`
+            SELECT COALESCE(-SUM(delta) FILTER (WHERE entry_type='usage'),0)::bigint AS paid_chats_used
+            FROM chad_chat_credit_ledger
+            WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        `,[days]);
+        const eco=chatEconomicsResult.rows[0]||{};
+        const paidPurchases=Number(eco.paid_purchases||0);
+        const grossChatRevenue=Number(eco.gross_chat_revenue_usd||0);
+        const estimatedPaypalFees=paidPurchases*PAYPAL_EST_FIXED_USD + grossChatRevenue*(PAYPAL_EST_PERCENT/100);
+        const openAiCost=Number(costResult.rows[0]?.estimated_token_cost_usd||0);
+        const hostingProrated=DIGITALOCEAN_MONTHLY_USD*(days/30);
+
         return res.json({
             success: true,
             generated_at: new Date().toISOString(),
@@ -2992,6 +3176,19 @@ async function handleAnalyticsDashboard(req, res) {
                     ? Number(((Number(row.clicks || 0) / Number(row.impressions || 1)) * 100).toFixed(2))
                     : 0
             })),
+            chat_economics: {
+                paid_purchases: paidPurchases,
+                gross_chat_revenue_usd: Number(grossChatRevenue.toFixed(2)),
+                credits_sold: Number(eco.credits_sold||0),
+                paid_chats_used: Number(creditUsageResult.rows[0]?.paid_chats_used||0),
+                estimated_paypal_fees_usd: Number(estimatedPaypalFees.toFixed(2)),
+                estimated_openai_cost_usd: Number(openAiCost.toFixed(4)),
+                estimated_digitalocean_cost_usd: Number(hostingProrated.toFixed(2)),
+                estimated_net_after_ai_paypal_hosting_usd: Number((grossChatRevenue-estimatedPaypalFees-openAiCost-hostingProrated).toFixed(2)),
+                digitalocean_monthly_usd: DIGITALOCEAN_MONTHLY_USD,
+                paypal_fee_assumption: `${PAYPAL_EST_PERCENT}% + $${PAYPAL_EST_FIXED_USD.toFixed(2)} USD/payment`,
+                note: "Estimate only; taxes, FX, email, storage and other costs are excluded."
+            },
             openai_costs: {
                 ...(costResult.rows[0] || {}),
                 estimated_token_cost_usd: Number(costResult.rows[0]?.estimated_token_cost_usd || 0),
@@ -4836,6 +5033,100 @@ async function handleAdminSponsorOrderRefund(req,res){
     }
 }
 
+async function handleChatPacks(req, res) {
+    try {
+        const user = await getAuthenticatedUser(req);
+        const balance = user ? await getChatCreditBalance(user.id) : 0;
+        return res.json({
+            success:true,
+            authenticated:Boolean(user),
+            balance,
+            packs:publicChatPacks(),
+            paypal_environment:PAYPAL_ENV
+        });
+    } catch (error) {
+        console.error("Chat packs error:", error);
+        return res.status(500).json({success:false,error:"Could not load Chad chat packs."});
+    }
+}
+
+async function handleChatPackCheckoutCreate(req, res) {
+    try {
+        const user = await getAuthenticatedUser(req);
+        if (!user) return res.status(401).json({success:false,error:"Sign in before buying Chad chats."});
+        const pack = CHAT_PACKS[String(req.body?.pack_id || "")];
+        if (!pack) return res.status(400).json({success:false,error:"That chat pack does not exist."});
+        const purchaseId = crypto.randomUUID();
+        await pool.query(
+            `INSERT INTO chad_chat_credit_purchases (id,user_id,pack_id,credits,amount_usd)
+             VALUES ($1,$2,$3,$4,$5)`,
+            [purchaseId,user.id,pack.id,pack.chats,pack.priceUsd]
+        );
+        const paypal = await paypalRequest("/v2/checkout/orders", {
+            method:"POST",
+            headers:{"PayPal-Request-Id":`chat-${purchaseId}`},
+            body:JSON.stringify({
+                intent:"CAPTURE",
+                purchase_units:[{
+                    reference_id:purchaseId,
+                    custom_id:`chat:${purchaseId}`,
+                    description:`Chad P.D. Chee — ${pack.label}`,
+                    amount:{currency_code:"USD",value:pack.priceUsd.toFixed(2)}
+                }],
+                payment_source:{paypal:{experience_context:{
+                    brand_name:"Chad P.D. Chee",
+                    user_action:"PAY_NOW",
+                    shipping_preference:"NO_SHIPPING",
+                    return_url:`${APP_BASE_URL}/?chat_payment=return&purchase=${encodeURIComponent(purchaseId)}`,
+                    cancel_url:`${APP_BASE_URL}/?chat_payment=cancelled&purchase=${encodeURIComponent(purchaseId)}`
+                }}}
+            })
+        });
+        await pool.query(`UPDATE chad_chat_credit_purchases SET paypal_order_id=$2,updated_at=NOW() WHERE id=$1`,[purchaseId,paypal.id]);
+        const approvalUrl=(paypal.links||[]).find(l=>l.rel==='payer-action')?.href || (paypal.links||[]).find(l=>l.rel==='approve')?.href;
+        if(!approvalUrl) throw new Error("PayPal did not return a checkout link.");
+        return res.json({success:true,purchase_id:purchaseId,paypal_order_id:paypal.id,approval_url:approvalUrl});
+    } catch (error) {
+        console.error("Chat pack checkout create error:",error);
+        return res.status(error?.status && Number(error.status)>=400 ? Number(error.status) : 500).json({success:false,error:error?.message||"Could not start chat purchase."});
+    }
+}
+
+async function handleChatPackCheckoutCapture(req, res) {
+    try {
+        const user = await getAuthenticatedUser(req);
+        if (!user) return res.status(401).json({success:false,error:"Sign in to finish this purchase."});
+        const purchaseId=String(req.body?.purchase_id||"");
+        const result=await pool.query(`SELECT * FROM chad_chat_credit_purchases WHERE id=$1 AND user_id=$2 LIMIT 1`,[purchaseId,user.id]);
+        const purchase=result.rows[0];
+        if(!purchase) return res.status(404).json({success:false,error:"Chat purchase not found."});
+        if(purchase.status==='paid') return res.json({success:true,balance:await getChatCreditBalance(user.id),credits:purchase.credits,already_paid:true});
+        if(!purchase.paypal_order_id) return res.status(409).json({success:false,error:"This purchase has no PayPal order."});
+        const capture=await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(purchase.paypal_order_id)}/capture`,{
+            method:'POST',headers:{'PayPal-Request-Id':`chat-capture-${purchase.id}`},body:'{}'
+        });
+        if(String(capture.status||'').toUpperCase()!=='COMPLETED') return res.status(409).json({success:false,error:`PayPal payment is ${capture.status||'not completed'}.`});
+        const captureId=String(capture.purchase_units?.[0]?.payments?.captures?.[0]?.id||'');
+        const granted=await grantChatPurchaseCredits(purchase.id,captureId);
+        return res.json({success:true,balance:granted?.balance||0,credits:purchase.credits,status:'paid'});
+    } catch(error) {
+        console.error("Chat pack capture error:",error);
+        return res.status(error?.status && Number(error.status)>=400 ? Number(error.status) : 500).json({success:false,error:error?.message||"Could not finish chat purchase."});
+    }
+}
+
+async function handleChatCreditHistory(req,res){
+    try{
+        const user=await getAuthenticatedUser(req);
+        if(!user) return res.status(401).json({success:false,error:"Sign in first."});
+        const [balance,purchases]=await Promise.all([
+            getChatCreditBalance(user.id),
+            pool.query(`SELECT id,pack_id,credits,amount_usd,status,paid_at,created_at FROM chad_chat_credit_purchases WHERE user_id=$1 ORDER BY created_at DESC LIMIT 25`,[user.id])
+        ]);
+        return res.json({success:true,balance,purchases:purchases.rows});
+    }catch(error){console.error("Chat credit history error:",error);return res.status(500).json({success:false,error:"Could not load chat credits."});}
+}
+
 async function handlePayPalWebhook(req,res){
     try{
         if(!PAYPAL_WEBHOOK_ID) return res.status(503).json({success:false,error:"PayPal webhook is not configured."});
@@ -4851,8 +5142,19 @@ async function handlePayPalWebhook(req,res){
         if(verification.verification_status!=='SUCCESS') return res.status(400).json({success:false,error:"Invalid PayPal webhook signature."});
         const event=req.body||{};
         if(event.event_type==='PAYMENT.CAPTURE.COMPLETED'){
-            const customId=event.resource?.custom_id || event.resource?.supplementary_data?.related_ids?.order_id || '';
-            let orderId=customId;
+            const paypalOrderId=String(event.resource?.supplementary_data?.related_ids?.order_id||'');
+            const customId=String(event.resource?.custom_id||'');
+            let chatPurchaseId=customId.startsWith('chat:') ? customId.slice(5) : '';
+            if(!chatPurchaseId && paypalOrderId){
+                const chatLookup=await pool.query(`SELECT id FROM chad_chat_credit_purchases WHERE paypal_order_id=$1 LIMIT 1`,[paypalOrderId]);
+                chatPurchaseId=chatLookup.rows[0]?.id||'';
+            }
+            if(chatPurchaseId){
+                await grantChatPurchaseCredits(chatPurchaseId,String(event.resource?.id||''));
+                return res.json({success:true});
+            }
+            const sponsorCustomId=event.resource?.custom_id || event.resource?.supplementary_data?.related_ids?.order_id || '';
+            let orderId=sponsorCustomId;
             if(!orderId && event.resource?.supplementary_data?.related_ids?.order_id){
                 const lookup=await pool.query(`SELECT id FROM chad_sponsor_orders WHERE paypal_order_id=$1 LIMIT 1`,[event.resource.supplementary_data.related_ids.order_id]);
                 orderId=lookup.rows[0]?.id||'';
@@ -5871,6 +6173,10 @@ registerBoth("get", "/account/export", handleAccountExport);
 registerBoth("post", "/account/delete", handleAccountDelete);
 
 registerBoth("get", "/status", handleStatus);
+registerBoth("get", "/chat-packs", handleChatPacks);
+registerBoth("post", "/chat-packs/checkout/create", handleChatPackCheckoutCreate);
+registerBoth("post", "/chat-packs/checkout/capture", handleChatPackCheckoutCapture);
+registerBoth("get", "/account/chat-credits", handleChatCreditHistory);
 registerBoth("post", "/translate", handleTranslate);
 registerBoth("post", "/ask", handleAsk);
 registerBoth("post", "/shopping-list", handleShoppingList);
