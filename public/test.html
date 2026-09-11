@@ -5382,7 +5382,30 @@ body {
     function appendStreamingChadText(state, delta) {
         if (!state || !state.answer || !delta) return;
         state.text += delta;
-        state.answer.textContent = state.text;
+
+        /*
+         * Format continuously while Chad streams instead of waiting for the
+         * enrichment work to finish. This makes headings, bold text and lists
+         * settle into their final layout as the answer arrives.
+         */
+        state.answer.innerHTML = formatAnswer(state.text);
+    }
+
+
+    function finalizeStreamingMain(state, data) {
+        if (!state || !state.wrapper || !data) return;
+
+        const answer = String(data.answer || state.text || '');
+        state.text = answer;
+        if (state.answer) state.answer.innerHTML = formatAnswer(answer);
+
+        const afterAnswer = state.wrapper.querySelector('.chad-after-answer');
+        if (afterAnswer && !afterAnswer.querySelector('.chad-walkthrough-offer, .chad-guide-card')) {
+            afterAnswer.innerHTML = buildWalkthroughOffer(data.walkthrough);
+            bindGuidedWalkthrough(state.wrapper, data.walkthrough);
+        }
+
+        state.mainFinalized = true;
     }
 
 
@@ -5438,6 +5461,14 @@ body {
                     appendStreamingChadText(streamState, event.delta);
                 }
 
+                if (event.type === 'main_done' && event.data) {
+                    if (!streamState) {
+                        stopLoadingForStream();
+                        streamState = beginStreamingChadResponse();
+                    }
+                    finalizeStreamingMain(streamState, event.data);
+                }
+
                 if (event.type === 'done' && event.data) {
                     finalData = event.data;
                 }
@@ -5452,6 +5483,13 @@ body {
         if (buffer.trim()) {
             try {
                 const event = JSON.parse(buffer.trim());
+                if (event.type === 'main_done' && event.data) {
+                    if (!streamState) {
+                        stopLoadingForStream();
+                        streamState = beginStreamingChadResponse();
+                    }
+                    finalizeStreamingMain(streamState, event.data);
+                }
                 if (event.type === 'done' && event.data) finalData = event.data;
                 if (event.type === 'error') {
                     removeStreamingChadResponse(streamState);
@@ -5467,7 +5505,10 @@ body {
             throw new Error('Chad started talking and then wandered off. Try that again.');
         }
 
-        removeStreamingChadResponse(streamState);
+        if (streamState) {
+            finalData.__streamState = streamState;
+            if (!streamState.mainFinalized) finalizeStreamingMain(streamState, finalData);
+        }
         return finalData;
     }
 
@@ -5615,6 +5656,11 @@ body {
                 stopSpeech();
                 if (index >= total - 1) {
                     container.innerHTML = '<div class="chad-guide-complete">Done. Look at you, following directions and everything. Chad is cautiously impressed.</div>';
+                    const wrapper = container.closest('.chad-answer-wrapper');
+                    if (wrapper) {
+                        wrapper.dataset.chadWalkthroughResolved = '1';
+                        wrapper.dispatchEvent(new CustomEvent('chad:walkthrough-resolved'));
+                    }
                     return;
                 }
                 index += 1;
@@ -5624,6 +5670,11 @@ body {
             stop.addEventListener('click', function () {
                 stopSpeech();
                 container.innerHTML = '<div class="chad-walkthrough-declined">Walkthrough stopped. Apparently you have decided to freestyle it. Bold.</div>';
+                const wrapper = container.closest('.chad-answer-wrapper');
+                if (wrapper) {
+                    wrapper.dataset.chadWalkthroughResolved = '1';
+                    wrapper.dispatchEvent(new CustomEvent('chad:walkthrough-resolved'));
+                }
             });
 
             if (autoSpeak) speakWalkthroughStep(step, status);
@@ -5650,6 +5701,8 @@ body {
         no && no.addEventListener('click', function () {
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             offer.innerHTML = '<div class="chad-walkthrough-declined">Fine. Go be independent. I’ll be right here when that becomes inconvenient.</div>';
+            wrapper.dataset.chadWalkthroughResolved = '1';
+            wrapper.dispatchEvent(new CustomEvent('chad:walkthrough-resolved'));
         });
     }
 
@@ -5663,42 +5716,43 @@ body {
         question
     ) {
 
-        const wrapper =
-            document.createElement(
-                'div'
-            );
+        const streamState = data && data.__streamState ? data.__streamState : null;
+        const walkthrough = normalizeClientWalkthrough(data && data.walkthrough);
+        let wrapper;
 
+        if (streamState && streamState.wrapper && streamState.wrapper.parentNode) {
+            wrapper = streamState.wrapper;
+            wrapper.classList.remove('chad-streaming-answer');
+            if (streamState.answer) {
+                streamState.answer.innerHTML = formatAnswer(data.answer || streamState.text || '');
+            }
+        } else {
+            wrapper = document.createElement('div');
+            wrapper.className = 'chad-message chad-answer-wrapper';
+            wrapper.innerHTML =
+                '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+                '<div class="chad-name">Chad:</div>' +
+                '<div class="chad-answer">' + formatAnswer(data.answer || '') + '</div>' +
+                '<div class="chad-after-answer"></div>';
+            chat.appendChild(wrapper);
+        }
 
-        wrapper.className =
-            'chad-message chad-answer-wrapper';
+        const afterAnswer = wrapper.querySelector('.chad-after-answer');
 
+        /*
+         * The walkthrough prompt belongs immediately after Chad's answer.
+         * main_done normally rendered it before enrichment finished; this is
+         * the non-stream/fallback path.
+         */
+        if (afterAnswer && walkthrough.offered && !afterAnswer.querySelector('.chad-walkthrough-offer, .chad-guide-card, .chad-guide-complete')) {
+            afterAnswer.insertAdjacentHTML('afterbegin', buildWalkthroughOffer(walkthrough));
+            bindGuidedWalkthrough(wrapper, walkthrough);
+        }
 
-        let html =
+        let extrasHtml = '';
 
-            '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
-
-            '<div class="chad-name">' +
-            'Chad:' +
-            '</div>' +
-
-            '<div class="chad-answer">' +
-            formatAnswer(
-                data.answer || ''
-            ) +
-            '</div>' +
-            '<div class="chad-after-answer"></div>';
-
-
-        let afterHtml = '';
-
-        afterHtml += buildWalkthroughOffer(data.walkthrough);
-
-        if (
-            data.shopping_list_recommended &&
-            data.shopping_token
-        ) {
-
-            afterHtml +=
+        if (data.shopping_list_recommended && data.shopping_token) {
+            extrasHtml +=
                 '<div class="chad-shopping-wrap">' +
                 '<div class="chad-shopping-subtext">' +
                 'Fine. Chad already made the shopping list because apparently waiting for you to ask was too much work.' +
@@ -5707,157 +5761,64 @@ body {
                 '</div>';
         }
 
-        afterHtml +=
-            buildProducts(
-                data.products || [],
-                data.affiliate_offers || [],
-                data.affiliate_disclosure || ''
-            );
-
-        afterHtml +=
-            buildVideos(
-                data.videos || []
-            );
-
-        afterHtml +=
-            buildSources(
-                data.citations || []
-            );
-
-
-        wrapper.innerHTML =
-            html;
-
-
-        chat.appendChild(
-            wrapper
+        extrasHtml += buildProducts(
+            data.products || [],
+            data.affiliate_offers || [],
+            data.affiliate_disclosure || ''
         );
 
+        extrasHtml += buildVideos(data.videos || []);
+        extrasHtml += buildSources(data.citations || []);
 
-        /*
-         * Track products displayed.
-         */
+        function bindRevealedExtras() {
+            const amazonButtons = wrapper.querySelectorAll('.chad-after-answer .chad-product-button');
+            amazonButtons.forEach(function (button) {
+                if (button.dataset.chadClickBound === '1') return;
+                button.dataset.chadClickBound = '1';
+                button.addEventListener('click', function () {
+                    trackAmazonClick(
+                        button.getAttribute('data-chad-asin'),
+                        button.getAttribute('data-chad-product')
+                    );
+                });
+            });
 
-        trackProductImpressions(
-
-            question,
-
-            data.products || []
-
-        );
-
-
-        /*
-         * Track Amazon clicks.
-         *
-         * Browser still goes DIRECTLY
-         * to Amazon.
-         */
-
-        const amazonButtons =
-            wrapper.querySelectorAll(
-                '.chad-product-button'
-            );
-
-
-        amazonButtons.forEach(
-            function (button) {
-
-                button.addEventListener(
-                    'click',
-                    function () {
-
-                        const asin =
-                            button.getAttribute(
-                                'data-chad-asin'
-                            );
-
-
-                        const productName =
-                            button.getAttribute(
-                                'data-chad-product'
-                            );
-
-
-                        trackAmazonClick(
-
-                            asin,
-
-                            productName
-
-                        );
-
-                    }
-                );
-
-            }
-        );
-
-
-        const afterAnswer =
-            wrapper.querySelector(
-                '.chad-after-answer'
-            );
-
-
-        const answerElement =
-            wrapper.querySelector(
-                '.chad-answer'
-            );
-
-
-        scrollToChadAnswer(
-            answerElement
-        );
-
-        if (afterAnswer) {
-
-            afterAnswer.innerHTML =
-                afterHtml;
-        }
-
-        bindGuidedWalkthrough(wrapper, data.walkthrough);
-
-        /*
-         * Bind Amazon click tracking for cards.
-         */
-        const revealedAmazonButtons =
-            wrapper.querySelectorAll(
-                '.chad-after-answer .chad-product-button'
-            );
-
-        revealedAmazonButtons.forEach(
-            function (button) {
-
-                button.addEventListener(
-                    'click',
-                    function () {
-
-                        trackAmazonClick(
-                            button.getAttribute('data-chad-asin'),
-                            button.getAttribute('data-chad-product')
-                        );
-                    }
+            if (
+                data.shopping_list_recommended &&
+                data.shopping_token &&
+                !wrapper.dataset.chadShoppingStarted
+            ) {
+                wrapper.dataset.chadShoppingStarted = '1';
+                buildShoppingList(
+                    wrapper,
+                    question,
+                    data.answer || '',
+                    data.shopping_token || ''
                 );
             }
-        );
-
-        /*
-         * Automatically build the shopping list.
-         */
-        if (
-            data.shopping_list_recommended &&
-            data.shopping_token
-        ) {
-
-            buildShoppingList(
-                wrapper,
-                question,
-                data.answer || '',
-                data.shopping_token || ''
-            );
         }
 
+        function revealExtras() {
+            if (!afterAnswer || wrapper.dataset.chadExtrasRevealed === '1') return;
+            wrapper.dataset.chadExtrasRevealed = '1';
+            if (extrasHtml) {
+                afterAnswer.insertAdjacentHTML('beforeend', extrasHtml);
+            }
+            bindRevealedExtras();
+        }
+
+        /*
+         * If Chad offered the hands-free walkthrough, keep Chad's Picks,
+         * shopping list, videos and sources out of the way until the user
+         * finishes/stops the walkthrough or chooses "I got this".
+         */
+        if (walkthrough.offered && wrapper.dataset.chadWalkthroughResolved !== '1') {
+            wrapper.addEventListener('chad:walkthrough-resolved', revealExtras, { once: true });
+        } else {
+            revealExtras();
+        }
+
+        trackProductImpressions(question, data.products || []);
     }
 
 
