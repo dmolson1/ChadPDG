@@ -3119,6 +3119,16 @@ body {
             return;
         }
 
+        /*
+         * Mobile Safari/Chrome can aggressively reposition the page when
+         * messages are appended near the composer. On phones, leave the
+         * user's viewport alone so Chad's reply does not yank the page to
+         * the bottom. Desktop keeps the existing smooth answer scroll.
+         */
+        if (window.matchMedia('(max-width: 820px)').matches) {
+            return;
+        }
+
         requestAnimationFrame(
             function () {
 
