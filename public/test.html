@@ -540,8 +540,28 @@ body.chad-test-enabled .chad-dev-title{
 #chad-chat-pack-modal.open{display:flex}.chad-pack-card{width:min(560px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.4)}
 .chad-pack-card h2{margin:0 0 5px;font-size:25px}.chad-pack-sub{color:#5c6268;margin-bottom:16px}.chad-pack-balance{font-weight:900;margin:10px 0 16px}.chad-pack-grid{display:grid;gap:10px}.chad-pack-option{border:2px solid #e2e5e8;border-radius:13px;padding:14px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;background:#fff;cursor:pointer;text-align:left}.chad-pack-option:hover{border-color:#111}.chad-pack-option strong{font-size:18px}.chad-pack-option span{font-weight:900;font-size:18px}.chad-pack-option small{display:block;color:#697078;margin-top:3px}.chad-pack-popular{border-color:#111;position:relative}.chad-pack-popular:after{content:'MOST POPULAR';position:absolute;right:10px;top:-9px;background:#111;color:#fff;font-size:9px;font-weight:900;padding:3px 7px;border-radius:9px}.chad-pack-close{width:100%;margin-top:13px;padding:11px;border:0;background:#eceff1;border-radius:10px;font-weight:800;cursor:pointer}.chad-pack-status{min-height:20px;margin-top:10px;font-size:13px;font-weight:700}.chad-buy-chats-mini{border:0;background:transparent;text-decoration:underline;font-weight:800;cursor:pointer;padding:0;margin-left:5px}
 </style>
+
+<style>
+.chad-install-overlay{position:fixed;inset:0;z-index:120000;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;font-family:Arial,Helvetica,sans-serif}
+.chad-install-overlay[hidden]{display:none!important}.chad-install-card{width:min(440px,100%);box-sizing:border-box;background:#fff;color:#111;border-radius:18px;padding:24px;position:relative;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.42)}
+.chad-install-avatar{width:92px;height:92px;object-fit:cover;border-radius:22px;margin:2px auto 12px;display:block}.chad-install-card h2{margin:0 34px 10px;font-size:23px;line-height:1.1}.chad-install-copy{font-size:15px;line-height:1.5;color:#454b50;margin:0 0 16px}.chad-install-copy strong{color:#111}.chad-install-close{position:absolute;right:12px;top:10px;border:0;background:#eef0f2;border-radius:50%;width:38px;height:38px;font-size:27px;cursor:pointer}.chad-install-primary,.chad-install-secondary{width:100%;border:0;border-radius:10px;padding:13px 14px;font-weight:900;cursor:pointer}.chad-install-primary{background:#111;color:#fff;margin-bottom:8px}.chad-install-secondary{background:#eceff1;color:#111}.chad-install-share{font-size:22px;vertical-align:-2px}.chad-install-steps{text-align:left;background:#f4f5f6;border-radius:12px;padding:13px 15px;margin:12px 0}.chad-install-steps div{margin:6px 0}
+@media(max-width:600px){.chad-install-card{padding:21px 18px}.chad-install-card h2{font-size:21px}}
+</style>
+
 </head>
 <body>
+
+<div id="chad-install-modal" class="chad-install-overlay" hidden>
+  <div class="chad-install-card" role="dialog" aria-modal="true" aria-labelledby="chad-install-title">
+    <button type="button" id="chad-install-close" class="chad-install-close" aria-label="Close">×</button>
+    <img class="chad-install-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="ChadPDChee">
+    <h2 id="chad-install-title">PUT CHAD ON YOUR PHONE</h2>
+    <div id="chad-install-copy" class="chad-install-copy"></div>
+    <button type="button" id="chad-install-native" class="chad-install-primary" hidden>INSTALL CHAD</button>
+    <button type="button" id="chad-install-got-it" class="chad-install-secondary">GOT IT</button>
+  </div>
+</div>
+
 
 <div id="chad-shell">
 
@@ -593,6 +613,15 @@ body.chad-test-enabled .chad-dev-title{
                     <small>Advertise with Chad</small>
                 </span>
             </a>
+
+
+            <button type="button" id="chad-install-app" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">▣</span>
+                <span>
+                    <strong>Put Chad on Your Phone</strong>
+                    <small>Install ChadPDChee on your home screen</small>
+                </span>
+            </button>
 
             <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
                 <span class="chad-sidebar-icon">✦</span>
@@ -6771,7 +6800,69 @@ loadMe();
 })();
 </script>
 
+\n<script>
+(function(){
+  let deferredInstallPrompt = null;
+  const installBtn = document.getElementById('chad-install-app');
+  const modal = document.getElementById('chad-install-modal');
+  const copy = document.getElementById('chad-install-copy');
+  const nativeBtn = document.getElementById('chad-install-native');
+  const closeBtn = document.getElementById('chad-install-close');
+  const gotItBtn = document.getElementById('chad-install-got-it');
+
+  function isStandalone(){
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+  function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+  function isAndroid(){ return /android/i.test(navigator.userAgent); }
+  function hideInstallEntry(){ if(installBtn) installBtn.style.display='none'; }
+  function closeInstall(){ if(modal) modal.hidden=true; }
+  function openInstall(){
+    if(!modal || !copy) return;
+    if(isStandalone()){ hideInstallEntry(); return; }
+    nativeBtn.hidden=true;
+    if(deferredInstallPrompt){
+      copy.innerHTML='<strong>Chad can live right on your home screen.</strong><br>No app store. No nonsense. Tap Install and his face will appear with your other apps.';
+      nativeBtn.hidden=false;
+    } else if(isIOS()){
+      copy.innerHTML='<strong>Jebus. Apple makes you do this part yourself.</strong><div class="chad-install-steps"><div>1. Tap the <span class="chad-install-share">⇧</span> <strong>Share</strong> button in Safari.</div><div>2. Tap <strong>Add to Home Screen</strong>.</div><div>3. Tap <strong>Add</strong>.</div></div>Chad will get his own icon and open like an app.';
+    } else if(isAndroid()){
+      copy.innerHTML='<strong>Chad is ready for your home screen.</strong><br>If the Install button is not available yet, open your browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.';
+      if(deferredInstallPrompt) nativeBtn.hidden=false;
+    } else {
+      copy.innerHTML='<strong>You can install ChadPDChee from your browser.</strong><br>Open the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong> when available.';
+    }
+    modal.hidden=false;
+  }
+
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferredInstallPrompt=e;
+  });
+  window.addEventListener('appinstalled', function(){
+    deferredInstallPrompt=null;
+    closeInstall();
+    hideInstallEntry();
+  });
+  if(isStandalone()) hideInstallEntry();
+
+  installBtn?.addEventListener('click', openInstall);
+  closeBtn?.addEventListener('click', closeInstall);
+  gotItBtn?.addEventListener('click', closeInstall);
+  modal?.addEventListener('click', function(e){ if(e.target===modal) closeInstall(); });
+  nativeBtn?.addEventListener('click', async function(){
+    if(!deferredInstallPrompt){ openInstall(); return; }
+    const prompt=deferredInstallPrompt;
+    deferredInstallPrompt=null;
+    await prompt.prompt();
+    try { await prompt.userChoice; } catch(_) {}
+    closeInstall();
+  });
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('/service-worker.js').catch(function(){}); });
+  }
+})();
+</script>\n
 </body>
 </html>
-
-                
