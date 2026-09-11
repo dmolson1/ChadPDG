@@ -35,15 +35,15 @@ const CHAD_EMAIL_FROM = process.env.CHAD_EMAIL_FROM || "Chad P.D. Chee <noreply@
 const APP_BASE_URL = "https://chadpdchee.com";
 
 // Sponsor platform
-const SPONSOR_PRICE_USD = 499;
+const SPONSOR_PRICE_USD = 5;
 const SPONSOR_MAX_ACTIVE_SLOTS = 4;
-const SPONSOR_AGREEMENT_VERSION = "2026-09-11-30DAY";
+const SPONSOR_AGREEMENT_VERSION = "2026-09-11-30DAY-LIVE5TEST";
 const SPONSOR_DURATION_DAYS = 30;
-const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11-30DAY
+const SPONSOR_AGREEMENT_TEXT = `Chad P.D. Chee Sponsor Placement Agreement — Version 2026-09-11-30DAY-LIVE5TEST
 
 This agreement is between Hammered Handyman Media ("Publisher") and the company or brand identified in this order ("Sponsor").
 
-Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for $499 USD for 30 consecutive days. The placement participates in the site's rotating direct-sponsor inventory, with no more than four active paid sponsor positions scheduled at the same time. This is a one-time purchase and does not automatically renew.
+Placement and fee. Sponsor is purchasing one Chad P.D. Chee direct sponsor position for $5 USD for 30 consecutive days. The placement participates in the site's rotating direct-sponsor inventory, with no more than four active paid sponsor positions scheduled at the same time. This is a one-time purchase and does not automatically renew.
 
 Approval. Payment does not cause automatic publication. Publisher may review, edit with Sponsor approval, reject, suspend, or remove creative that is inaccurate, unlawful, unsafe, misleading, technically harmful, incompatible with the audience, or reasonably likely to damage the Publisher or Chad P.D. Chee brand. If Publisher rejects a campaign before it runs and the parties cannot agree on acceptable creative, the sponsorship fee will be refunded.
 
@@ -974,6 +974,15 @@ async function initializeDatabase() {
 
         ALTER TABLE chad_sponsor_orders
             ADD COLUMN IF NOT EXISTS reserved_end_at TIMESTAMPTZ;
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS paypal_refund_id TEXT;
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS refund_status TEXT NOT NULL DEFAULT '';
+
+        ALTER TABLE chad_sponsor_orders
+            ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
 
         CREATE INDEX IF NOT EXISTS chad_sponsor_orders_reserved_window_idx
             ON chad_sponsor_orders (reserved_start_at, reserved_end_at, status);
@@ -4669,6 +4678,73 @@ async function handleAdminSponsorOrderApprove(req,res){
     finally{client.release();}
 }
 
+async function handleAdminSponsorOrderRefund(req,res){
+    try{
+        if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:"Admin key required."});
+        const orderId=cleanSponsorPortalText(req.body?.order_id,80);
+        if(!orderId) return res.status(400).json({success:false,error:"Sponsor order ID required."});
+
+        const r=await pool.query(
+            `SELECT o.*,a.company_name
+             FROM chad_sponsor_orders o
+             JOIN chad_sponsor_accounts a ON a.id=o.sponsor_account_id
+             WHERE o.id=$1
+             LIMIT 1`,
+            [orderId]
+        );
+        const order=r.rows[0];
+        if(!order) return res.status(404).json({success:false,error:"Sponsor order not found."});
+        if(order.status==='refunded') return res.json({success:true,status:'refunded',already_refunded:true,refund_id:order.paypal_refund_id||''});
+        if(order.status==='refund_pending') return res.status(409).json({success:false,error:"A refund is already pending for this order."});
+        if(!['paid_pending_approval','approved','live','completed'].includes(order.status)){
+            return res.status(409).json({success:false,error:"Only paid sponsor orders can be refunded."});
+        }
+        if(!order.paypal_capture_id){
+            return res.status(409).json({success:false,error:"This paid order does not have a PayPal capture ID."});
+        }
+
+        const refund=await paypalRequest(`/v2/payments/captures/${encodeURIComponent(order.paypal_capture_id)}/refund`,{
+            method:'POST',
+            headers:{'PayPal-Request-Id':`chad-refund-${order.id}`},
+            body:'{}'
+        });
+        const refundStatus=String(refund?.status||'').toUpperCase();
+        if(!['COMPLETED','PENDING'].includes(refundStatus)){
+            return res.status(502).json({success:false,error:`PayPal returned unexpected refund status: ${refundStatus||'UNKNOWN'}.`});
+        }
+
+        const newStatus=refundStatus==='COMPLETED' ? 'refunded' : 'refund_pending';
+        const client=await pool.connect();
+        try{
+            await client.query('BEGIN');
+            await client.query(
+                `UPDATE chad_sponsor_orders
+                 SET status=$2,
+                     paypal_refund_id=COALESCE(NULLIF($3,''),paypal_refund_id),
+                     refund_status=$4,
+                     refunded_at=CASE WHEN $2='refunded' THEN COALESCE(refunded_at,NOW()) ELSE refunded_at END,
+                     updated_at=NOW()
+                 WHERE id=$1`,
+                [order.id,newStatus,String(refund?.id||''),refundStatus]
+            );
+            if(order.campaign_id){
+                await client.query(`UPDATE chad_sponsors SET is_active=FALSE,updated_at=NOW() WHERE campaign_id=$1`,[order.campaign_id]);
+            }
+            await client.query('COMMIT');
+        }catch(error){
+            try{await client.query('ROLLBACK')}catch{}
+            throw error;
+        }finally{client.release();}
+
+        console.log('PayPal sponsor refund:',`order=${order.id}`,`refund=${String(refund?.id||'')}`,`status=${refundStatus}`);
+        return res.json({success:true,status:newStatus,refund_status:refundStatus,refund_id:String(refund?.id||'')});
+    }catch(error){
+        console.error('Sponsor refund error:',error);
+        return res.status(error?.status && Number(error.status)>=400 && Number(error.status)<600 ? Number(error.status) : 500)
+            .json({success:false,error:error?.message||'Could not refund sponsor order.'});
+    }
+}
+
 async function handlePayPalWebhook(req,res){
     try{
         if(!PAYPAL_WEBHOOK_ID) return res.status(503).json({success:false,error:"PayPal webhook is not configured."});
@@ -4693,7 +4769,18 @@ async function handlePayPalWebhook(req,res){
             if(orderId) await pool.query(`UPDATE chad_sponsor_orders SET status='paid_pending_approval',paypal_capture_id=COALESCE(NULLIF($2,''),paypal_capture_id),paid_at=COALESCE(paid_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='payment_pending'`,[orderId,String(event.resource?.id||'')]);
         }
         if(event.event_type==='PAYMENT.CAPTURE.REFUNDED' || event.event_type==='PAYMENT.CAPTURE.REVERSED'){
-            await pool.query(`UPDATE chad_sponsor_orders SET status='refunded',updated_at=NOW() WHERE paypal_capture_id=$1`,[String(event.resource?.supplementary_data?.related_ids?.capture_id||event.resource?.id||'')]);
+            const captureId=String(event.resource?.supplementary_data?.related_ids?.capture_id||event.resource?.id||'');
+            const refundId=event.event_type==='PAYMENT.CAPTURE.REFUNDED' ? String(event.resource?.id||'') : '';
+            const refunded=await pool.query(
+                `UPDATE chad_sponsor_orders
+                 SET status='refunded',paypal_refund_id=COALESCE(NULLIF($2,''),paypal_refund_id),refund_status=$3,refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW()
+                 WHERE paypal_capture_id=$1
+                 RETURNING campaign_id`,
+                [captureId,refundId,event.event_type]
+            );
+            for(const row of refunded.rows){
+                if(row.campaign_id) await pool.query(`UPDATE chad_sponsors SET is_active=FALSE,updated_at=NOW() WHERE campaign_id=$1`,[row.campaign_id]);
+            }
         }
         return res.json({success:true});
     }catch(error){console.error("PayPal webhook error:",error);return res.status(500).json({success:false,error:"Webhook processing failed."});}
@@ -5726,6 +5813,7 @@ registerBoth("post", "/paypal/webhook", handlePayPalWebhook);
 registerBoth("get", "/admin/sponsor-orders", handleAdminSponsorOrders);
 registerBoth("get", "/admin/sponsor-orders/contract", handleAdminSponsorContract);
 registerBoth("post", "/admin/sponsor-orders/approve", handleAdminSponsorOrderApprove);
+registerBoth("post", "/admin/sponsor-orders/refund", handleAdminSponsorOrderRefund);
 registerBoth("get", "/admin/sponsor-leads", handleAdminSponsorLeads);
 registerBoth("post", "/admin/sponsor-leads/status", handleAdminSponsorLeadStatus);
 registerBoth("post", "/admin/sponsor-leads/delete", handleAdminSponsorLeadDelete);
