@@ -7358,6 +7358,7 @@ loadMe();
     </div>
     <div class="chad-voice-actions">
         <button type="button" id="chad-live-voice-mute">MUTE MIC</button>
+        <button type="button" id="chad-live-voice-hear" hidden>🔊 HEAR CHAD</button>
         <button type="button" id="chad-live-voice-end" class="chad-end-voice">END VOICE CHAT</button>
     </div>
     <div class="chad-voice-note">You can interrupt Chad naturally. During a walkthrough, say “next”, “repeat”, “back”, or “stop”.</div>
@@ -7379,6 +7380,8 @@ loadMe();
     let timerId = null;
     let closeTimer = null;
     let startedAt = 0;
+    let heardText = "";
+    let chadText = "";
     const MAX_SESSION_MS = 15 * 60 * 1000;
 
     function el(id){ return document.getElementById(id); }
@@ -7431,6 +7434,7 @@ loadMe();
         if(audio){
             try{ audio.pause(); }catch(_){}
             audio.srcObject = null;
+            try{ audio.remove(); }catch(_){}
         }
         peer = null;
         events = null;
@@ -7439,7 +7443,11 @@ loadMe();
         liveReady = false;
         finalizing = false;
         muted = false;
+        heardText = "";
+        chadText = "";
         setLiveVisual(false);
+        const hearButton = el('chad-live-voice-hear');
+        if(hearButton) hearButton.hidden = true;
         const muteButton = el('chad-live-voice-mute');
         if(muteButton) muteButton.textContent = 'MUTE MIC';
         const button = el('chad-voice-button');
@@ -7491,17 +7499,36 @@ loadMe();
             liveReady = true;
             finalizing = false;
             setLiveVisual(true);
-            setStatus('Listening… just talk to Chad.');
+            setStatus('Listening… say something to Chad.');
             startTimer();
+            return;
+        }
+        if(event.type === 'session.input_transcript.delta'){
+            heardText = (heardText + String(event.delta || '')).slice(-140);
+            const clean = heardText.trim();
+            if(clean) setStatus('Heard you: “' + clean + '”');
+            return;
+        }
+        if(event.type === 'session.output_transcript.delta'){
+            chadText = (chadText + String(event.delta || '')).slice(-140);
+            const clean = chadText.trim();
+            if(clean) setStatus('Chad: “' + clean + '”');
+            return;
+        }
+        if(event.type === 'session.usage.updated'){
+            return;
+        }
+        if(event.type === 'error'){
+            const message = event.error && event.error.message
+                ? event.error.message
+                : 'Voice chat hit an error.';
+            setStatus(message);
             return;
         }
         if(event.type === 'session.closed'){
             cleanupVoice('Voice chat ended.');
             return;
         }
-        // GPT-Live sends transcript and delegated-work events here too.
-        // We deliberately keep this first build visually quiet so the text chat
-        // does not jump around while the user is speaking.
     }
     async function startVoiceChat(){
         if(peer || finalizing) return;
@@ -7529,14 +7556,28 @@ loadMe();
             const connection = new RTCPeerConnection();
             peer = connection;
 
-            audio = new Audio();
+            audio = document.createElement('audio');
             audio.autoplay = true;
             audio.playsInline = true;
+            audio.setAttribute('playsinline','');
+            audio.style.display = 'none';
+            document.body.appendChild(audio);
+
+            // Prime iOS audio from the same user gesture that opened voice mode.
+            // Safari may reject this before a remote track exists; that is fine.
+            try{ audio.play().catch(function(){}); }catch(_){}
 
             connection.addEventListener('track', function(event){
-                audio.srcObject = new MediaStream([event.track]);
-                audio.play().catch(function(){
-                    setStatus('Connected. Tap the screen once if your browser blocks Chad’s audio.');
+                audio.srcObject = event.streams && event.streams[0]
+                    ? event.streams[0]
+                    : new MediaStream([event.track]);
+
+                const hearButton = el('chad-live-voice-hear');
+                audio.play().then(function(){
+                    if(hearButton) hearButton.hidden = true;
+                }).catch(function(){
+                    if(hearButton) hearButton.hidden = false;
+                    setStatus('Chad is responding — tap HEAR CHAD so iPhone can play his voice.');
                 });
             });
 
@@ -7648,6 +7689,16 @@ loadMe();
             else startVoiceChat();
         });
         el('chad-live-voice-mute')?.addEventListener('click', toggleMute);
+        el('chad-live-voice-hear')?.addEventListener('click', function(){
+            if(!audio) return;
+            audio.play().then(function(){
+                const b = el('chad-live-voice-hear');
+                if(b) b.hidden = true;
+                setStatus('Listening… just talk to Chad.');
+            }).catch(function(){
+                setStatus('iPhone is still blocking audio. Check Silent Mode/volume and Safari microphone permission.');
+            });
+        });
         el('chad-live-voice-end')?.addEventListener('click', endVoiceChat);
 
         window.addEventListener('pagehide', function(){
