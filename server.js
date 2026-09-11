@@ -6857,21 +6857,38 @@ ${walkthroughText}
          * session surface is still evolving; Realtime calls are documented
          * specifically for browser WebRTC SDP offer/answer negotiation.
          */
+        // OpenAI's Realtime WebRTC call endpoint requires multipart/form-data:
+        //   sdp     -> application/sdp
+        //   session -> application/json
+        // Do NOT set Content-Type manually; Node fetch adds the multipart boundary.
+        const realtimeForm = new FormData();
+
+        realtimeForm.append(
+            "sdp",
+            new Blob([sdp], { type: "application/sdp" }),
+            "offer.sdp"
+        );
+
+        realtimeForm.append(
+            "session",
+            new Blob(
+                [JSON.stringify({
+                    type: "realtime",
+                    model: "gpt-realtime-mini",
+                    instructions: voiceInstructions
+                })],
+                { type: "application/json" }
+            ),
+            "session.json"
+        );
+
         const openaiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-                "Content-Type": "application/json",
                 "OpenAI-Safety-Identifier": hashValue(user ? `voice-user:${user.id}` : "voice-admin-test").slice(0, 64)
             },
-            body: JSON.stringify({
-                sdp,
-                session: {
-                    type: "realtime",
-                    model: "gpt-realtime-2.1-mini",
-                    instructions: voiceInstructions
-                }
-            })
+            body: realtimeForm
         });
 
         const raw = await openaiResponse.text();
@@ -6925,7 +6942,7 @@ ${walkthroughText}
             has_conversation: Boolean(conversationId),
             has_walkthrough: Boolean(walkthrough?.steps?.length),
             voice_transport: "webrtc",
-            voice_model: "gpt-realtime-2.1-mini"
+            voice_model: "gpt-realtime-mini"
         }).catch(() => {});
 
         return res.status(201).json({
@@ -6935,7 +6952,7 @@ ${walkthroughText}
                 type: "webrtc",
                 sdp: raw
             },
-            voice_model: "gpt-realtime-2.1-mini"
+            voice_model: "gpt-realtime-mini"
         });
     } catch (error) {
         console.error("Voice session error:", error);
