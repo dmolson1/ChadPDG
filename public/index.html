@@ -450,6 +450,11 @@ body {
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
      crossorigin="anonymous"></script>
     
+<style>
+#chad-chat-pack-modal{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:18px;font-family:Arial,Helvetica,sans-serif}
+#chad-chat-pack-modal.open{display:flex}.chad-pack-card{width:min(560px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.4)}
+.chad-pack-card h2{margin:0 0 5px;font-size:25px}.chad-pack-sub{color:#5c6268;margin-bottom:16px}.chad-pack-balance{font-weight:900;margin:10px 0 16px}.chad-pack-grid{display:grid;gap:10px}.chad-pack-option{border:2px solid #e2e5e8;border-radius:13px;padding:14px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;background:#fff;cursor:pointer;text-align:left}.chad-pack-option:hover{border-color:#111}.chad-pack-option strong{font-size:18px}.chad-pack-option span{font-weight:900;font-size:18px}.chad-pack-option small{display:block;color:#697078;margin-top:3px}.chad-pack-popular{border-color:#111;position:relative}.chad-pack-popular:after{content:'MOST POPULAR';position:absolute;right:10px;top:-9px;background:#111;color:#fff;font-size:9px;font-weight:900;padding:3px 7px;border-radius:9px}.chad-pack-close{width:100%;margin-top:13px;padding:11px;border:0;background:#eceff1;border-radius:10px;font-weight:800;cursor:pointer}.chad-pack-status{min-height:20px;margin-top:10px;font-size:13px;font-weight:700}.chad-buy-chats-mini{border:0;background:transparent;text-decoration:underline;font-weight:800;cursor:pointer;padding:0;margin-left:5px}
+</style>
 </head>
 <body>
 
@@ -2834,7 +2839,10 @@ body {
             left +
             ' of ' +
             limit +
-            ' free questions remaining today';
+            ' free questions remaining today' +
+            (Number(window.CHAD_CREDIT_BALANCE || 0) > 0
+                ? ' · ' + Number(window.CHAD_CREDIT_BALANCE || 0) + ' paid chats'
+                : '');
 
         if (left <= 0) {
 
@@ -2877,12 +2885,13 @@ body {
                 return;
             }
 
+            window.CHAD_CREDIT_BALANCE = Number(data.credit_balance || 0);
             updateQuestionLimit(
                 data.remaining,
                 data.daily_limit
             );
 
-            if (Number(data.remaining) <= 0) {
+            if (Number(data.remaining) <= 0 && Number(data.credit_balance || 0) <= 0) {
 
                 dailyLimitLocked = true;
 
@@ -5455,6 +5464,19 @@ body {
     }
 
 
+    function showPaidChatLimitPrompt(data) {
+        if (!data || data.authenticated !== true) return;
+        if (document.getElementById('chad-paid-chat-limit')) return;
+        const prompt=document.createElement('div');
+        prompt.id='chad-paid-chat-limit';
+        prompt.className='chad-free-account-limit';
+        prompt.innerHTML='<div class="chad-free-account-limit-title">Chad will keep pretending to work.</div>'+
+          '<div class="chad-free-account-limit-copy">You used today’s free chats. Grab a prepaid pack and keep going. Purchased chats never expire.</div>'+
+          '<button type="button" class="chad-free-account-limit-button">BUY MORE CHAD CHATS</button>';
+        chat.appendChild(prompt);
+        prompt.querySelector('button')?.addEventListener('click',()=>window.CHAD_OPEN_CHAT_PACKS?.());
+    }
+
     function showDailyLimitMessage(data) {
 
         dailyLimitLocked = true;
@@ -5514,6 +5536,7 @@ body {
 
         lockQuestionLimitUI();
         showFreeAccountLimitPrompt(data);
+        if (data && data.authenticated === true) showPaidChatLimitPrompt(data);
     }
 
 
@@ -5761,13 +5784,14 @@ body {
                 message
             );
 
+            window.CHAD_CREDIT_BALANCE = Number(data.credit_balance || 0);
             updateQuestionLimit(
                 data.remaining,
                 data.daily_limit
             );
 
             if (
-                Number(data.remaining) <= 0
+                Number(data.remaining) <= 0 && Number(data.credit_balance || 0) <= 0
             ) {
                 lockQuestionLimitUI();
 
@@ -6311,6 +6335,43 @@ loadMe();
 
 </script>
 
+
+<div id="chad-chat-pack-modal" role="dialog" aria-modal="true" aria-labelledby="chad-pack-title">
+  <div class="chad-pack-card">
+    <h2 id="chad-pack-title">More Chad. Apparently.</h2>
+    <div class="chad-pack-sub">Prepaid chats are added to your signed-in account and never expire. Your free daily chats are always used first.</div>
+    <div class="chad-pack-balance" id="chad-pack-balance">Paid chats: 0</div>
+    <div class="chad-pack-grid" id="chad-pack-grid"></div>
+    <div class="chad-pack-status" id="chad-pack-status"></div>
+    <button type="button" class="chad-pack-close" id="chad-pack-close">NOT NOW</button>
+  </div>
+</div>
+<script>
+(()=>{
+ const modal=document.getElementById('chad-chat-pack-modal'),grid=document.getElementById('chad-pack-grid'),status=document.getElementById('chad-pack-status'),balance=document.getElementById('chad-pack-balance');
+ const headers=()=>({'Content-Type':'application/json'});
+ async function load(){
+   status.textContent='';
+   const r=await fetch('/wp-json/chadpgt/v1/chat-packs',{credentials:'same-origin'}); const d=await r.json();
+   if(!d.authenticated){ modal.classList.remove('open'); window.CHADPDG_OPEN_AUTH?.('signin','Sign in before buying Chad chats.'); return; }
+   window.CHAD_CREDIT_BALANCE=Number(d.balance||0); balance.textContent='Paid chats: '+window.CHAD_CREDIT_BALANCE;
+   grid.innerHTML='';
+   (d.packs||[]).forEach(p=>{const b=document.createElement('button');b.type='button';b.className='chad-pack-option'+(p.id==='popular'?' chad-pack-popular':'');b.innerHTML='<div><strong>'+p.chats+' chats</strong><small>'+(p.id==='starter'?'Quick top-up':p.id==='popular'?'Best everyday pack':'Best value')+' · never expires</small></div><span>$'+Number(p.price_usd).toFixed(2)+' USD</span>';b.onclick=()=>buy(p.id,b);grid.appendChild(b);});
+ }
+ async function buy(packId,button){
+   try{button.disabled=true;status.textContent='Sending you to PayPal…';const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/create',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({pack_id:packId})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not start checkout.');sessionStorage.setItem('chad_chat_purchase',d.purchase_id);location.href=d.approval_url;}catch(e){status.textContent=e.message;button.disabled=false;}
+ }
+ window.CHAD_OPEN_CHAT_PACKS=async()=>{modal.classList.add('open');try{await load()}catch(e){status.textContent=e.message||'Could not load chat packs.'}};
+ document.getElementById('chad-pack-close')?.addEventListener('click',()=>modal.classList.remove('open'));
+ modal?.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
+ async function finishReturn(){
+   const q=new URLSearchParams(location.search);if(q.get('chat_payment')!=='return')return;const purchase=q.get('purchase')||sessionStorage.getItem('chad_chat_purchase')||'';if(!purchase)return;
+   modal.classList.add('open');status.textContent='Finishing your PayPal payment…';
+   try{const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/capture',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({purchase_id:purchase})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not finish payment.');window.CHAD_CREDIT_BALANCE=Number(d.balance||0);balance.textContent='Paid chats: '+window.CHAD_CREDIT_BALANCE;status.textContent='Success — '+d.credits+' chats added. Chad has reluctantly returned to work.';sessionStorage.removeItem('chad_chat_purchase');history.replaceState({},'',location.pathname);if(typeof syncQuestionLimit==='function')syncQuestionLimit();setTimeout(()=>{const ask=document.getElementById('chad-ask'),input=document.getElementById('chad-question');if(ask){ask.disabled=false;ask.classList.remove('chad-limit-reached');ask.textContent='ASK CHAD';}if(input){input.disabled=false;input.placeholder='Ask Chad...';}if(typeof dailyLimitLocked!=='undefined')dailyLimitLocked=false;},50);}catch(e){status.textContent=e.message||'Payment return failed.';}
+ }
+ finishReturn();
+})();
+</script>
 
 <div class="chad-legal-links" style="text-align:center;padding:18px 12px 28px;font:600 12px Arial,Helvetica,sans-serif;color:#6b737b">
   <a href="/advertise.html" style="color:inherit;font-weight:800">Advertise with Chad</a>
