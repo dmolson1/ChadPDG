@@ -1157,6 +1157,8 @@ async function ensureConversation(id) {
 }
 
 async function loadConversationMemory(id) {
+    // Keep Chad conversational without hauling an ever-growing transcript into every request.
+    // Four recent turns is enough for local continuity; long messages are clipped for speed.
     const result = await pool.query(
         `SELECT role, content
          FROM (
@@ -1164,15 +1166,19 @@ async function loadConversationMemory(id) {
             FROM chad_messages
             WHERE conversation_id = $1
             ORDER BY id DESC
-            LIMIT 10
+            LIMIT 8
          ) recent
          ORDER BY id ASC`,
         [id]
     );
-    return result.rows.map(row => ({
-        role: row.role,
-        content: row.content
-    }));
+
+    return result.rows.map(row => {
+        const content = String(row.content || "");
+        const clipped = content.length > 1400
+            ? content.slice(0, 1400) + "\n[older detail clipped for speed]"
+            : content;
+        return { role: row.role, content: clipped };
+    });
 }
 
 
@@ -1643,6 +1649,28 @@ function isDiagnosticOpportunity(message, answer = "") {
     ].some(x => text.includes(x));
 }
 
+
+function shouldUseWebSearchForAnswer(message) {
+    const text = String(message || "").toLowerCase();
+
+    // Chad's default lane is fast, practical know-how. Search only when freshness,
+    // an exact document/spec, or jurisdiction-specific facts can materially change the answer.
+    const freshness = [
+        "latest", "current", "today", "right now", "this year", "2026", "price", "cost",
+        "in stock", "available", "near me", "recall", "bulletin", "tsb"
+    ];
+    const exactReference = [
+        "manual", "datasheet", "spec sheet", "specification", "torque spec", "part number",
+        "model number", "manufacturer says", "wiring diagram", "service manual"
+    ];
+    const rules = [
+        "code requirement", "electrical code", "building code", "plumbing code", "permit",
+        "inspection", "legal", "law", "bylaw", "ontario code", "cec", "nec"
+    ];
+
+    return [...freshness, ...exactReference, ...rules].some(term => text.includes(term));
+}
+
 function shouldOfferShoppingList(question, answer, modelRecommended = false) {
     const q = String(question || "").toLowerCase().trim();
     if (!q) return false;
@@ -1723,6 +1751,73 @@ const CHAD_SCHEMA = {
         }
     },
     required: ["answer","shopping_list_recommended","products","videos"]
+};
+
+const CHAD_FAST_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        answer: { type: "string" },
+        shopping_list_recommended: { type: "boolean" }
+    },
+    required: ["answer", "shopping_list_recommended"]
+};
+
+const CHAD_ENRICHMENT_PROMPT = `You are Chad's research sidecar.
+
+The user already has Chad's practical answer. Your job is ONLY to find useful extras for an actionable physical DIY, repair, maintenance, automotive, mechanical, electrical, plumbing, HVAC, appliance, or diagnostic question.
+
+Use web search.
+
+PRODUCTS:
+- Return 0 to 5 genuinely useful Amazon products.
+- Amazon Canada preferred.
+- Never invent ASINs or URLs.
+- Use real Amazon product detail pages only.
+- If diagnosis is unresolved, prefer diagnostic tools/testers/cleaners/consumables instead of speculative replacement parts.
+- If a failed component is actually identified, a relevant replacement part is allowed.
+
+VIDEOS:
+- Return 0 to 3 genuinely relevant direct YouTube how-to videos.
+- Only youtube.com/watch or youtu.be links.
+- Prefer an exact procedure, vehicle/component, or tool match.
+- Do not invent titles, channels, or URLs.
+
+Do not write prose outside the structured fields.`;
+
+const CHAD_ENRICHMENT_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        products: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    asin: { type: "string" },
+                    source_url: { type: "string" }
+                },
+                required: ["name", "description", "asin", "source_url"]
+            }
+        },
+        videos: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    title: { type: "string" },
+                    channel: { type: "string" },
+                    url: { type: "string" }
+                },
+                required: ["title", "channel", "url"]
+            }
+        }
+    },
+    required: ["products", "videos"]
 };
 
 const PRODUCT_SCHEMA = {
@@ -1949,6 +2044,9 @@ async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_s
         model: MODEL,
         tools,
         input,
+        reasoning: { effort: "low" },
+        prompt_cache_key: "chadpdchee-core-2026-09-11",
+        prompt_cache_retention: "24h",
         text: {
             format: {
                 type: "json_schema",
@@ -1958,6 +2056,170 @@ async function callStructuredOpenAI(name, schema, input, tools = [{ type: "web_s
             }
         }
     }, 90000, requestKind);
+}
+
+function extractPartialJsonString(jsonText, key) {
+    const source = String(jsonText || "");
+    const marker = `"${key}"`;
+    const keyIndex = source.indexOf(marker);
+    if (keyIndex < 0) return "";
+
+    let i = keyIndex + marker.length;
+    while (i < source.length && /\s/.test(source[i])) i++;
+    if (source[i] !== ":") return "";
+    i++;
+    while (i < source.length && /\s/.test(source[i])) i++;
+    if (source[i] !== '"') return "";
+    i++;
+
+    let out = "";
+    for (; i < source.length; i++) {
+        const ch = source[i];
+        if (ch === '"') break;
+        if (ch !== "\\") {
+            out += ch;
+            continue;
+        }
+
+        if (i + 1 >= source.length) break;
+        const esc = source[++i];
+        if (esc === '"') out += '"';
+        else if (esc === "\\") out += "\\";
+        else if (esc === "/") out += "/";
+        else if (esc === "b") out += "\b";
+        else if (esc === "f") out += "\f";
+        else if (esc === "n") out += "\n";
+        else if (esc === "r") out += "\r";
+        else if (esc === "t") out += "\t";
+        else if (esc === "u") {
+            const hex = source.slice(i + 1, i + 5);
+            if (!/^[0-9a-fA-F]{4}$/.test(hex)) break;
+            out += String.fromCharCode(parseInt(hex, 16));
+            i += 4;
+        }
+    }
+    return out;
+}
+
+async function callStructuredOpenAIStreaming({
+    name,
+    schema,
+    input,
+    tools = [],
+    requestKind = name,
+    onReady = () => {},
+    onAnswerDelta = () => {}
+}) {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${process.env.OPENAI_API_KEY || ""}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            model: MODEL,
+            tools,
+            input,
+            stream: true,
+            reasoning: { effort: "low" },
+            prompt_cache_key: "chadpdchee-core-2026-09-11",
+            prompt_cache_retention: "24h",
+            text: {
+                format: {
+                    type: "json_schema",
+                    name,
+                    strict: true,
+                    schema
+                }
+            }
+        }),
+        signal: AbortSignal.timeout(90000)
+    });
+
+    if (!response.ok) {
+        const bodyText = await response.text();
+        let data = {};
+        try { data = JSON.parse(bodyText); } catch {}
+        const message = data?.error?.message || `OpenAI request failed (${response.status}).`;
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+    }
+
+    onReady();
+
+    let buffer = "";
+    let rawOutput = "";
+    let visibleAnswer = "";
+    let finalResponse = null;
+    const decoder = new TextDecoder();
+
+    for await (const chunk of response.body) {
+        buffer += decoder.decode(chunk, { stream: true });
+        buffer = buffer.replace(/\r\n/g, "\n");
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const block of events) {
+            const dataLines = block.split("\n")
+                .filter(line => line.startsWith("data:"))
+                .map(line => line.slice(5).trim());
+            if (!dataLines.length) continue;
+            const payload = dataLines.join("\n");
+            if (!payload || payload === "[DONE]") continue;
+
+            let event;
+            try { event = JSON.parse(payload); } catch { continue; }
+
+            if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+                rawOutput += event.delta;
+                const nextAnswer = extractPartialJsonString(rawOutput, "answer");
+                if (nextAnswer.length > visibleAnswer.length) {
+                    onAnswerDelta(nextAnswer.slice(visibleAnswer.length));
+                    visibleAnswer = nextAnswer;
+                }
+            } else if (event.type === "response.completed" && event.response) {
+                finalResponse = event.response;
+            } else if (event.type === "error") {
+                throw new Error(event.message || "OpenAI streaming error.");
+            }
+        }
+    }
+
+    if (!finalResponse) {
+        finalResponse = {
+            model: MODEL,
+            output: [{ type: "message", content: [{ type: "output_text", text: rawOutput, annotations: [] }] }]
+        };
+    }
+
+    void recordOpenAIUsage(finalResponse, requestKind);
+    return finalResponse;
+}
+
+async function getResponseEnrichment(question, answer) {
+    const data = await callStructuredOpenAI(
+        "chad_enrichment",
+        CHAD_ENRICHMENT_SCHEMA,
+        [
+            { role: "system", content: CHAD_ENRICHMENT_PROMPT },
+            { role: "user", content: `USER QUESTION:
+${question}
+
+CHAD ANSWER:
+${answer}` }
+        ],
+        [{ type: "web_search" }],
+        "chad_enrichment"
+    );
+
+    const text = getResponseText(data);
+    const decoded = JSON.parse(text || "{}");
+    return {
+        products: prepareProducts(decoded.products || []),
+        videos: cleanVideos(decoded.videos || []),
+        sources: collectSources(data)
+    };
 }
 
 async function getProductPicks(question, answer) {
@@ -2402,6 +2664,8 @@ async function handleAsk(req, res) {
     let paidCreditUserId = "";
     let paidCreditBalance = 0;
     let usageSource = "free";
+    let streamMode = false;
+    let streamStarted = false;
 
     try {
         if (!process.env.OPENAI_API_KEY) {
@@ -2533,15 +2797,48 @@ async function handleAsk(req, res) {
 
         const input = [
             { role: "system", content: CHAD_SYSTEM_PROMPT },
+            { role: "system", content: "FAST RESPONSE MODE: Answer the question now. Return only the fields allowed by the provided schema. Product and video research is handled separately after the answer, so do not spend time trying to produce those here." },
             ...memory,
             { role: "user", content: message }
         ];
 
-        const data = await callStructuredOpenAI(
-            "chad_response",
-            CHAD_SCHEMA,
-            input
-        );
+        streamMode = req.body?.stream === true;
+        const mainTools = shouldUseWebSearchForAnswer(message)
+            ? [{ type: "web_search" }]
+            : [];
+
+        const writeStreamEvent = (event) => {
+            if (!streamStarted) return;
+            res.write(JSON.stringify(event) + "\n");
+        };
+
+        const data = streamMode
+            ? await callStructuredOpenAIStreaming({
+                name: "chad_response_fast",
+                schema: CHAD_FAST_SCHEMA,
+                input,
+                tools: mainTools,
+                requestKind: mainTools.length ? "chad_answer_web" : "chad_answer_fast",
+                onReady: () => {
+                    streamStarted = true;
+                    res.status(200);
+                    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+                    res.setHeader("Cache-Control", "no-cache, no-transform");
+                    res.setHeader("X-Accel-Buffering", "no");
+                    if (typeof res.flushHeaders === "function") res.flushHeaders();
+                    writeStreamEvent({ type: "start" });
+                },
+                onAnswerDelta: (delta) => {
+                    if (delta) writeStreamEvent({ type: "delta", delta });
+                }
+            })
+            : await callStructuredOpenAI(
+                "chad_response_fast",
+                CHAD_FAST_SCHEMA,
+                input,
+                mainTools,
+                mainTools.length ? "chad_answer_web" : "chad_answer_fast"
+            );
 
         const text = getResponseText(data);
         if (!text) throw new Error("Chad apparently forgot how words work.");
@@ -2556,25 +2853,21 @@ async function handleAsk(req, res) {
         const answer = cleanAnswer(decoded.answer || "");
         if (!answer) throw new Error("Chad apparently forgot how words work.");
 
-        let products = prepareProducts(decoded.products || []);
+        let products = [];
+        let videos = [];
         let productSources = [];
 
-        if (
-            (isPhysicalDiyQuestion(message) || isDiagnosticOpportunity(message, answer)) &&
-            products.length < 2
-        ) {
+        const needsEnrichment = isPhysicalDiyQuestion(message) || isDiagnosticOpportunity(message, answer);
+        if (needsEnrichment) {
             try {
-                const fallback = await getProductPicks(message, answer);
-                const byAsin = new Map(products.map(p => [p.asin, p]));
-                for (const p of fallback.products) byAsin.set(p.asin, p);
-                products = [...byAsin.values()].slice(0, 5);
-                productSources = fallback.sources;
+                const enrichment = await getResponseEnrichment(message, answer);
+                products = enrichment.products;
+                videos = enrichment.videos;
+                productSources = enrichment.sources;
             } catch (error) {
-                console.warn("Product fallback failed:", error.message);
+                console.warn("Chad enrichment failed:", error.message);
             }
         }
-
-        const videos = cleanVideos(decoded.videos || []);
 
         await saveConversationTurn(conversationId, message, answer);
 
@@ -2618,7 +2911,7 @@ async function handleAsk(req, res) {
             });
         }
 
-        return res.json({
+        const responsePayload = {
             success: true,
             answer,
             shopping_list_recommended: shoppingListRecommended,
@@ -2642,7 +2935,14 @@ async function handleAsk(req, res) {
             account_daily_limit: SIGNED_IN_DAILY_LIMIT,
             guest_daily_limit: DAILY_LIMIT,
             analytics_token: analyticsToken(visitorHash, conversationId)
-        });
+        };
+
+        if (streamMode && streamStarted) {
+            writeStreamEvent({ type: "done", data: responsePayload });
+            return res.end();
+        }
+
+        return res.json(responsePayload);
     } catch (error) {
         console.error("Ask error:", error);
         if (quotaReserved) {
@@ -2651,6 +2951,16 @@ async function handleAsk(req, res) {
         if (paidCreditReserved) {
             await restoreChatCredit(paidCreditUserId, paidCreditReference).catch(() => {});
         }
+        if (streamMode && streamStarted) {
+            try {
+                res.write(JSON.stringify({
+                    type: "error",
+                    error: error.message || "Something went sideways."
+                }) + "\n");
+            } catch {}
+            return res.end();
+        }
+
         return res.status(500).json({
             success: false,
             error: error.message || "Something went sideways."
