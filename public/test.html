@@ -538,6 +538,80 @@ body.chad-test-enabled .chad-dev-title{
         }
     }
 
+
+/* =========================================================
+   CHADPDG CLEAN ACTION BAR
+   ========================================================= */
+#chad-app #chad-buttons{
+    display:flex !important;
+    align-items:center !important;
+    flex-wrap:wrap !important;
+    gap:8px !important;
+    margin-top:9px !important;
+}
+
+#chad-app #chad-buttons button{
+    appearance:none !important;
+    -webkit-appearance:none !important;
+    min-height:40px !important;
+    border-radius:999px !important;
+    padding:9px 16px !important;
+    font-family:Arial,Helvetica,sans-serif !important;
+    font-size:12px !important;
+    font-weight:900 !important;
+    letter-spacing:.015em !important;
+    line-height:1 !important;
+    box-shadow:none !important;
+    cursor:pointer !important;
+}
+
+#chad-app #chad-ask{
+    background:#0066cc !important;
+    border:1px solid #0066cc !important;
+    color:#fff !important;
+    padding-left:20px !important;
+    padding-right:20px !important;
+}
+
+#chad-app #chad-ask:hover,
+#chad-app #chad-ask:focus{
+    background:#0052a3 !important;
+    border-color:#0052a3 !important;
+    transform:none !important;
+}
+
+#chad-app #chad-buttons .chad-secondary-action{
+    background:#fff !important;
+    border:1px solid #d6dce2 !important;
+    color:#3e4852 !important;
+}
+
+#chad-app #chad-buttons .chad-secondary-action:hover,
+#chad-app #chad-buttons .chad-secondary-action:focus{
+    background:#f4f6f8 !important;
+    border-color:#b9c2cb !important;
+    color:#151a1f !important;
+    transform:none !important;
+}
+
+@media (max-width:600px){
+    #chad-app #chad-buttons{
+        flex-direction:row !important;
+    }
+
+    #chad-app #chad-ask{
+        flex:1 1 auto !important;
+        width:auto !important;
+    }
+
+    #chad-app #chad-buttons .chad-secondary-action{
+        width:auto !important;
+        flex:0 0 auto !important;
+        padding-left:13px !important;
+        padding-right:13px !important;
+    }
+}
+
 </style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8895069433454585"
@@ -683,7 +757,7 @@ body {
                 <div class="chad-sidebar-empty">
                     <div class="chad-sidebar-empty-title">Your projects will live here.</div>
                     <div class="chad-sidebar-empty-copy">
-                        Sign in to save projects and continue them on another device.
+                        Sign in to keep your projects and continue them on another device.
                     </div>
                 </div>
             </div>
@@ -840,15 +914,6 @@ body {
                 id="chad-reset"
             >
                 NEW CONVERSATION
-            </button>
-
-            <button
-                type="button"
-                id="chad-save-conversation"
-                class="chad-secondary-action"
-                title="Save this conversation with your own title"
-            >
-                SAVE CONVERSATION
             </button>
 
             <button
@@ -7183,7 +7248,7 @@ window.CHADPDG_OPEN_AUTH = function(view, message){
 };
 
 function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;let plan=currentUser.is_pro?'PRO':'FREE';let until='';if(currentUser.is_pro&&currentUser.pro_until){try{until=' · through '+new Date(currentUser.pro_until).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'})}catch(_){}}card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(plan)+until+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
-function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Save your projects';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
+function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Projects save automatically';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
 function signedIn(){if(!currentUser)return signedOut();accountTitle.textContent=currentUser.display_name||'Account';accountSubtitle.textContent=currentUser.email;accountButton.classList.add('chad-sidebar-signedin')}
 
 async function loadMe(){try{const d=await api('/auth/me');currentUser=d.authenticated?d.user:null;if(currentUser){signedIn();renderAccount();await loadRecent()}else signedOut();refreshQuestionLimit()}catch(_){currentUser=null;signedOut();refreshQuestionLimit()}}
@@ -7197,7 +7262,7 @@ function closeShareModal(){const overlay=document.getElementById('chad-share-ove
 async function shareConversation(c){try{const d=await api('/account/conversations/share',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||''}));openShareModal(d.share_url,d.title,c?.id||currentConversationId)}catch(e){window.alert(e.message||'Could not share that conversation.')}}
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
-async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
+async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
 function historyChad(text,meta){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';const walkthrough=meta&&meta.walkthrough?meta.walkthrough:null;const offer=(window.CHADPDG_BUILD_WALKTHROUGH&&walkthrough)?window.CHADPDG_BUILD_WALKTHROUGH(walkthrough):'';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div><div class="chad-after-answer">'+offer+'</div>';chat.appendChild(w);if(window.CHADPDG_BIND_WALKTHROUGH&&walkthrough)window.CHADPDG_BIND_WALKTHROUGH(w,walkthrough)}
 async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'',m.message_meta||null)});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
@@ -7280,11 +7345,6 @@ async function copyConversation(c){
     if(c&&c.id&&currentUser){const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(c.id));return copyText(conversationTextFromMessages(d.messages||[],d.conversation?.title||c.title));}
     return copyText(visibleConversationText());
 }
-
-document.getElementById('chad-save-conversation')?.addEventListener('click', async ()=>{
-    if(!currentUser){ showSignupForFeature('save'); return; }
-    await saveConversation(null);
-});
 
 document.getElementById('chad-share-conversation')?.addEventListener('click', async ()=>{
     if(!currentUser){ showSignupForFeature('share'); return; }
