@@ -6842,18 +6842,9 @@ ${walkthroughText}
             },
             body: JSON.stringify({
                 session: {
+                    type: "live",
                     model: "gpt-live-1",
-                    instructions: voiceInstructions,
-                    delegation: {
-                        type: "responses",
-                        responses: {
-                            model: MODEL,
-                            instructions:
-                                "Support Chad's live spoken conversation. Use web search only when the user needs current or time-sensitive facts. Be concise and return information suitable for speech.",
-                            tools: [{ type: "web_search" }],
-                            tool_choice: "auto"
-                        }
-                    }
+                    instructions: voiceInstructions
                 },
                 transport: {
                     type: "webrtc",
@@ -6871,10 +6862,29 @@ ${walkthroughText}
         }
 
         if (!openaiResponse.ok) {
-            console.error("GPT-Live session creation failed:", openaiResponse.status, raw.slice(0, 1000));
-            return res.status(openaiResponse.status >= 400 && openaiResponse.status < 600 ? openaiResponse.status : 502).json({
+            console.error("GPT-Live session creation failed:", openaiResponse.status, raw.slice(0, 2000));
+
+            const upstreamMessage =
+                data?.error?.message ||
+                data?.message ||
+                "";
+
+            const upstreamCode =
+                data?.error?.code ||
+                data?.error?.type ||
+                "";
+
+            const adminTest = isAdminTestRequest(req);
+
+            return res.status(
+                openaiResponse.status >= 400 && openaiResponse.status < 600
+                    ? openaiResponse.status
+                    : 502
+            ).json({
                 success: false,
-                error: "Chad couldn't start voice mode. Try again in a moment."
+                error: adminTest && upstreamMessage
+                    ? `GPT-Live ${openaiResponse.status}: ${upstreamMessage}${upstreamCode ? ` (${upstreamCode})` : ""}`
+                    : "Chad couldn't start voice mode. Try again in a moment."
             });
         }
 
