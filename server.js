@@ -6704,8 +6704,19 @@ async function handleAdminAdSettingsSave(req, res) {
  * The OpenAI API key never leaves this server.
  */
 async function handleVoiceSession(req, res) {
-    const user = await requireAuthenticatedUser(req, res);
-    if (!user) return;
+    const adminTest = isAdminTestRequest(req);
+    const user = await getAuthenticatedUser(req);
+
+    // Production voice remains signed-in only.
+    // The developer test page may bypass sign-in when a valid admin test key is supplied.
+    if (!user && !adminTest) {
+        return res.status(401).json({
+            success: false,
+            error: "Please sign in to use live voice chat."
+        });
+    }
+
+    const voiceIdentity = user ? `user:${user.id}` : "admin-test";
 
     const sdp = typeof req.body?.sdp === "string" ? req.body.sdp.trim() : "";
     if (!sdp) {
@@ -6718,7 +6729,7 @@ async function handleVoiceSession(req, res) {
         return res.status(503).json({ success: false, error: "Voice chat is not configured yet." });
     }
 
-    const burstOk = await claimBurst("voice_session", `user:${user.id}`, 4, 60);
+    const burstOk = await claimBurst("voice_session", voiceIdentity, adminTest ? 20 : 4, 60);
     if (!burstOk) {
         return res.status(429).json({
             success: false,
@@ -6731,7 +6742,7 @@ async function handleVoiceSession(req, res) {
     let walkthrough = null;
 
     try {
-        if (conversationId) {
+        if (conversationId && user) {
             // If this conversation began while signed out, claim it now.
             await pool.query(
                 `UPDATE chad_conversations
@@ -6751,6 +6762,13 @@ async function handleVoiceSession(req, res) {
             if (!owner.rowCount) {
                 conversationId = "";
             }
+        } else if (conversationId && adminTest) {
+            // Developer test mode can read the active test conversation without claiming it.
+            const exists = await pool.query(
+                `SELECT id FROM chad_conversations WHERE id = $1 LIMIT 1`,
+                [conversationId]
+            );
+            if (!exists.rowCount) conversationId = "";
         }
 
         if (conversationId) {
@@ -6838,7 +6856,7 @@ ${walkthroughText}
             headers: {
                 "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
                 "Content-Type": "application/json",
-                "OpenAI-Safety-Identifier": hashValue(`voice-user:${user.id}`).slice(0, 64)
+                "OpenAI-Safety-Identifier": hashValue(user ? `voice-user:${user.id}` : "voice-admin-test").slice(0, 64)
             },
             body: JSON.stringify({
                 session: {
@@ -6874,8 +6892,6 @@ ${walkthroughText}
                 data?.error?.type ||
                 "";
 
-            const adminTest = isAdminTestRequest(req);
-
             return res.status(
                 openaiResponse.status >= 400 && openaiResponse.status < 600
                     ? openaiResponse.status
@@ -6897,7 +6913,8 @@ ${walkthroughText}
         }
 
         trackAnalyticsEvent(req, "voice_session_started", {
-            authenticated: true,
+            authenticated: Boolean(user),
+            admin_test_mode: adminTest,
             has_conversation: Boolean(conversationId),
             has_walkthrough: Boolean(walkthrough?.steps?.length)
         }).catch(() => {});
