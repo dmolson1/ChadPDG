@@ -5082,7 +5082,7 @@ body {
         } finally {
 
             if (
-                chadTurnstileWidgetId !== null &&
+                turnstileWidgetId !== null &&
                 window.turnstile &&
                 typeof window.turnstile.reset ===
                     'function'
@@ -5090,7 +5090,7 @@ body {
 
                 try {
                     window.turnstile.reset(
-                        chadTurnstileWidgetId
+                        turnstileWidgetId
                     );
                 } catch (error) {}
             }
