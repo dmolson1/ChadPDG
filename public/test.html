@@ -5192,6 +5192,121 @@ body {
     }
 
 
+
+
+    function beginStreamingChadResponse() {
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chad-message chad-answer-wrapper chad-streaming-answer';
+        wrapper.innerHTML =
+            '<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad">' +
+            '<div class="chad-name">Chad:</div>' +
+            '<div class="chad-answer"></div>' +
+            '<div class="chad-after-answer"></div>';
+
+        chat.appendChild(wrapper);
+
+        return {
+            wrapper: wrapper,
+            answer: wrapper.querySelector('.chad-answer'),
+            text: ''
+        };
+    }
+
+
+    function appendStreamingChadText(state, delta) {
+        if (!state || !state.answer || !delta) return;
+        state.text += delta;
+        state.answer.textContent = state.text;
+    }
+
+
+    function removeStreamingChadResponse(state) {
+        if (state && state.wrapper && state.wrapper.parentNode) {
+            state.wrapper.parentNode.removeChild(state.wrapper);
+        }
+    }
+
+
+    async function readChadStream(response, loading) {
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+        let streamState = null;
+
+        function stopLoadingForStream() {
+            if (loadingInterval) {
+                clearInterval(loadingInterval);
+                loadingInterval = null;
+            }
+            if (loading && loading.parentNode) {
+                loading.parentNode.removeChild(loading);
+            }
+        }
+
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+
+            buffer += decoder.decode(chunk.value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                let event;
+                try {
+                    event = JSON.parse(trimmed);
+                } catch (error) {
+                    continue;
+                }
+
+                if (event.type === 'delta' && typeof event.delta === 'string') {
+                    if (!streamState) {
+                        stopLoadingForStream();
+                        streamState = beginStreamingChadResponse();
+                    }
+                    appendStreamingChadText(streamState, event.delta);
+                }
+
+                if (event.type === 'done' && event.data) {
+                    finalData = event.data;
+                }
+
+                if (event.type === 'error') {
+                    removeStreamingChadResponse(streamState);
+                    throw new Error(event.error || 'Chad could not answer that one.');
+                }
+            }
+        }
+
+        if (buffer.trim()) {
+            try {
+                const event = JSON.parse(buffer.trim());
+                if (event.type === 'done' && event.data) finalData = event.data;
+                if (event.type === 'error') {
+                    removeStreamingChadResponse(streamState);
+                    throw new Error(event.error || 'Chad could not answer that one.');
+                }
+            } catch (error) {
+                if (error && error.message && error.message !== 'Unexpected end of JSON input') throw error;
+            }
+        }
+
+        if (!finalData) {
+            removeStreamingChadResponse(streamState);
+            throw new Error('Chad started talking and then wandered off. Try that again.');
+        }
+
+        removeStreamingChadResponse(streamState);
+        return finalData;
+    }
+
+
     function addChadResponse(
         data,
         question
@@ -5510,7 +5625,7 @@ body {
         const signedIn = !!(data && data.authenticated === true);
 
         if (askButton) {
-            askButton.disabled = true;
+            askButton.disabled = !signedIn;
             askButton.classList.add(
                 'chad-limit-reached'
             );
@@ -5800,7 +5915,8 @@ body {
                             turnstile_token:
                                 turnstileToken,
                             analytics_visitor:
-                                analyticsVisitorId
+                                analyticsVisitorId,
+                            stream: true
                         })
                     }
                 );
@@ -5859,16 +5975,27 @@ body {
 
             let data;
 
-            try {
+            const contentType =
+                String(response.headers.get('content-type') || '').toLowerCase();
 
-                data =
-                    await response.json();
+            if (contentType.includes('application/x-ndjson')) {
 
-            } catch (jsonError) {
+                data = await readChadStream(response, loading);
 
-                throw new Error(
-                    'Chad returned something the website could not understand.'
-                );
+            } else {
+
+                try {
+
+                    data =
+                        await response.json();
+
+                } catch (jsonError) {
+
+                    throw new Error(
+                        'Chad returned something the website could not understand.'
+                    );
+
+                }
 
             }
 
@@ -6646,3 +6773,5 @@ loadMe();
 
 </body>
 </html>
+
+                
