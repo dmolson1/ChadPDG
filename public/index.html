@@ -4762,21 +4762,30 @@ body {
                 '.chad-shopping-result'
             );
 
-        if (
-            !button ||
-            !resultBox
-        ) {
+        if (!resultBox) {
             return;
         }
 
+        /*
+         * The current Chad UI auto-builds the shopping list after the answer
+         * (or after a walkthrough is resolved), so there may be no visible
+         * .chad-shopping-button. The old code treated that as an error and
+         * returned before calling /shopping-list, leaving a blank box.
+         *
+         * A button is now optional: if one exists we update its state; if not,
+         * Chad simply builds the list automatically.
+         */
         const originalText =
-            button.textContent;
+            button ? button.textContent : '';
 
-        button.disabled = true;
-        button.textContent =
-            'CHAD IS MAKING THE LIST...';
+        if (button) {
+            button.disabled = true;
+            button.textContent =
+                'CHAD IS MAKING THE LIST...';
+        }
 
-        resultBox.innerHTML = '';
+        resultBox.innerHTML =
+            '<div class="chad-shopping-loading">Chad is grabbing the stuff you actually need for this job...</div>';
 
         let turnstileToken = '';
 
@@ -4908,9 +4917,11 @@ body {
 
         } catch (error) {
 
-            button.disabled = false;
-            button.textContent =
-                originalText;
+            if (button) {
+                button.disabled = false;
+                button.textContent =
+                    originalText;
+            }
 
             resultBox.innerHTML =
                 '<div class="chad-shopping-error">' +
@@ -5707,7 +5718,7 @@ body {
             extrasHtml +=
                 '<div class="chad-shopping-wrap">' +
                 '<div class="chad-shopping-subtext">' +
-                'Fine. Chad already made the shopping list because apparently waiting for you to ask was too much work.' +
+                'Before you start pretending you already own everything, Chad pulled together the tools, parts and consumables that actually make sense for this job.' +
                 '</div>' +
                 '<div class="chad-shopping-result" aria-live="polite"></div>' +
                 '</div>';
