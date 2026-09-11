@@ -851,6 +851,11 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`
+        ALTER TABLE chad_messages
+        ADD COLUMN IF NOT EXISTS message_meta JSONB NOT NULL DEFAULT '{}'::jsonb
+    `);
+
+    await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_chad_messages_conversation
         ON chad_messages(conversation_id, id)
     `);
@@ -1256,16 +1261,17 @@ function makeConversationTitle(userText) {
     return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-async function saveConversationTurn(id, userText, assistantText, imageDataUrl = "") {
+async function saveConversationTurn(id, userText, assistantText, imageDataUrl = "", assistantMeta = {}) {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
         await ensureConversation(id);
         const safeImage = normalizeChatImageDataUrl(imageDataUrl);
+        const safeAssistantMeta = JSON.stringify(assistantMeta && typeof assistantMeta === "object" ? assistantMeta : {});
         await client.query(
-            `INSERT INTO chad_messages (conversation_id, role, content, image_data_url)
-             VALUES ($1, 'user', $2, $4), ($1, 'assistant', $3, NULL)`,
-            [id, userText, assistantText, safeImage || null]
+            `INSERT INTO chad_messages (conversation_id, role, content, image_data_url, message_meta)
+             VALUES ($1, 'user', $2, $4, '{}'::jsonb), ($1, 'assistant', $3, NULL, $5::jsonb)`,
+            [id, userText, assistantText, safeImage || null, safeAssistantMeta]
         );
         await client.query(
             `UPDATE chad_conversations
@@ -1806,10 +1812,51 @@ const CHAD_FAST_SCHEMA = {
     additionalProperties: false,
     properties: {
         answer: { type: "string" },
-        shopping_list_recommended: { type: "boolean" }
+        shopping_list_recommended: { type: "boolean" },
+        walkthrough: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                offered: { type: "boolean" },
+                prompt: { type: "string" },
+                steps: {
+                    type: "array",
+                    items: { type: "string" },
+                    maxItems: 12
+                }
+            },
+            required: ["offered", "prompt", "steps"]
+        }
     },
-    required: ["answer", "shopping_list_recommended"]
+    required: ["answer", "shopping_list_recommended", "walkthrough"]
 };
+
+function normalizeWalkthrough(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    const steps = Array.isArray(raw.steps)
+        ? raw.steps
+            .map(step => String(step || "").replace(/\s+/g, " ").trim())
+            .filter(Boolean)
+            .slice(0, 12)
+            .map(step => step.slice(0, 700))
+        : [];
+
+    const offered = Boolean(raw.offered) && steps.length >= 3;
+    if (!offered) {
+        return { offered: false, prompt: "", steps: [] };
+    }
+
+    const prompt = String(raw.prompt || "Want me to walk you through this out loud while you do it?")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+
+    return {
+        offered: true,
+        prompt: prompt || "Want me to walk you through this out loud while you do it?",
+        steps
+    };
+}
 
 const CHAD_ENRICHMENT_PROMPT = `You are Chad's research sidecar.
 
@@ -2990,7 +3037,7 @@ async function handleAsk(req, res) {
 
         const input = [
             { role: "system", content: CHAD_SYSTEM_PROMPT },
-            { role: "system", content: "FAST RESPONSE MODE: Answer the question now. Return only the fields allowed by the provided schema. Product and video research is handled separately after the answer, so do not spend time trying to produce those here. If the user attached an image, inspect only what is actually visible. Say when a detail cannot be determined confidently from the photo." },
+            { role: "system", content: "FAST RESPONSE MODE: Answer the question now. Return only the fields allowed by the provided schema. Product and video research is handled separately after the answer, so do not spend time trying to produce those here. If the user attached an image, inspect only what is actually visible. Say when a detail cannot be determined confidently from the photo. WALKTHROUGH: If your answer contains a practical sequential process with at least 3 distinct steps that would genuinely help someone working with their hands, set walkthrough.offered=true and provide concise standalone steps that can be spoken one at a time. The walkthrough steps must preserve important safety warnings and must not introduce work you did not recommend in the answer. Keep each spoken step focused enough to follow without looking at the full answer. Use Chad's personality lightly, but clarity wins. If the question is simple, informational, not sequential, or the safe instruction is to stop and get qualified help, set walkthrough.offered=false, prompt='', steps=[]. When offered, prompt should be a short Chad-style version of: Want me to walk you through this out loud while you do it?" },
             ...memory,
             { role: "user", content: currentUserContent }
         ];
@@ -3046,6 +3093,8 @@ async function handleAsk(req, res) {
         const answer = cleanAnswer(decoded.answer || "");
         if (!answer) throw new Error("Chad apparently forgot how words work.");
 
+        const walkthrough = normalizeWalkthrough(decoded.walkthrough);
+
         let products = [];
         let videos = [];
         let productSources = [];
@@ -3062,7 +3111,13 @@ async function handleAsk(req, res) {
             }
         }
 
-        await saveConversationTurn(conversationId, message || 'Photo question', answer, imageDataUrl);
+        await saveConversationTurn(
+            conversationId,
+            message || 'Photo question',
+            answer,
+            imageDataUrl,
+            { walkthrough }
+        );
 
         const citationMap = new Map();
         for (const c of [...collectSources(data), ...productSources]) {
@@ -3108,6 +3163,7 @@ async function handleAsk(req, res) {
         const responsePayload = {
             success: true,
             answer,
+            walkthrough,
             shopping_list_recommended: shoppingListRecommended,
             shopping_token: shoppingToken,
             products,
@@ -4273,7 +4329,7 @@ async function handleConversationMessages(req, res) {
             return res.status(404).json({ success: false, error: "Project not found." });
         }
         const messages = await pool.query(
-            `SELECT role, content, image_data_url, created_at
+            `SELECT role, content, image_data_url, message_meta, created_at
              FROM chad_messages WHERE conversation_id = $1 ORDER BY id ASC LIMIT 500`,
             [id]
         );
@@ -6801,4 +6857,3 @@ async function startServer() {
 }
 
 startServer();
-
