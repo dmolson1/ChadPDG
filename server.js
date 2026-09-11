@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 8080;
 const MODEL = "gpt-5.6-luna";
 const DAILY_LIMIT = 5;
 const SIGNED_IN_DAILY_LIMIT = 15;
+const PRO_DAILY_LIMIT = 50;
 const IP_DAILY_SAFETY_LIMIT = 20;
 const BURST_LIMIT = 15;
 const BURST_WINDOW_SECONDS = 60;
@@ -330,7 +331,7 @@ async function getAuthenticatedUser(req) {
     if (!token || token.length > 200) return null;
 
     const result = await pool.query(
-        `SELECT u.id, u.email, u.display_name, u.email_verified, u.plan,
+        `SELECT u.id, u.email, u.display_name, u.email_verified, u.plan, u.pro_until,
                 u.created_at, u.marketing_consent
          FROM chad_user_sessions s
          JOIN chad_users u ON u.id = s.user_id
@@ -385,6 +386,17 @@ function validUuid(value) {
 function validVisitorId(value) {
     return typeof value === "string" &&
         /^[a-zA-Z0-9_-]{16,128}$/.test(value);
+}
+
+const MAX_CHAT_IMAGE_DATA_URL_LENGTH = 1_500_000;
+
+function normalizeChatImageDataUrl(value) {
+    if (typeof value !== "string") return "";
+    const dataUrl = value.trim();
+    if (!dataUrl) return "";
+    if (dataUrl.length > MAX_CHAT_IMAGE_DATA_URL_LENGTH) return "";
+    if (!/^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i.test(dataUrl)) return "";
+    return dataUrl;
 }
 
 function getOrCreateVisitorId(req, res) {
@@ -698,6 +710,36 @@ async function initializeDatabase() {
         WHERE deleted_at IS NULL
     `);
 
+    await pool.query(`ALTER TABLE chad_users ADD COLUMN IF NOT EXISTS pro_until TIMESTAMPTZ NULL`);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_pro_codes (
+            id UUID PRIMARY KEY,
+            code_hash VARCHAR(64) UNIQUE NOT NULL,
+            code_prefix VARCHAR(24) NOT NULL,
+            duration_days INTEGER NOT NULL DEFAULT 30,
+            max_redemptions INTEGER NOT NULL DEFAULT 1,
+            redemption_count INTEGER NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            expires_at TIMESTAMPTZ NULL,
+            disabled_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_pro_redemptions (
+            id UUID PRIMARY KEY,
+            code_id UUID NOT NULL REFERENCES chad_pro_codes(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES chad_users(id) ON DELETE CASCADE,
+            redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            pro_until TIMESTAMPTZ NOT NULL,
+            UNIQUE(code_id, user_id)
+        )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_chad_pro_redemptions_user ON chad_pro_redemptions(user_id, redeemed_at DESC)`);
+
     await pool.query(`
         CREATE TABLE IF NOT EXISTS chad_user_sessions (
             token_hash VARCHAR(64) PRIMARY KEY,
@@ -801,6 +843,11 @@ async function initializeDatabase() {
             content TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+    `);
+
+    await pool.query(`
+        ALTER TABLE chad_messages
+        ADD COLUMN IF NOT EXISTS image_data_url TEXT
     `);
 
     await pool.query(`
@@ -1209,15 +1256,16 @@ function makeConversationTitle(userText) {
     return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-async function saveConversationTurn(id, userText, assistantText) {
+async function saveConversationTurn(id, userText, assistantText, imageDataUrl = "") {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
         await ensureConversation(id);
+        const safeImage = normalizeChatImageDataUrl(imageDataUrl);
         await client.query(
-            `INSERT INTO chad_messages (conversation_id, role, content)
-             VALUES ($1, 'user', $2), ($1, 'assistant', $3)`,
-            [id, userText, assistantText]
+            `INSERT INTO chad_messages (conversation_id, role, content, image_data_url)
+             VALUES ($1, 'user', $2, $4), ($1, 'assistant', $3, NULL)`,
+            [id, userText, assistantText, safeImage || null]
         );
         await client.query(
             `UPDATE chad_conversations
@@ -2528,6 +2576,133 @@ async function grantChatPurchaseCredits(purchaseId, captureId = "") {
     } finally { client.release(); }
 }
 
+
+function isActivePro(user) {
+    if (!user) return false;
+    if (String(user.plan || '').toLowerCase() === 'pro') return true;
+    if (!user.pro_until) return false;
+    const t = new Date(user.pro_until).getTime();
+    return Number.isFinite(t) && t > Date.now();
+}
+
+function effectivePlan(user) {
+    return isActivePro(user) ? 'pro' : (String(user?.plan || 'free').toLowerCase() === 'pro' ? 'pro' : 'free');
+}
+
+function publicUser(user) {
+    if (!user) return null;
+    return {
+        id: user.id,
+        email: user.email,
+        display_name: user.display_name || '',
+        email_verified: Boolean(user.email_verified),
+        plan: effectivePlan(user),
+        is_pro: isActivePro(user),
+        pro_until: user.pro_until || null,
+        created_at: user.created_at,
+        marketing_consent: Boolean(user.marketing_consent)
+    };
+}
+
+function normalizeProCode(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 64);
+}
+function hashProCode(value) {
+    return crypto.createHash('sha256').update(normalizeProCode(value)).digest('hex');
+}
+function generateProCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const part = n => Array.from({length:n}, () => chars[crypto.randomInt(0, chars.length)]).join('');
+    return `CHAD-${part(4)}-${part(4)}`;
+}
+
+async function handleRedeemProCode(req, res) {
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) return;
+    const raw = String(req.body?.code || '').trim();
+    const normalized = normalizeProCode(raw);
+    if (normalized.length < 8) return res.status(400).json({success:false,error:'That Pro code does not look right.'});
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const found = await client.query(
+            `SELECT * FROM chad_pro_codes WHERE code_hash=$1 FOR UPDATE`, [hashProCode(raw)]
+        );
+        const code = found.rows[0];
+        if (!code || code.disabled_at || (code.expires_at && new Date(code.expires_at) <= new Date())) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({success:false,error:'That Pro code is invalid or expired.'});
+        }
+        if (Number(code.redemption_count || 0) >= Number(code.max_redemptions || 1)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({success:false,error:'That Pro code has already been used.'});
+        }
+        const dup = await client.query(`SELECT 1 FROM chad_pro_redemptions WHERE code_id=$1 AND user_id=$2`, [code.id,user.id]);
+        if (dup.rowCount) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({success:false,error:'You already redeemed that Pro code.'});
+        }
+        const current = await client.query(`SELECT pro_until FROM chad_users WHERE id=$1 FOR UPDATE`, [user.id]);
+        const now = new Date();
+        const existing = current.rows[0]?.pro_until ? new Date(current.rows[0].pro_until) : now;
+        const base = existing > now ? existing : now;
+        const proUntil = new Date(base.getTime() + Number(code.duration_days || 30)*86400000);
+        await client.query(`UPDATE chad_users SET pro_until=$2, updated_at=NOW() WHERE id=$1`, [user.id,proUntil]);
+        await client.query(`UPDATE chad_pro_codes SET redemption_count=redemption_count+1 WHERE id=$1`, [code.id]);
+        await client.query(`INSERT INTO chad_pro_redemptions(id,code_id,user_id,pro_until) VALUES($1,$2,$3,$4)`, [crypto.randomUUID(),code.id,user.id,proUntil]);
+        await client.query('COMMIT');
+        const refreshed = await pool.query(`SELECT id,email,display_name,email_verified,plan,pro_until,created_at,marketing_consent FROM chad_users WHERE id=$1`,[user.id]);
+        return res.json({success:true,user:publicUser(refreshed.rows[0]),daily_limit:PRO_DAILY_LIMIT,message:`Chad Pro is active until ${proUntil.toISOString()}.`});
+    } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        console.error('Pro code redeem error:',error);
+        return res.status(500).json({success:false,error:'Could not redeem that Pro code.'});
+    } finally { client.release(); }
+}
+
+async function handleAdminCreateProCodes(req,res) {
+    if (!isAdminTestRequest(req)) return res.status(401).json({success:false,error:'Admin key required.'});
+    const quantity=Math.max(1,Math.min(100,Number(req.body?.quantity||1)));
+    const durationDays=Math.max(1,Math.min(365,Number(req.body?.duration_days||30)));
+    const maxRedemptions=Math.max(1,Math.min(10000,Number(req.body?.max_redemptions||1)));
+    const note=String(req.body?.note||'').trim().slice(0,300);
+    const codes=[];
+    for(let i=0;i<quantity;i++){
+        let code,id=crypto.randomUUID();
+        for(let tries=0;tries<10;tries++){
+            code=generateProCode();
+            try{
+                await pool.query(`INSERT INTO chad_pro_codes(id,code_hash,code_prefix,duration_days,max_redemptions,note) VALUES($1,$2,$3,$4,$5,$6)`,[id,hashProCode(code),code.slice(0,9),durationDays,maxRedemptions,note]);
+                break;
+            }catch(e){if(e.code!=='23505'||tries===9) throw e; id=crypto.randomUUID();}
+        }
+        codes.push(code);
+    }
+    return res.json({success:true,codes,duration_days:durationDays,max_redemptions:maxRedemptions});
+}
+
+async function handleAdminListProCodes(req,res){
+    if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:'Admin key required.'});
+    const r=await pool.query(`SELECT id,code_prefix,duration_days,max_redemptions,redemption_count,note,expires_at,disabled_at,created_at FROM chad_pro_codes ORDER BY created_at DESC LIMIT 200`);
+    return res.json({success:true,codes:r.rows});
+}
+
+async function handleAdminResetAnalytics(req,res){
+    if(!isAdminTestRequest(req)) return res.status(401).json({success:false,error:'Admin key required.'});
+    if(String(req.body?.confirm||'')!=='RESET LAUNCH ANALYTICS') return res.status(400).json({success:false,error:'Confirmation phrase required.'});
+    const client=await pool.connect();
+    try{
+        await client.query('BEGIN');
+        const a=await client.query('DELETE FROM chad_analytics');
+        const o=await client.query('DELETE FROM chad_openai_usage');
+        let d={rowCount:0},ip={rowCount:0};
+        if(req.body?.reset_daily_quotas===true){d=await client.query('DELETE FROM chad_daily_usage');ip=await client.query('DELETE FROM chad_ip_daily_usage');}
+        await client.query('COMMIT');
+        return res.json({success:true,deleted:{analytics:a.rowCount,openai_usage:o.rowCount,daily_usage:d.rowCount,ip_daily_usage:ip.rowCount}});
+    }catch(error){try{await client.query('ROLLBACK')}catch{};console.error('Analytics reset error:',error);return res.status(500).json({success:false,error:'Could not reset analytics.'});}
+    finally{client.release();}
+}
+
 async function handleStatus(req, res) {
     try {
         const visitorId = getOrCreateVisitorId(req, res);
@@ -2536,7 +2711,7 @@ async function handleStatus(req, res) {
         const reset = getTorontoResetInfo();
         const user = await getAuthenticatedUser(req);
 
-        const dailyLimit = user ? SIGNED_IN_DAILY_LIMIT : DAILY_LIMIT;
+        const dailyLimit = user ? (isActivePro(user) ? PRO_DAILY_LIMIT : SIGNED_IN_DAILY_LIMIT) : DAILY_LIMIT;
         const quotaHash = user ? hashValue(`user:${user.id}`) : visitorHash;
 
         if (admin) {
@@ -2548,6 +2723,9 @@ async function handleStatus(req, res) {
                 admin_test_mode: true,
                 authenticated: Boolean(user),
                 account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+                pro_daily_limit: PRO_DAILY_LIMIT,
+                is_pro: isActivePro(user),
+                pro_until: user?.pro_until || null,
                 guest_daily_limit: DAILY_LIMIT,
                 ...reset
             });
@@ -2568,6 +2746,9 @@ async function handleStatus(req, res) {
             chat_packs: user ? publicChatPacks() : [],
             can_buy_chat_credits: Boolean(user),
             account_daily_limit: SIGNED_IN_DAILY_LIMIT,
+            pro_daily_limit: PRO_DAILY_LIMIT,
+            is_pro: isActivePro(user),
+            pro_until: user?.pro_until || null,
             guest_daily_limit: DAILY_LIMIT,
             ...reset
         });
@@ -2673,10 +2854,18 @@ async function handleAsk(req, res) {
         }
 
         const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
-        if (!message) {
+        const rawImageDataUrl = typeof req.body?.image_data_url === "string" ? req.body.image_data_url.trim() : "";
+        const imageDataUrl = normalizeChatImageDataUrl(rawImageDataUrl);
+        if (rawImageDataUrl && !imageDataUrl) {
+            return res.status(413).json({
+                success: false,
+                error: "That photo is too large or unsupported. Try a normal JPG, PNG, or WebP photo."
+            });
+        }
+        if (!message && !imageDataUrl) {
             return res.status(400).json({
                 success: false,
-                error: "Chad needs a question. Preferably one involving a tool."
+                error: "Chad needs a question or a photo. Preferably something you have not already made worse."
             });
         }
         if (message.length > MAX_MESSAGE_LENGTH) {
@@ -2694,7 +2883,7 @@ async function handleAsk(req, res) {
         const authenticatedUser = await getAuthenticatedUser(req);
 
         quotaDailyLimit = authenticatedUser
-            ? SIGNED_IN_DAILY_LIMIT
+            ? (isActivePro(authenticatedUser) ? PRO_DAILY_LIMIT : SIGNED_IN_DAILY_LIMIT)
             : DAILY_LIMIT;
 
         quotaHash = authenticatedUser
@@ -2795,11 +2984,15 @@ async function handleAsk(req, res) {
         const conversationId = await getOrCreateConversationId(req, res);
         const memory = await loadConversationMemory(conversationId);
 
+        const currentUserContent = [];
+        if (message) currentUserContent.push({ type: "input_text", text: message });
+        if (imageDataUrl) currentUserContent.push({ type: "input_image", image_url: imageDataUrl, detail: "low" });
+
         const input = [
             { role: "system", content: CHAD_SYSTEM_PROMPT },
-            { role: "system", content: "FAST RESPONSE MODE: Answer the question now. Return only the fields allowed by the provided schema. Product and video research is handled separately after the answer, so do not spend time trying to produce those here." },
+            { role: "system", content: "FAST RESPONSE MODE: Answer the question now. Return only the fields allowed by the provided schema. Product and video research is handled separately after the answer, so do not spend time trying to produce those here. If the user attached an image, inspect only what is actually visible. Say when a detail cannot be determined confidently from the photo." },
             ...memory,
-            { role: "user", content: message }
+            { role: "user", content: currentUserContent }
         ];
 
         streamMode = req.body?.stream === true;
@@ -2818,7 +3011,7 @@ async function handleAsk(req, res) {
                 schema: CHAD_FAST_SCHEMA,
                 input,
                 tools: mainTools,
-                requestKind: mainTools.length ? "chad_answer_web" : "chad_answer_fast",
+                requestKind: imageDataUrl ? "chad_answer_image" : (mainTools.length ? "chad_answer_web" : "chad_answer_fast"),
                 onReady: () => {
                     streamStarted = true;
                     res.status(200);
@@ -2837,7 +3030,7 @@ async function handleAsk(req, res) {
                 CHAD_FAST_SCHEMA,
                 input,
                 mainTools,
-                mainTools.length ? "chad_answer_web" : "chad_answer_fast"
+                imageDataUrl ? "chad_answer_image" : (mainTools.length ? "chad_answer_web" : "chad_answer_fast")
             );
 
         const text = getResponseText(data);
@@ -2869,7 +3062,7 @@ async function handleAsk(req, res) {
             }
         }
 
-        await saveConversationTurn(conversationId, message, answer);
+        await saveConversationTurn(conversationId, message || 'Photo question', answer, imageDataUrl);
 
         const citationMap = new Map();
         for (const c of [...collectSources(data), ...productSources]) {
@@ -2906,7 +3099,8 @@ async function handleAsk(req, res) {
                 metadata: {
                     status: "public",
                     category: analyticsClassification.category,
-                    topic: analyticsClassification.topic
+                    topic: analyticsClassification.topic,
+                    has_image: Boolean(imageDataUrl)
                 }
             });
         }
@@ -3710,7 +3904,7 @@ async function handleVerifyEmail(req, res) {
         await createAuthSession(userId, req, res);
 
         const userResult = await pool.query(
-            `SELECT id, email, display_name, email_verified, plan, created_at
+            `SELECT id, email, display_name, email_verified, plan, pro_until, created_at
              FROM chad_users
              WHERE id = $1
                AND deleted_at IS NULL
@@ -3957,7 +4151,9 @@ async function handleLogin(req, res) {
                 email: user.email,
                 display_name: user.display_name || "",
                 email_verified: Boolean(user.email_verified),
-                plan: user.plan,
+                plan: effectivePlan(user),
+                is_pro: isActivePro(user),
+                pro_until: user.pro_until || null,
                 marketing_consent: Boolean(user.marketing_consent)
             }
         });
@@ -3978,15 +4174,7 @@ async function handleMe(req, res) {
     return res.json({
         success: true,
         authenticated: true,
-        user: {
-            id: user.id,
-            email: user.email,
-            display_name: user.display_name || "",
-            email_verified: Boolean(user.email_verified),
-            plan: user.plan,
-            created_at: user.created_at,
-            marketing_consent: Boolean(user.marketing_consent)
-        }
+        user: publicUser(user)
     });
 }
 
@@ -4085,7 +4273,7 @@ async function handleConversationMessages(req, res) {
             return res.status(404).json({ success: false, error: "Project not found." });
         }
         const messages = await pool.query(
-            `SELECT role, content, created_at
+            `SELECT role, content, image_data_url, created_at
              FROM chad_messages WHERE conversation_id = $1 ORDER BY id ASC LIMIT 500`,
             [id]
         );
@@ -4126,6 +4314,16 @@ async function handleConversationSave(req, res) {
                 error: "Give the conversation a title first."
             });
         }
+
+        // If this conversation began while signed out, the browser still owns its
+        // UUID cookie. Claim that guest conversation at the moment the newly
+        // authenticated user saves it instead of making them lose the thread.
+        await pool.query(
+            `UPDATE chad_conversations
+             SET user_id = $2, updated_at = NOW()
+             WHERE id = $1 AND user_id IS NULL`,
+            [id, user.id]
+        );
 
         const result = await pool.query(
             `UPDATE chad_conversations
@@ -4171,6 +4369,13 @@ async function handleConversationShare(req, res) {
                 error: "Start a conversation before sharing it."
             });
         }
+
+        await pool.query(
+            `UPDATE chad_conversations
+             SET user_id = $2, updated_at = NOW()
+             WHERE id = $1 AND user_id IS NULL`,
+            [id, user.id]
+        );
 
         const owned = await pool.query(
             `SELECT id, COALESCE(NULLIF(title, ''), 'ChadPDChee conversation') AS title
@@ -4437,7 +4642,7 @@ async function handlePublicConversationShare(req, res) {
         const conversation = share.rows[0];
 
         const messagesResult = await pool.query(
-            `SELECT role, content, created_at
+            `SELECT role, content, image_data_url, created_at
              FROM chad_messages
              WHERE conversation_id = $1
              ORDER BY id ASC
@@ -4448,8 +4653,12 @@ async function handlePublicConversationShare(req, res) {
         const renderedMessages = messagesResult.rows.map(message => {
             const who = message.role === "user" ? "Hammered Handyman" : "Chad";
             const body = escapeHtml(message.content || "").replace(/\n/g, "<br>");
+            const image = normalizeChatImageDataUrl(message.image_data_url || "")
+                ? `<img src="${message.image_data_url}" alt="Shared conversation photo" style="display:block;max-width:100%;max-height:520px;object-fit:contain;border-radius:12px;margin:0 0 12px">`
+                : "";
             return `<section style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:${message.role === "user" ? "#f1f3f5" : "#20262c"};color:${message.role === "user" ? "#111" : "#fff"}">
                 <div style="font-weight:800;margin-bottom:8px">${who}</div>
+                ${image}
                 <div style="line-height:1.55">${body}</div>
             </section>`;
         }).join("");
@@ -6456,7 +6665,8 @@ app.get("/health", async (req, res) => {
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
         termsVersion: TERMS_VERSION,
         dailyLimit: DAILY_LIMIT,
-        signedInDailyLimit: SIGNED_IN_DAILY_LIMIT
+        signedInDailyLimit: SIGNED_IN_DAILY_LIMIT,
+        proDailyLimit: PRO_DAILY_LIMIT
     });
 });
 
@@ -6488,6 +6698,10 @@ registerBoth("get", "/chat-packs", handleChatPacks);
 registerBoth("post", "/chat-packs/checkout/create", handleChatPackCheckoutCreate);
 registerBoth("post", "/chat-packs/checkout/capture", handleChatPackCheckoutCapture);
 registerBoth("get", "/account/chat-credits", handleChatCreditHistory);
+registerBoth("post", "/pro/redeem", handleRedeemProCode);
+registerBoth("post", "/admin/pro-codes/create", handleAdminCreateProCodes);
+registerBoth("get", "/admin/pro-codes", handleAdminListProCodes);
+registerBoth("post", "/admin/analytics/reset", handleAdminResetAnalytics);
 registerBoth("post", "/translate", handleTranslate);
 registerBoth("post", "/ask", handleAsk);
 registerBoth("post", "/shopping-list", handleShoppingList);
