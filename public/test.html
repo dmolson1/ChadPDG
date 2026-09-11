@@ -548,6 +548,90 @@ body.chad-test-enabled .chad-dev-title{
 @media(max-width:600px){.chad-install-card{padding:21px 18px}.chad-install-card h2{font-size:21px}}
 </style>
 
+
+<style id="chad-continuous-page-layout">
+/* =========================================================
+   CONTINUOUS CONVERSATION PAGE
+   The page itself scrolls. #chad-chat never becomes an
+   independently scrolling panel.
+   ========================================================= */
+html,
+body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+}
+
+#chad-shell,
+#chad-main,
+#chad-app {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+#chad-shell,
+#chad-main {
+    min-height: 100vh !important;
+}
+
+#chad-app {
+    min-height: 100vh !important;
+}
+
+#chad-chat,
+#chad-chat.chad-chat-visible {
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: auto !important;
+    contain: none !important;
+    scrollbar-width: auto !important;
+}
+
+/* The history sidebar may scroll independently; the conversation may not. */
+.chad-sidebar-scroll {
+    overflow-y: auto !important;
+}
+
+/* Desktop keeps the composer available while the document scrolls. */
+@media (min-width: 821px) {
+    #chad-input-area {
+        position: sticky !important;
+        bottom: 0 !important;
+    }
+}
+
+/* Mobile stays in normal document flow to avoid Safari keyboard jumps. */
+@media (max-width: 820px) {
+    html,
+    body,
+    #chad-shell,
+    #chad-main,
+    #chad-app,
+    #chad-chat,
+    #chad-chat.chad-chat-visible {
+        height: auto !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
+    body {
+        overflow-y: auto !important;
+    }
+
+    #chad-input-area {
+        position: static !important;
+        bottom: auto !important;
+    }
+}
+</style>
+
 </head>
 <body>
 
@@ -606,6 +690,14 @@ body.chad-test-enabled .chad-dev-title{
                 </span>
             </button>
 
+            <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">✦</span>
+                <span>
+                    <strong>Get Chat Credits</strong>
+                    <small>Buy prepaid chats · never expire</small>
+                </span>
+            </button>
+
             <a href="/advertise.html" class="chad-sidebar-row" style="text-decoration:none;color:inherit;">
                 <span class="chad-sidebar-icon">★</span>
                 <span>
@@ -631,13 +723,6 @@ body.chad-test-enabled .chad-dev-title{
                 </span>
             </button>
 
-            <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
-                <span class="chad-sidebar-icon">✦</span>
-                <span>
-                    <strong>Get Chat Credits</strong>
-                    <small>Buy prepaid chats · never expire</small>
-                </span>
-            </button>
         </div>
     </aside>
 
@@ -2466,9 +2551,22 @@ body {
 
     #chad-sidebar {
         width: min(86vw, 310px);
+        height: 100dvh;
+        max-height: 100dvh;
         transform: translateX(-102%);
         transition: transform .2s ease;
         box-shadow: 18px 0 45px rgba(0,0,0,.26);
+        overscroll-behavior: contain;
+    }
+
+    /* Keep the final drawer controls above Safari/Chrome mobile browser UI. */
+    .chad-sidebar-bottom {
+        flex: 0 0 auto;
+        padding: 10px 10px calc(30px + env(safe-area-inset-bottom)) !important;
+    }
+
+    .chad-sidebar-scroll {
+        overscroll-behavior: contain;
     }
 
     body.chad-menu-open #chad-sidebar {
@@ -2755,7 +2853,7 @@ body {
         }
 
         if (!window.matchMedia('(max-width: 820px)').matches) {
-            scrollToChadAnswer(humanCheckChatMessage);
+            humanCheckChatMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
 
@@ -3320,35 +3418,16 @@ body {
         element
     ) {
 
-        if (!element) {
-            return;
-        }
-
         /*
-         * Mobile Safari/Chrome can aggressively reposition the page when
-         * messages are appended near the composer. On phones, leave the
-         * user's viewport alone so Chad's reply does not yank the page to
-         * the bottom. Desktop keeps the existing smooth answer scroll.
+         * Intentionally do nothing. Chad now lives in the normal document
+         * flow, so appending or streaming a reply must never take control of
+         * the user's browser scroll position on desktop or mobile.
+         *
+         * Explicit navigation actions (opening a saved conversation, starting
+         * a new conversation, or revealing a human-check challenge) handle
+         * their own scrolling separately where appropriate.
          */
-        if (window.matchMedia('(max-width: 820px)').matches) {
-            return;
-        }
-
-        requestAnimationFrame(
-            function () {
-
-                const y =
-                    element.getBoundingClientRect().top +
-                    window.pageYOffset -
-                    18;
-
-                window.scrollTo({
-                    top: Math.max(0, y),
-                    behavior: 'smooth'
-                });
-
-            }
-        );
+        return;
 
     }
 
