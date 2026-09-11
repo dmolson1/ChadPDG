@@ -623,6 +623,14 @@ body.chad-test-enabled .chad-dev-title{
                 </span>
             </button>
 
+            <button type="button" id="chad-menu-redeem-pro" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">⚡</span>
+                <span>
+                    <strong>Redeem Pro Code</strong>
+                    <small>Got a code? Make Chad work harder</small>
+                </span>
+            </button>
+
             <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
                 <span class="chad-sidebar-icon">✦</span>
                 <span>
@@ -709,11 +717,20 @@ body.chad-test-enabled .chad-dev-title{
 
     <div id="chad-input-area">
 
-        <textarea
-            id="chad-question"
-            placeholder="Ask Chad..."
-            rows="3"
-        ></textarea>
+        <div class="chad-composer-row">
+            <button type="button" id="chad-camera-button" class="chad-camera-button" aria-label="Take or choose a photo" title="Take or choose a photo">📷</button>
+            <textarea
+                id="chad-question"
+                placeholder="Ask Chad..."
+                rows="3"
+            ></textarea>
+            <input id="chad-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+        </div>
+        <div id="chad-photo-preview" class="chad-photo-preview" hidden>
+            <img id="chad-photo-preview-image" alt="Photo ready to send">
+            <div class="chad-photo-preview-meta"><strong>Photo ready.</strong><span>Chad will inspect this with your next question.</span></div>
+            <button type="button" id="chad-photo-remove" aria-label="Remove photo">×</button>
+        </div>
 
         <div id="chad-buttons">
 
@@ -747,6 +764,15 @@ body.chad-test-enabled .chad-dev-title{
                 title="Share this conversation"
             >
                 SHARE
+            </button>
+
+            <button
+                type="button"
+                id="chad-copy-conversation"
+                class="chad-secondary-action"
+                title="Copy this conversation to your clipboard"
+            >
+                COPY
             </button>
 
         </div>
@@ -906,6 +932,15 @@ body.chad-test-enabled .chad-dev-title{
             <section id="chad-auth-account" class="chad-auth-view" hidden>
                 <h2>Your account</h2>
                 <div id="chad-account-card" class="chad-account-card"></div>
+                <div class="chad-pro-redeem-box">
+                    <strong>Got a Chad Pro code?</strong>
+                    <span>Facebook subscriber, promo winner, mysterious important person — put it here.</span>
+                    <form id="chad-pro-redeem-form">
+                        <input id="chad-pro-code" type="text" autocomplete="off" placeholder="CHAD-XXXX-XXXX" maxlength="24">
+                        <button type="submit" class="chad-auth-primary">Redeem Pro Code</button>
+                    </form>
+                    <small id="chad-pro-status"></small>
+                </div>
                 <div id="chad-verify-box" class="chad-verify-box" hidden>
                     <strong>Email verification needed</strong>
                     <span>Check your inbox for Chad's verification email.</span>
@@ -2553,12 +2588,15 @@ body {
 .chad-auth-link,.chad-inline-policy{border:0;background:none;padding:0;color:#1677B8;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer}.chad-auth-view>.chad-auth-link{margin-top:14px}.chad-auth-switch{border-top:1px solid #e7e9eb;margin-top:20px;padding-top:18px;font-size:14px;color:#616970}
 .chad-auth-check{grid-template-columns:19px 1fr!important;align-items:start;gap:9px!important;line-height:1.4;font-weight:500!important}.chad-auth-check input{margin:2px 0 0;width:17px;height:17px}
 .chad-auth-message{display:none;margin:0 0 18px;border-radius:10px;padding:11px 13px;background:#eef7ff;color:#164f75;font-size:13px;line-height:1.4}.chad-auth-message.is-error{background:#fff0f0;color:#922}.chad-auth-message.is-success{background:#edf9ef;color:#216b32}.chad-auth-message:not(:empty){display:block}
-.chad-account-card{border:1px solid #e1e5e8;background:#f8f9fa;border-radius:14px;padding:16px;margin-bottom:14px}.chad-account-card strong{display:block;font-size:16px}.chad-account-card span{display:block;margin-top:5px;color:#697078;font-size:13px}#chad-verify-box[hidden]{display:none!important}
+.chad-account-card{border:1px solid #e1e5e8;background:#f8f9fa;border-radius:14px;padding:16px;margin-bottom:14px}.chad-account-card strong{display:block;font-size:16px}.chad-account-card span{display:block;margin-top:5px;color:#697078;font-size:13px}#chad-verify-box[hidden]{display:none!important}.chad-pro-redeem-box{border:1px solid #d9dfe4;background:#fff8dd;border-radius:14px;padding:14px;margin:0 0 14px}.chad-pro-redeem-box>strong{display:block;font-size:15px;margin-bottom:4px}.chad-pro-redeem-box>span{display:block;font-size:12px;line-height:1.4;color:#5f6468;margin-bottom:10px}.chad-pro-redeem-box form{display:flex;gap:8px;align-items:center}.chad-pro-redeem-box input{flex:1;min-width:0;text-transform:uppercase;padding:11px;border:1px solid #cfd5da;border-radius:9px;font-weight:800;letter-spacing:.6px}.chad-pro-redeem-box .chad-auth-primary{width:auto;margin:0;padding:11px 12px;white-space:nowrap}.chad-pro-redeem-box small{display:block;margin-top:8px;font-weight:700}.chad-pro-active{color:#16823a}.chad-pro-error{color:#a72b2b}@media(max-width:520px){.chad-pro-redeem-box form{flex-direction:column;align-items:stretch}.chad-pro-redeem-box .chad-auth-primary{width:100%}}
 .chad-verify-box{display:grid;gap:8px;padding:14px;border:1px solid #efd67a;background:#fff9df;border-radius:12px;margin:12px 0;font-size:13px}.chad-account-actions{display:grid;gap:10px;margin-top:18px}
 .chad-policy-panel h2{margin:15px 0 10px}.chad-policy-panel p,.chad-policy-panel li{color:#4e565d;line-height:1.5;font-size:14px}.chad-policy-panel ul{padding-left:20px}
 .chad-recent-item{width:100%;border:0;background:transparent;color:#e7eaed;text-align:left;border-radius:9px;padding:10px;margin:1px 0;cursor:pointer;font:700 13px/1.25 Arial,Helvetica,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chad-recent-item:hover,.chad-recent-item.is-active{background:rgba(255,255,255,.09)}.chad-recent-row{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:4px;align-items:center;margin:1px 0}.chad-recent-row .chad-recent-item{margin:0}.chad-recent-menu-wrap{position:relative}.chad-recent-more{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#aeb8c2;font-size:20px;line-height:1;cursor:pointer}.chad-recent-more:hover{background:rgba(255,255,255,.09);color:#fff}.chad-recent-menu{position:absolute;right:0;top:34px;z-index:40;min-width:128px;padding:6px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#20262c;box-shadow:0 12px 28px rgba(0,0,0,.35)}.chad-recent-menu[hidden]{display:none!important}.chad-recent-menu button{display:block;width:100%;border:0;border-radius:7px;background:transparent;color:#fff;text-align:left;padding:8px 10px;cursor:pointer;font:600 13px Arial,Helvetica,sans-serif}.chad-recent-menu button:hover{background:rgba(255,255,255,.08)}.chad-recent-menu button.chad-delete-project{color:#ff9a9a}.chad-sidebar-signedin{color:#78c8ff!important}.chad-history-note{text-align:center;color:#7c838a;font:600 12px/1.4 Arial,Helvetica,sans-serif;margin:18px 0}
 @media(max-width:600px){#chad-auth-overlay{padding:0;align-items:flex-end}#chad-auth-modal{width:100%;max-height:92vh;border-radius:20px 20px 0 0;padding:24px 18px max(24px,env(safe-area-inset-bottom))}}
 
+
+.chad-composer-row{display:flex;gap:10px;align-items:stretch}.chad-composer-row #chad-question{flex:1;min-width:0}.chad-camera-button{flex:0 0 48px;width:48px;border:2px solid #20262c;border-radius:12px;background:#fff;color:#111;font-size:22px;cursor:pointer}.chad-camera-button:hover{background:#f3f4f5}.chad-photo-preview{display:grid;grid-template-columns:78px minmax(0,1fr) 34px;gap:11px;align-items:center;margin:10px 0;padding:9px;border:1px solid #d4d8dc;border-radius:12px;background:#f8f9fa}.chad-photo-preview[hidden]{display:none!important}.chad-photo-preview img{width:78px;height:78px;object-fit:cover;border-radius:9px}.chad-photo-preview-meta{display:grid;gap:3px;font:12px/1.35 Arial,Helvetica,sans-serif;color:#555}.chad-photo-preview-meta strong{font-size:13px;color:#111}.chad-photo-preview button{width:32px;height:32px;border:0;border-radius:50%;background:#20262c;color:#fff;font-size:21px;cursor:pointer}.chad-user-photo{display:block;max-width:min(360px,100%);max-height:420px;object-fit:contain;border-radius:12px;margin:0 0 8px auto}.chad-copy-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100500;background:#20262c;color:#fff;border-radius:999px;padding:10px 15px;font:700 12px Arial,Helvetica,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+@media(max-width:600px){.chad-camera-button{flex-basis:46px;width:46px}.chad-photo-preview{grid-template-columns:64px minmax(0,1fr) 34px}.chad-photo-preview img{width:64px;height:64px}}
 </style>
 
 
@@ -3319,7 +3357,8 @@ body {
        ===================================================== */
 
     function addUserMessage(
-        message
+        message,
+        imageDataUrl
     ) {
 
         const wrapper =
@@ -3341,8 +3380,9 @@ body {
 
                 '<div class="chad-user-bubble">' +
 
+                (imageDataUrl ? '<img class="chad-user-photo" src="' + escapeHtml(imageDataUrl) + '" alt="Attached photo">' : '') +
                 escapeHtml(
-                    message
+                    message || (imageDataUrl ? 'Photo attached' : '')
                 ) +
 
                 '</div>' +
@@ -5862,6 +5902,39 @@ body {
     }
 
 
+    let pendingPhotoDataUrl = '';
+
+    function setPhotoPreview(dataUrl) {
+        pendingPhotoDataUrl = dataUrl || '';
+        const box = document.getElementById('chad-photo-preview');
+        const img = document.getElementById('chad-photo-preview-image');
+        if (!box || !img) return;
+        if (pendingPhotoDataUrl) { img.src = pendingPhotoDataUrl; box.hidden = false; }
+        else { img.removeAttribute('src'); box.hidden = true; }
+    }
+
+    async function resizeChatPhoto(file) {
+        if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type || '')) throw new Error('Use a JPG, PNG, or WebP photo.');
+        const raw = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result||'')); r.onerror=()=>reject(new Error('Could not read that photo.')); r.readAsDataURL(file); });
+        const img = await new Promise((resolve,reject)=>{ const i=new Image(); i.onload=()=>resolve(i); i.onerror=()=>reject(new Error('Could not open that photo.')); i.src=raw; });
+        const maxSide=1280, scale=Math.min(1,maxSide/Math.max(img.naturalWidth||1,img.naturalHeight||1));
+        const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(img.naturalWidth*scale)); canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        canvas.getContext('2d',{alpha:false}).drawImage(img,0,0,canvas.width,canvas.height);
+        let data=canvas.toDataURL('image/jpeg',0.78);
+        if(data.length>1450000) data=canvas.toDataURL('image/jpeg',0.58);
+        if(data.length>1500000) throw new Error('That photo is still too large. Try another photo or crop it first.');
+        return data;
+    }
+
+    document.getElementById('chad-camera-button')?.addEventListener('click',()=>document.getElementById('chad-camera-input')?.click());
+    document.getElementById('chad-camera-input')?.addEventListener('change',async function(){
+        const file=this.files&&this.files[0]; if(!file)return;
+        try{ setPhotoPreview(await resizeChatPhoto(file)); if(!questionInput.value.trim()) questionInput.placeholder='Ask Chad about this photo...'; }
+        catch(e){ addError(e.message||'Could not prepare that photo.'); }
+        finally{ this.value=''; }
+    });
+    document.getElementById('chad-photo-remove')?.addEventListener('click',()=>{ setPhotoPreview(''); questionInput.placeholder='Ask Chad...'; });
+
     async function askChad() {
 
         if (dailyLimitLocked) {
@@ -5871,7 +5944,9 @@ body {
         const message =
             questionInput.value.trim();
 
-        if (!message) {
+        const imageDataUrl = pendingPhotoDataUrl;
+
+        if (!message && !imageDataUrl) {
             questionInput.focus();
             return;
         }
@@ -5885,6 +5960,8 @@ body {
         );
 
         questionInput.value = '';
+        setPhotoPreview('');
+        questionInput.placeholder = 'Ask Chad...';
 
         /*
          * Start the funny Hammered Handyman translation
@@ -5893,7 +5970,7 @@ body {
          * No Turnstile token is sent here.
          */
 
-        const translationPromise =
+        const translationPromise = message ?
             fetch(
                 '/wp-json/chadpgt/v1/translate',
                 {
@@ -5920,7 +5997,7 @@ body {
             })
             .catch(function () {
                 return message;
-            });
+            }) : Promise.resolve(imageDataUrl ? 'Take a look at this.' : message);
 
 
         /*
@@ -5945,7 +6022,8 @@ body {
                                 turnstileToken,
                             analytics_visitor:
                                 analyticsVisitorId,
-                            stream: true
+                            stream: true,
+                            image_data_url: imageDataUrl || ''
                         })
                     }
                 );
@@ -5962,7 +6040,8 @@ body {
             await translationPromise;
 
         addUserMessage(
-            displayQuestion
+            displayQuestion,
+            imageDataUrl
         );
 
         const loading =
@@ -6251,6 +6330,7 @@ body {
 
         questionInput.value =
             '';
+        setPhotoPreview('');
 
 
         /*
@@ -6483,7 +6563,7 @@ body {
 (function(){
 'use strict';
 const overlay=document.getElementById('chad-auth-overlay'),closeButton=document.getElementById('chad-auth-close'),accountButton=document.getElementById('chad-account-button'),accountTitle=document.getElementById('chad-account-title'),accountSubtitle=document.getElementById('chad-account-subtitle'),recentList=document.getElementById('chad-recent-list'),authMessage=document.getElementById('chad-auth-message'),chat=document.getElementById('chad-chat');
-let currentUser=null,currentConversationId=null,lastAuthView='signin';
+let currentUser=null,currentConversationId=null,lastAuthView='signin',pendingAuthFeature='';
 
 function api(path,options){return fetch(path,Object.assign({credentials:'same-origin'},options||{})).then(async r=>{let d={};try{d=await r.json()}catch(_){ }if(!r.ok||d.success===false){const e=new Error(d.error||'Something went sideways.');e.status=r.status;e.data=d;throw e}return d})}
 function jsonOptions(method,body){return{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}}
@@ -6501,7 +6581,7 @@ window.CHADPDG_OPEN_AUTH = function(view, message){
     }
 };
 
-function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(currentUser.plan||'free')+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
+function renderAccount(){const card=document.getElementById('chad-account-card'),verify=document.getElementById('chad-verify-box');if(!card||!currentUser)return;const display=currentUser.display_name||currentUser.email;let plan=currentUser.is_pro?'PRO':'FREE';let until='';if(currentUser.is_pro&&currentUser.pro_until){try{until=' · through '+new Date(currentUser.pro_until).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'})}catch(_){}}card.innerHTML='<strong>'+esc(display)+'</strong><span>'+esc(currentUser.email)+'</span><span>Plan: '+esc(plan)+until+' · Email '+(currentUser.email_verified?'verified ✓':'not verified')+'</span>';verify.hidden=!!currentUser.email_verified}
 function signedOut(){if(accountTitle)accountTitle.textContent='Sign in';if(accountSubtitle)accountSubtitle.textContent='Save your projects';accountButton&&accountButton.classList.remove('chad-sidebar-signedin');if(recentList)recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">Your projects will live here.</div><div class="chad-sidebar-empty-copy">Sign in to save projects and continue them on another device.</div></div>'}
 function signedIn(){if(!currentUser)return signedOut();accountTitle.textContent=currentUser.display_name||'Account';accountSubtitle.textContent=currentUser.email;accountButton.classList.add('chad-sidebar-signedin')}
 
@@ -6516,19 +6596,44 @@ function closeShareModal(){const overlay=document.getElementById('chad-share-ove
 async function shareConversation(c){try{const d=await api('/account/conversations/share',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||''}));openShareModal(d.share_url,d.title,c?.id||currentConversationId)}catch(e){window.alert(e.message||'Could not share that conversation.')}}
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
-async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
+async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const save=document.createElement('button');save.type='button';save.textContent=c.is_saved?'Save with New Title':'Save Conversation';save.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;saveConversation(c)});const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(save,share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
 function historyChad(text){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div>';chat.appendChild(w)}
-async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'');if(m.role==='assistant')historyChad(m.content||'')});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
+async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'')});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
 
 accountButton&&accountButton.addEventListener('click',()=>openAuth(currentUser?'account':'signin'));closeButton&&closeButton.addEventListener('click',closeAuth);overlay&&overlay.addEventListener('click',e=>{if(e.target===overlay)closeAuth()});
 document.querySelectorAll('[data-auth-view]').forEach(b=>b.addEventListener('click',()=>setView(b.getAttribute('data-auth-view'))));
 
-document.getElementById('chad-signin-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Signing in…');try{const d=await api('/auth/login',jsonOptions('POST',{email:document.getElementById('chad-signin-email').value,password:document.getElementById('chad-signin-password').value}));currentUser=d.user;signedIn();renderAccount();await loadRecent();refreshQuestionLimit();setView('account');msg('Signed in. Chad has reluctantly restored your projects.','success')}catch(err){msg(err.message,'error')}});
+document.getElementById('chad-signin-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Signing in…');try{const d=await api('/auth/login',jsonOptions('POST',{email:document.getElementById('chad-signin-email').value,password:document.getElementById('chad-signin-password').value}));currentUser=d.user;signedIn();renderAccount();await finishPendingAuthFeature();await loadRecent();refreshQuestionLimit();setView('account');msg('Signed in. Chad has reluctantly restored your projects.','success')}catch(err){msg(err.message,'error')}});
 
-document.getElementById('chad-signup-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Creating your account…');try{const d=await api('/auth/signup',jsonOptions('POST',{display_name:document.getElementById('chad-signup-name').value,email:document.getElementById('chad-signup-email').value,password:document.getElementById('chad-signup-password').value,accept_terms:document.getElementById('chad-signup-terms').checked,accept_privacy:document.getElementById('chad-signup-privacy').checked,marketing_consent:document.getElementById('chad-signup-marketing').checked}));currentUser=d.user;signedIn();renderAccount();await loadRecent();refreshQuestionLimit();setView('account');msg(d.verification_email_sent?'Account created. Check your email for the verification link.':'Account created, but the verification email could not be sent. Use Resend verification below.',d.verification_email_sent?'success':'error')}catch(err){msg(err.message,'error')}});
+document.getElementById('chad-signup-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Creating your account…');try{const d=await api('/auth/signup',jsonOptions('POST',{display_name:document.getElementById('chad-signup-name').value,email:document.getElementById('chad-signup-email').value,password:document.getElementById('chad-signup-password').value,accept_terms:document.getElementById('chad-signup-terms').checked,accept_privacy:document.getElementById('chad-signup-privacy').checked,marketing_consent:document.getElementById('chad-signup-marketing').checked}));currentUser=d.user;signedIn();renderAccount();await finishPendingAuthFeature();await loadRecent();refreshQuestionLimit();setView('account');msg(d.verification_email_sent?'Account created. Check your email for the verification link.':'Account created, but the verification email could not be sent. Use Resend verification below.',d.verification_email_sent?'success':'error')}catch(err){msg(err.message,'error')}});
 
 document.getElementById('chad-forgot-form')?.addEventListener('submit',async e=>{e.preventDefault();msg('Sending reset link…');try{const d=await api('/auth/forgot-password',jsonOptions('POST',{email:document.getElementById('chad-forgot-email').value}));msg(d.message||'If that account exists, a reset link has been sent.','success')}catch(_){msg('If that account exists, a reset link has been sent.','success')}});
+
+
+
+async function finishPendingAuthFeature(){
+    const feature=pendingAuthFeature;
+    if(!feature)return;
+    pendingAuthFeature='';
+    // The backend claims the current guest conversation on save/share after auth.
+    if(feature==='save') await saveConversation(null);
+    if(feature==='share') await shareConversation(null);
+}
+async function redeemProCode(code){
+    if(!currentUser){openAuth('signin');msg('Sign in first, then redeem your Pro code.','success');return}
+    const status=document.getElementById('chad-pro-status');
+    if(status){status.textContent='Checking code…';status.className=''}
+    try{
+        const d=await api('/pro/redeem',jsonOptions('POST',{code:String(code||'').trim()}));
+        currentUser=d.user||currentUser;
+        signedIn();renderAccount();refreshQuestionLimit();
+        if(status){status.textContent='PRO ACTIVATED. Chad is now contractually obligated to tolerate you more often.';status.className='chad-pro-active'}
+        const input=document.getElementById('chad-pro-code');if(input)input.value='';
+    }catch(e){if(status){status.textContent=e.message||'Could not redeem that code.';status.className='chad-pro-error'}}
+}
+document.getElementById('chad-pro-redeem-form')?.addEventListener('submit',function(e){e.preventDefault();redeemProCode(document.getElementById('chad-pro-code')?.value||'')});
+document.getElementById('chad-menu-redeem-pro')?.addEventListener('click',function(){document.body.classList.remove('chad-menu-open');if(!currentUser){openAuth('signin');msg('Sign in first, then redeem your Pro code.','success');return}openAuth('account');setTimeout(()=>document.getElementById('chad-pro-code')?.focus(),80)});
 
 document.getElementById('chad-resend-verify')?.addEventListener('click',async function(){this.disabled=true;try{await api('/auth/resend-verification',jsonOptions('POST',{}));msg('Verification email sent. Check your inbox.','success')}catch(e){msg(e.message,'error')}finally{this.disabled=false}});
 document.getElementById('chad-signout')?.addEventListener('click',async()=>{try{await api('/auth/logout',jsonOptions('POST',{}))}catch(_){ }currentUser=null;currentConversationId=null;signedOut();refreshQuestionLimit();closeAuth()});
@@ -6546,9 +6651,33 @@ document.addEventListener('click',e=>{if(!e.target.closest('.chad-recent-menu-wr
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('chad-auth-open'))closeAuth()});
 
 function showSignupForFeature(feature){
+    pendingAuthFeature=feature;
     const reason = feature === 'share' ? 'share this conversation' : 'save this conversation';
     openAuth('signup');
     msg('Create a free account to '+reason+', keep your project history, and get 15 Chad questions every day instead of 5.','success');
+}
+
+function conversationTextFromMessages(messages,title){
+    const lines=[title||'ChadPDChee Conversation',''];
+    (messages||[]).forEach(m=>{lines.push(m.role==='user'?'Hammered Handyman:':'Chad:');if(m.image_data_url)lines.push('[Photo attached]');lines.push(String(m.content||''));lines.push('');});
+    return lines.join('\n').trim();
+}
+function visibleConversationText(){
+    const lines=['ChadPDChee Conversation',''];
+    chat.querySelectorAll('.chad-message').forEach(m=>{
+        if(m.classList.contains('chad-user')){lines.push('Hammered Handyman:');if(m.querySelector('.chad-user-photo'))lines.push('[Photo attached]');lines.push((m.querySelector('.chad-user-bubble')?.innerText||'').trim());lines.push('');}
+        else if(m.classList.contains('chad-answer-wrapper')&&!m.classList.contains('chad-human-check-chat')){lines.push('Chad:');lines.push((m.querySelector('.chad-answer')?.innerText||'').trim());lines.push('');}
+    });
+    return lines.join('\n').trim();
+}
+async function copyText(text){
+    if(!text)throw new Error('There is nothing to copy yet.');
+    try{await navigator.clipboard.writeText(text)}catch(_){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
+    const toast=document.createElement('div');toast.className='chad-copy-toast';toast.textContent='Conversation copied.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),1400);
+}
+async function copyConversation(c){
+    if(c&&c.id&&currentUser){const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(c.id));return copyText(conversationTextFromMessages(d.messages||[],d.conversation?.title||c.title));}
+    return copyText(visibleConversationText());
 }
 
 document.getElementById('chad-save-conversation')?.addEventListener('click', async ()=>{
@@ -6559,6 +6688,10 @@ document.getElementById('chad-save-conversation')?.addEventListener('click', asy
 document.getElementById('chad-share-conversation')?.addEventListener('click', async ()=>{
     if(!currentUser){ showSignupForFeature('share'); return; }
     await shareConversation(null);
+});
+
+document.getElementById('chad-copy-conversation')?.addEventListener('click', async ()=>{
+    try{await copyConversation(null)}catch(e){window.alert(e.message||'Could not copy that conversation.')}
 });
 
 document.getElementById('chad-share-close')?.addEventListener('click', closeShareModal);
