@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChadPDChee Developer Test — Unlimited</title>
+<title>Chad P.D. Chee</title>
 <style>
 html {
     scroll-behavior: smooth;
@@ -326,91 +326,6 @@ body {
 }
 
 
-
-/* DEVELOPER TEST PAGE */
-#chad-dev-panel{
-    width:100%;
-    max-width:900px;
-    margin:14px auto 10px;
-    padding:12px 14px;
-    border:1px solid #8dbbd7;
-    border-radius:10px;
-    background:#eef7fc;
-    font-family:Arial,Helvetica,sans-serif;
-    box-sizing:border-box
-}
-#chad-dev-panel *{box-sizing:border-box}
-.chad-dev-top{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:10px;
-    margin-bottom:9px
-}
-.chad-dev-title{
-    font-size:12px;
-    font-weight:900;
-    color:#0D5F91;
-    letter-spacing:.5px
-}
-.chad-dev-home{
-    color:#0D5F91;
-    font-size:12px;
-    font-weight:900;
-    text-decoration:none
-}
-.chad-dev-row{
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap
-}
-#chad-dev-key{
-    flex:1;
-    min-width:220px;
-    padding:9px 10px;
-    border:1px solid #9ebdce;
-    border-radius:7px;
-    background:#fff;
-    font-size:13px
-}
-#chad-dev-enable,
-#chad-dev-clear{
-    padding:9px 12px;
-    border-radius:7px;
-    font-weight:900;
-    cursor:pointer;
-    font-size:12px
-}
-#chad-dev-enable{
-    border:0;
-    background:#1677B8;
-    color:#fff
-}
-#chad-dev-clear{
-    border:1px solid #b9c8d1;
-    background:#fff;
-    color:#222
-}
-#chad-dev-status{
-    margin-top:7px;
-    color:#4d6574;
-    font-size:11px;
-    font-weight:800
-}
-body.chad-test-enabled #chad-dev-panel{
-    background:#eaf8ef;
-    border-color:#8bc49d
-}
-body.chad-test-enabled .chad-dev-title{
-    color:#176b38
-}
-@media(max-width:600px){
-    #chad-dev-panel{margin:8px auto 8px;padding:10px}
-    .chad-dev-top{align-items:flex-start}
-    #chad-dev-key{min-width:100%}
-}
-
-
 /* =========================================================
    SPONSOR BANNER — STABLE IMAGE + MOBILE TEXT FIX
    ========================================================= */
@@ -594,19 +509,11 @@ body.chad-test-enabled .chad-dev-title{
                 </span>
             </a>
 
-            <button type="button" class="chad-sidebar-row chad-placeholder-control">
-                <span class="chad-sidebar-icon">★</span>
+            <button type="button" id="chad-menu-chat-credits" class="chad-sidebar-row">
+                <span class="chad-sidebar-icon">✦</span>
                 <span>
-                    <strong>Upgrade</strong>
-                    <small>Plans coming soon</small>
-                </span>
-            </button>
-
-            <button type="button" class="chad-sidebar-row chad-placeholder-control">
-                <span class="chad-sidebar-icon">▣</span>
-                <span>
-                    <strong>Billing</strong>
-                    <small>Coming soon</small>
+                    <strong>Get Chat Credits</strong>
+                    <small>Buy prepaid chats · never expire</small>
                 </span>
             </button>
         </div>
@@ -633,24 +540,6 @@ body.chad-test-enabled .chad-dev-title{
 
             <button type="button" id="chad-mobile-new" aria-label="New project">＋</button>
         </header>
-
-        <div id="chad-dev-panel">
-            <div class="chad-dev-top">
-                <div class="chad-dev-title">DEVELOPER TEST PAGE — UNLIMITED QUESTIONS</div>
-                <a class="chad-dev-home" href="/admin.html">Admin Home →</a>
-            </div>
-            <div class="chad-dev-row">
-                <input
-                    id="chad-dev-key"
-                    type="password"
-                    placeholder="Admin test key"
-                    autocomplete="off"
-                >
-                <button id="chad-dev-enable" type="button">ENABLE TEST MODE</button>
-                <button id="chad-dev-clear" type="button">CLEAR KEY</button>
-            </div>
-            <div id="chad-dev-status"></div>
-        </div>
 
         <div id="chad-app">
 
@@ -4361,16 +4250,6 @@ body {
                 window.CHADPDG_DEV.devToken;
         }
 
-        const adminTestKey =
-            sessionStorage.getItem('chad_admin_key') ||
-            sessionStorage.getItem('chadpdg_admin_test_key') ||
-            '';
-
-        if (adminTestKey) {
-            headers['X-Chad-Admin-Key'] =
-                adminTestKey;
-        }
-
         return headers;
     }
 
@@ -6475,6 +6354,10 @@ loadMe();
    try{button.disabled=true;status.textContent='Sending you to PayPal…';const r=await fetch('/wp-json/chadpgt/v1/chat-packs/checkout/create',{method:'POST',credentials:'same-origin',headers:headers(),body:JSON.stringify({pack_id:packId})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Could not start checkout.');sessionStorage.setItem('chad_chat_purchase',d.purchase_id);location.href=d.approval_url;}catch(e){status.textContent=e.message;button.disabled=false;}
  }
  window.CHAD_OPEN_CHAT_PACKS=async()=>{modal.classList.add('open');try{await load()}catch(e){status.textContent=e.message||'Could not load chat packs.'}};
+ document.getElementById('chad-menu-chat-credits')?.addEventListener('click',()=>{
+   document.body.classList.remove('chad-menu-open');
+   window.CHAD_OPEN_CHAT_PACKS?.();
+ });
  document.getElementById('chad-pack-close')?.addEventListener('click',()=>modal.classList.remove('open'));
  modal?.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
  async function finishReturn(){
@@ -6495,67 +6378,6 @@ loadMe();
   <span aria-hidden="true"> · </span>
   <a href="/privacy.html" style="color:inherit">Privacy Policy</a>
 </div>
-
-
-
-<script>
-(function(){
-    'use strict';
-
-    const PRIMARY_KEY='chad_admin_key';
-    const LEGACY_KEY='chadpdg_admin_test_key';
-
-    function currentKey(){
-        return sessionStorage.getItem(PRIMARY_KEY) ||
-               sessionStorage.getItem(LEGACY_KEY) ||
-               '';
-    }
-
-    function refreshDevPanel(){
-        const input=document.getElementById('chad-dev-key');
-        const status=document.getElementById('chad-dev-status');
-        if(!input||!status)return;
-
-        const key=currentKey();
-        input.value=key;
-
-        if(key){
-            document.body.classList.add('chad-test-enabled');
-            status.textContent='Test mode enabled. Chad requests use the admin bypass, so public daily question limits do not apply.';
-        }else{
-            document.body.classList.remove('chad-test-enabled');
-            status.textContent='Enter your admin test key to enable unlimited testing.';
-        }
-    }
-
-    window.addEventListener('DOMContentLoaded',function(){
-        const input=document.getElementById('chad-dev-key');
-        const enable=document.getElementById('chad-dev-enable');
-        const clear=document.getElementById('chad-dev-clear');
-
-        refreshDevPanel();
-
-        enable.addEventListener('click',function(){
-            const value=input.value.trim();
-
-            if(!value){
-                document.getElementById('chad-dev-status').textContent='Enter the admin test key first.';
-                return;
-            }
-
-            sessionStorage.setItem(PRIMARY_KEY,value);
-            sessionStorage.setItem(LEGACY_KEY,value);
-            refreshDevPanel();
-        });
-
-        clear.addEventListener('click',function(){
-            sessionStorage.removeItem(PRIMARY_KEY);
-            sessionStorage.removeItem(LEGACY_KEY);
-            refreshDevPanel();
-        });
-    });
-})();
-</script>
 
 </body>
 </html>
