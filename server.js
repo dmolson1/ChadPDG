@@ -6695,6 +6695,213 @@ async function handleAdminAdSettingsSave(req, res) {
 }
 
 
+
+/*
+ * ============================================================
+ * CHADPDCHEE LIVE VOICE — GPT-LIVE-1 / WEBRTC
+ * ============================================================
+ * Browser microphone/audio travels directly over WebRTC.
+ * The OpenAI API key never leaves this server.
+ */
+async function handleVoiceSession(req, res) {
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) return;
+
+    const sdp = typeof req.body?.sdp === "string" ? req.body.sdp.trim() : "";
+    if (!sdp) {
+        return res.status(400).json({ success: false, error: "A voice connection offer is required." });
+    }
+    if (sdp.length > 80_000) {
+        return res.status(413).json({ success: false, error: "That voice connection request is too large." });
+    }
+    if (!process.env.OPENAI_API_KEY) {
+        return res.status(503).json({ success: false, error: "Voice chat is not configured yet." });
+    }
+
+    const burstOk = await claimBurst("voice_session", `user:${user.id}`, 4, 60);
+    if (!burstOk) {
+        return res.status(429).json({
+            success: false,
+            error: "Easy there, chief. Give Chad a few seconds before starting another voice chat."
+        });
+    }
+
+    let conversationId = getConversationIdFromRequest(req);
+    let recentMemory = [];
+    let walkthrough = null;
+
+    try {
+        if (conversationId) {
+            // If this conversation began while signed out, claim it now.
+            await pool.query(
+                `UPDATE chad_conversations
+                 SET user_id = $2, updated_at = NOW()
+                 WHERE id = $1 AND user_id IS NULL`,
+                [conversationId, user.id]
+            );
+
+            const owner = await pool.query(
+                `SELECT id
+                 FROM chad_conversations
+                 WHERE id = $1 AND user_id = $2
+                 LIMIT 1`,
+                [conversationId, user.id]
+            );
+
+            if (!owner.rowCount) {
+                conversationId = "";
+            }
+        }
+
+        if (conversationId) {
+            recentMemory = await loadConversationMemory(conversationId);
+
+            const metaResult = await pool.query(
+                `SELECT message_meta
+                 FROM chad_messages
+                 WHERE conversation_id = $1
+                   AND role = 'assistant'
+                 ORDER BY id DESC
+                 LIMIT 1`,
+                [conversationId]
+            );
+
+            const meta = metaResult.rows[0]?.message_meta || {};
+            if (
+                meta.walkthrough &&
+                meta.walkthrough.offered === true &&
+                Array.isArray(meta.walkthrough.steps) &&
+                meta.walkthrough.steps.length
+            ) {
+                walkthrough = {
+                    prompt: String(meta.walkthrough.prompt || ""),
+                    steps: meta.walkthrough.steps
+                        .map(step => String(step || "").trim())
+                        .filter(Boolean)
+                        .slice(0, 20)
+                };
+            }
+        }
+    } catch (error) {
+        console.warn("Voice context load failed:", error.message);
+        recentMemory = [];
+        walkthrough = null;
+    }
+
+    const historyText = recentMemory.length
+        ? recentMemory.map(item => `${item.role === "assistant" ? "CHAD" : "USER"}: ${item.content}`).join("\n")
+        : "(No recent text-chat history is available.)";
+
+    const walkthroughText = walkthrough?.steps?.length
+        ? [
+            "ACTIVE WALKTHROUGH FROM THE CURRENT CHAT:",
+            ...walkthrough.steps.map((step, index) => `STEP ${index + 1}: ${step}`)
+          ].join("\n")
+        : "ACTIVE WALKTHROUGH: none.";
+
+    const voiceInstructions = `
+You are Chad from ChadPDChee, now speaking live with the user.
+
+PERSONALITY:
+- Chad is sarcastic, confident, mildly annoyed that the user needed help, and genuinely useful.
+- Chad sounds like a blue-collar buddy who knows what he is doing.
+- No swearing.
+- Roast the situation, not the person.
+- Do not overdo jokes. Clarity and usefulness win.
+- Speak naturally. Usually answer in 1 to 3 spoken sentences unless more detail is needed.
+- Do not read giant lists unless the user asks.
+- Never claim you performed an action you cannot actually perform.
+
+VOICE CONVERSATION:
+- This is hands-free conversation. Respond naturally to interruptions and short phrases.
+- If the user says "yes", "walk me through it", "guide me", or similar and an ACTIVE WALKTHROUGH exists, begin with Step 1.
+- During an active walkthrough, understand "next", "next step", "I'm ready", "done", "repeat", "say that again", "back", "previous", "stop", "I'm good", and normal conversational variants.
+- Give ONE walkthrough step at a time. Do not jump ahead unless asked.
+- If the user asks a question about the current step, answer it, then remain on that step until they say they are ready.
+- Important safety warnings in a walkthrough must never be skipped.
+- If there is no active walkthrough and they ask to be walked through something, help conversationally but do not pretend hidden steps exist.
+- If a task reaches a point where a reasonable DIYer should stop and use a qualified professional, say so clearly.
+
+SAFETY:
+- For electrical, gas, structural, vehicle-lifting, high-voltage, fire, or other hazardous work, prioritize safe isolation, verification, PPE, stable support, and professional help where appropriate.
+- Never encourage bypassing safety devices or working live when de-energization is the safe approach.
+
+RECENT TEXT CHAT:
+${historyText}
+
+${walkthroughText}
+`.trim();
+
+    try {
+        const openaiResponse = await fetch("https://api.openai.com/v1/live/sessions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                "Content-Type": "application/json",
+                "OpenAI-Safety-Identifier": hashValue(`voice-user:${user.id}`).slice(0, 64)
+            },
+            body: JSON.stringify({
+                session: {
+                    model: "gpt-live-1",
+                    instructions: voiceInstructions,
+                    delegation: {
+                        type: "responses",
+                        responses: {
+                            model: MODEL,
+                            instructions:
+                                "Support Chad's live spoken conversation. Use web search only when the user needs current or time-sensitive facts. Be concise and return information suitable for speech.",
+                            tools: [{ type: "web_search" }],
+                            tool_choice: "auto"
+                        }
+                    }
+                },
+                transport: {
+                    type: "webrtc",
+                    sdp
+                }
+            })
+        });
+
+        const raw = await openaiResponse.text();
+        let data = {};
+        try {
+            data = raw ? JSON.parse(raw) : {};
+        } catch {
+            data = {};
+        }
+
+        if (!openaiResponse.ok) {
+            console.error("GPT-Live session creation failed:", openaiResponse.status, raw.slice(0, 1000));
+            return res.status(openaiResponse.status >= 400 && openaiResponse.status < 600 ? openaiResponse.status : 502).json({
+                success: false,
+                error: "Chad couldn't start voice mode. Try again in a moment."
+            });
+        }
+
+        if (!data?.transport?.sdp || !data?.session?.id) {
+            console.error("GPT-Live returned an incomplete session response.");
+            return res.status(502).json({
+                success: false,
+                error: "Chad's voice connection came back incomplete."
+            });
+        }
+
+        trackAnalyticsEvent(req, "voice_session_started", {
+            authenticated: true,
+            has_conversation: Boolean(conversationId),
+            has_walkthrough: Boolean(walkthrough?.steps?.length)
+        }).catch(() => {});
+
+        return res.status(201).json(data);
+    } catch (error) {
+        console.error("Voice session error:", error);
+        return res.status(502).json({
+            success: false,
+            error: "Chad couldn't open the voice line. Try again in a moment."
+        });
+    }
+}
+
 function registerBoth(method, path, ...handlers) {
     app[method](path, ...handlers);
     app[method](`/wp-json/chadpgt/v1${path}`, ...handlers);
@@ -6771,6 +6978,7 @@ registerBoth("post", "/pro/redeem", handleRedeemProCode);
 registerBoth("post", "/admin/pro-codes/create", handleAdminCreateProCodes);
 registerBoth("get", "/admin/pro-codes", handleAdminListProCodes);
 registerBoth("post", "/admin/analytics/reset", handleAdminResetAnalytics);
+registerBoth("post", "/voice/session", handleVoiceSession);
 registerBoth("post", "/translate", handleTranslate);
 registerBoth("post", "/ask", handleAsk);
 registerBoth("post", "/shopping-list", handleShoppingList);
