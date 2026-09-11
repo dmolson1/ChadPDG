@@ -749,6 +749,12 @@ body.chad-test-enabled .chad-dev-title{
 
     </div>
 
+        <div id="chad-human-check-notice" class="chad-human-check-notice" role="status" aria-live="assertive" hidden>
+            <button type="button" id="chad-human-check-jump" class="chad-human-check-jump">
+                HUMAN CHECK REQUIRED — TAP HERE TO CONTINUE
+            </button>
+        </div>
+
         <div id="chad-turnstile"></div>
 
         <div id="chad-question-limit" aria-live="polite"></div>
@@ -1474,6 +1480,31 @@ body.chad-test-enabled .chad-dev-title{
 #chad-turnstile {
     min-height: 0;
     margin-top: 8px;
+}
+
+.chad-human-check-notice {
+    margin-top: 10px;
+}
+
+.chad-human-check-jump {
+    width: 100%;
+    border: 2px solid #111;
+    border-radius: 8px;
+    padding: 11px 12px;
+    font: inherit;
+    font-weight: 900;
+    cursor: pointer;
+    background: #fff3a6;
+    color: #111;
+}
+
+@media (max-width: 820px) {
+    .chad-human-check-notice:not([hidden]) {
+        display: block !important;
+        position: sticky;
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        z-index: 50;
+    }
 }
 
 
@@ -2611,6 +2642,24 @@ body {
     let dailyLimitLocked = false;
 
 
+    function setHumanCheckNotice(show) {
+        const notice = document.getElementById('chad-human-check-notice');
+        if (!notice) return;
+        notice.hidden = !show;
+    }
+
+    function jumpToHumanCheck() {
+        const target = document.getElementById('chad-turnstile');
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    const humanCheckJump = document.getElementById('chad-human-check-jump');
+    if (humanCheckJump) {
+        humanCheckJump.addEventListener('click', jumpToHumanCheck);
+    }
+
+
     function initializeTurnstile() {
 
         if (
@@ -2653,8 +2702,20 @@ body {
                     theme:
                         'auto',
 
+                    'before-interactive-callback':
+                        function () {
+                            setHumanCheckNotice(true);
+                        },
+
+                    'after-interactive-callback':
+                        function () {
+                            setHumanCheckNotice(false);
+                        },
+
                     callback:
                         function (token) {
+
+                            setHumanCheckNotice(false);
 
                             if (turnstileResolve) {
 
@@ -2675,6 +2736,8 @@ body {
 
                     'error-callback':
                         function () {
+
+                            setHumanCheckNotice(false);
 
                             if (turnstileReject) {
 
@@ -2804,6 +2867,8 @@ body {
 
 
     function resetTurnstile() {
+
+        setHumanCheckNotice(false);
 
         if (
             turnstileWidgetId !== null &&
