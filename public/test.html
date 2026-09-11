@@ -7543,11 +7543,15 @@ loadMe();
             return;
         }
 
-        if(typeof currentUser === 'undefined' || !currentUser){
-            setStatus('Sign in to use live voice chat.');
-            if(typeof openAuth === 'function'){
-                openAuth('signin');
-                if(typeof msg === 'function') msg('Sign in first, then tap the microphone to talk to Chad.','success');
+        const adminTestKey =
+            sessionStorage.getItem('chad_admin_key') ||
+            sessionStorage.getItem('chadpdg_admin_test_key') ||
+            '';
+
+        if((typeof currentUser === 'undefined' || !currentUser) && !adminTestKey){
+            setStatus('Enable Test Mode or sign in to use live voice chat.');
+            if(typeof msg === 'function'){
+                msg('Enable Test Mode above, or sign in, then tap the microphone again.','success');
             }
             return;
         }
