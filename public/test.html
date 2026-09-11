@@ -7497,7 +7497,7 @@ loadMe();
     }
     function handleVoiceEvent(event){
         if(!event || !event.type) return;
-        if(event.type === 'session.started'){
+        if(event.type === 'session.started' || event.type === 'session.created' || event.type === 'session.updated'){
             liveReady = true;
             finalizing = false;
             setLiveVisual(true);
@@ -7505,13 +7505,13 @@ loadMe();
             startTimer();
             return;
         }
-        if(event.type === 'session.input_transcript.delta'){
+        if(event.type === 'session.input_transcript.delta' || event.type === 'conversation.item.input_audio_transcription.delta'){
             heardText = (heardText + String(event.delta || '')).slice(-140);
             const clean = heardText.trim();
             if(clean) setStatus('Heard you: “' + clean + '”');
             return;
         }
-        if(event.type === 'session.output_transcript.delta'){
+        if(event.type === 'session.output_transcript.delta' || event.type === 'response.audio_transcript.delta' || event.type === 'response.output_audio_transcript.delta'){
             chadText = (chadText + String(event.delta || '')).slice(-140);
             const clean = chadText.trim();
             if(clean) setStatus('Chad: “' + clean + '”');
@@ -7647,18 +7647,10 @@ loadMe();
         const endButton = el('chad-live-voice-end');
         if(endButton) endButton.disabled = true;
 
-        if(liveReady && events && events.readyState === 'open'){
-            finalizing = true;
-            setStatus('Ending voice chat…');
-            try{ events.send(JSON.stringify({type:'session.close'})); }catch(_){}
-            closeTimer = setTimeout(function(){
-                cleanupVoice('Voice chat ended.');
-                if(endButton) endButton.disabled = false;
-            },15000);
-        }else{
-            cleanupVoice('Voice chat ended.');
-            if(endButton) endButton.disabled = false;
-        }
+        finalizing = true;
+        setStatus('Ending voice chat…');
+        cleanupVoice('Voice chat ended.');
+        if(endButton) endButton.disabled = false;
     }
     function toggleMute(){
         if(!microphone) return;
