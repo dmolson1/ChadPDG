@@ -198,6 +198,58 @@ app.get("/reset-password", (req, res) => {
 });
 
 
+
+/* ============================================================
+   OWNER DASHBOARD — CUSTOMERS / REVENUE / PRO CODES
+   ============================================================ */
+app.get("/admin/owner-dashboard", requireAdmin, async (req, res) => {
+    try {
+        const [summaryResult, customersResult, purchasesResult, codesResult, redemptionsResult] = await Promise.all([
+            pool.query(`
+                SELECT
+                  (SELECT COUNT(*)::int FROM chad_users WHERE deleted_at IS NULL) registered_users,
+                  (SELECT COUNT(DISTINCT u.id)::int FROM chad_users u JOIN chad_pro_redemptions r ON r.user_id=u.id WHERE u.deleted_at IS NULL AND r.pro_until>NOW()) active_pro_users,
+                  (SELECT COUNT(DISTINCT user_id)::int FROM chad_chat_credit_purchases WHERE paid_at IS NOT NULL AND refunded_at IS NULL) paying_customers,
+                  (SELECT COALESCE(SUM(amount_usd),0)::numeric(12,2) FROM chad_chat_credit_purchases WHERE paid_at IS NOT NULL AND refunded_at IS NULL) revenue_usd,
+                  (SELECT COALESCE(SUM(credits),0)::bigint FROM chad_chat_credit_purchases WHERE paid_at IS NOT NULL AND refunded_at IS NULL) chats_sold,
+                  (SELECT COUNT(*)::int FROM chad_pro_codes) pro_codes_generated,
+                  (SELECT COALESCE(SUM(redemption_count),0)::bigint FROM chad_pro_codes) pro_codes_claimed
+            `),
+            pool.query(`
+                SELECT u.id,u.email,COALESCE(u.display_name,'') display_name,u.email_verified,u.plan,u.created_at,u.last_login_at,
+                  (SELECT MAX(r.pro_until) FROM chad_pro_redemptions r WHERE r.user_id=u.id) pro_until,
+                  COALESCE((SELECT SUM(l.delta) FROM chad_chat_credit_ledger l WHERE l.user_id=u.id),0)::bigint credit_balance,
+                  COALESCE((SELECT SUM(p.amount_usd) FROM chad_chat_credit_purchases p WHERE p.user_id=u.id AND p.paid_at IS NOT NULL AND p.refunded_at IS NULL),0)::numeric(12,2) total_spent_usd,
+                  COALESCE((SELECT COUNT(*) FROM chad_chat_credit_purchases p WHERE p.user_id=u.id AND p.paid_at IS NOT NULL AND p.refunded_at IS NULL),0)::int purchase_count
+                FROM chad_users u WHERE u.deleted_at IS NULL ORDER BY u.created_at DESC LIMIT 500
+            `),
+            pool.query(`
+                SELECT p.pack_id,p.credits,p.amount_usd,p.status,p.paid_at,p.refunded_at,p.created_at,u.email,COALESCE(u.display_name,'') display_name
+                FROM chad_chat_credit_purchases p JOIN chad_users u ON u.id=p.user_id
+                ORDER BY COALESCE(p.paid_at,p.created_at) DESC LIMIT 250
+            `),
+            pool.query(`
+                SELECT id,code_prefix,duration_days,max_redemptions,redemption_count,note,expires_at,disabled_at,created_at
+                FROM chad_pro_codes ORDER BY created_at DESC LIMIT 250
+            `),
+            pool.query(`
+                SELECT c.code_prefix,c.note,c.duration_days,u.email,COALESCE(u.display_name,'') display_name,r.redeemed_at,r.pro_until
+                FROM chad_pro_redemptions r JOIN chad_pro_codes c ON c.id=r.code_id JOIN chad_users u ON u.id=r.user_id
+                ORDER BY r.redeemed_at DESC LIMIT 250
+            `)
+        ]);
+        const x=summaryResult.rows[0]||{}, pc=Number(x.paying_customers||0), rev=Number(x.revenue_usd||0);
+        res.json({
+          ok:true,generated_at:new Date().toISOString(),
+          summary:{registered_users:Number(x.registered_users||0),active_pro_users:Number(x.active_pro_users||0),paying_customers:pc,revenue_usd:rev,chats_sold:Number(x.chats_sold||0),pro_codes_generated:Number(x.pro_codes_generated||0),pro_codes_claimed:Number(x.pro_codes_claimed||0),average_customer_spend_usd:pc?Number((rev/pc).toFixed(2)):0},
+          customers:customersResult.rows,purchases:purchasesResult.rows,pro_codes:codesResult.rows,pro_redemptions:redemptionsResult.rows
+        });
+    } catch(error) {
+        console.error("Owner dashboard error:",error);
+        res.status(500).json({ok:false,error:"Could not load owner dashboard."});
+    }
+});
+
 /* ============================================================
    PRIVATE ADMIN / ANALYTICS PAGES
    ------------------------------------------------------------
@@ -228,7 +280,10 @@ const PRIVATE_ADMIN_PAGE_PATHS = new Set([
     "/sponsor-admin.html",
     "/sponsor-leads",
     "/sponsor-leads/",
-    "/sponsor-leads.html"
+    "/sponsor-leads.html",
+    "/customers-revenue",
+    "/customers-revenue/",
+    "/customers-revenue.html"
 ]);
 
 function requirePrivateAdminPage(req, res, next) {
