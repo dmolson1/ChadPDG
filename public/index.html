@@ -1,8 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="chad-build" content="20260912-2">
 <title>Chad P.D. Chee</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#111111">
@@ -7001,7 +7003,11 @@ body {
                             analytics_visitor:
                                 analyticsVisitorId,
                             stream: true,
-                            image_data_url: imageDataUrl || ''
+                            image_data_url: imageDataUrl || '',
+                            conversation_id:
+                                (typeof window.CHADPDG_GET_CURRENT_CONVERSATION_ID === 'function')
+                                    ? (window.CHADPDG_GET_CURRENT_CONVERSATION_ID() || '')
+                                    : ''
                         })
                     }
                 );
@@ -7169,6 +7175,18 @@ body {
 
             analyticsToken =
                 data.analytics_token || '';
+
+            /*
+             * A successful answer has already been persisted by the backend.
+             * Sync the returned conversation id into the account/history UI
+             * immediately so signed-in projects appear without a manual Save.
+             */
+            if (
+                data.conversation_id &&
+                typeof window.CHADPDG_CONVERSATION_UPDATED === 'function'
+            ) {
+                window.CHADPDG_CONVERSATION_UPDATED(data.conversation_id);
+            }
 
             addChadResponse(
                 data,
@@ -7591,7 +7609,7 @@ async function loadMe(){try{const d=await api('/auth/me');currentUser=d.authenti
 function closeRecentMenus(){document.querySelectorAll('.chad-recent-menu').forEach(m=>m.hidden=true)}
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
-async function saveConversation(c){const suggested=(c&&c.title)||'My Chad Project';const title=window.prompt('Give this conversation a title',suggested);if(title===null)return null;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return null;try{const d=await api('/account/conversations/save',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||'',title:clean}));currentConversationId=d.conversation?.id||currentConversationId;await loadRecent();return d.conversation}catch(e){window.alert(e.message||'Could not save that conversation.');return null}}
+async function saveConversation(c){try{const d=await api('/account/conversations/save',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||'',title:(c&&c.title)||''}));currentConversationId=d.conversation?.id||currentConversationId;await loadRecent();return d.conversation}catch(e){window.alert(e.message||'Could not save that conversation.');return null}}
 let activeShareConversationId=null,activeShareTitle='';
 function openShareModal(url,title,id){activeShareConversationId=id||currentConversationId||null;activeShareTitle=title||'ChadPDChee conversation';const overlay=document.getElementById('chad-share-overlay'),input=document.getElementById('chad-share-url'),status=document.getElementById('chad-share-status');if(input)input.value=url||'';if(status)status.textContent='';if(overlay)overlay.hidden=false}
 function closeShareModal(){const overlay=document.getElementById('chad-share-overlay');if(overlay)overlay.hidden=true}
@@ -7606,6 +7624,13 @@ window.CHADPDG_SHARE_CURRENT_CONVERSATION = function(){
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
 async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
+/* Keep the live chat and account/history UI on the same conversation. */
+window.CHADPDG_GET_CURRENT_CONVERSATION_ID=function(){return currentConversationId||''};
+window.CHADPDG_CONVERSATION_UPDATED=function(id){
+    if(id) currentConversationId=id;
+    if(currentUser) loadRecent();
+};
+
 function historyUser(text){const w=document.createElement('div');w.className='chad-message chad-user';w.innerHTML='<div class="chad-user-content"><div class="chad-user-name">Hammered Handyman:</div><div class="chad-user-bubble">'+esc(text)+'</div></div><img class="chad-user-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Hammered-Handyman-Avatar.png" alt="Hammered Handyman">';chat.appendChild(w)}
 function historyChad(text,meta){const w=document.createElement('div');w.className='chad-message chad-answer-wrapper';const walkthrough=meta&&meta.walkthrough?meta.walkthrough:null;const offer=(window.CHADPDG_BUILD_WALKTHROUGH&&walkthrough)?window.CHADPDG_BUILD_WALKTHROUGH(walkthrough):'';w.innerHTML='<img class="chad-avatar" src="https://hammeredhandyman.com/wp-content/uploads/2026/09/Chadpdchee-avatar.png" alt="Chad"><div class="chad-name">Chad:</div><div class="chad-answer">'+esc(text).replace(/\n/g,'<br>')+'</div><div class="chad-after-answer">'+offer+'</div>';chat.appendChild(w);if(window.CHADPDG_BIND_WALKTHROUGH&&walkthrough)window.CHADPDG_BIND_WALKTHROUGH(w,walkthrough);if(window.ensureChadMessageActions)window.ensureChadMessageActions(w)}
 async function openConversation(id){try{await api('/account/conversations/select',jsonOptions('POST',{conversation_id:id}));const d=await api('/account/conversations/messages?conversation_id='+encodeURIComponent(id));currentConversationId=id;chat.innerHTML='';chat.classList.add('chad-chat-visible');(d.messages||[]).forEach(m=>{if(m.role==='user')historyUser(m.content||'',m.image_data_url||'');if(m.role==='assistant')historyChad(m.content||'',m.message_meta||null)});if(!d.messages||!d.messages.length)chat.innerHTML='<div class="chad-history-note">This project is empty. Impressive efficiency.</div>';document.body.classList.remove('chad-menu-open');window.scrollTo({top:Math.max(0,chat.offsetTop-20),behavior:'smooth'});await loadRecent()}catch(e){window.alert(e.message||'Could not open that project.')}}
@@ -7655,7 +7680,7 @@ document.querySelectorAll('.chad-inline-policy').forEach(b=>b.addEventListener('
 document.getElementById('chad-policy-back')?.addEventListener('click',()=>setView('signup'));
 
 [document.getElementById('chad-sidebar-new'),document.getElementById('chad-mobile-new')].forEach(b=>b&&b.addEventListener('click',()=>{currentConversationId=null;closeRecentMenus();if(currentUser){loadRecent();setTimeout(loadRecent,700)}}));
-document.getElementById('chad-ask')?.addEventListener('click',()=>{if(currentUser)setTimeout(loadRecent,4500)});
+document.getElementById('chad-ask')?.addEventListener('click',()=>{if(currentUser)setTimeout(loadRecent,12000)});
 document.addEventListener('click',e=>{if(!e.target.closest('.chad-recent-menu-wrap'))closeRecentMenus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('chad-auth-open'))closeAuth()});
 
@@ -7940,7 +7965,7 @@ loadMe();
     window.addEventListener('load', async function(){
       try {
         const registration = await navigator.serviceWorker.register(
-          '/service-worker.js?v=20260912-1',
+          '/service-worker.js?v=20260912-2',
           { scope: '/', updateViaCache: 'none' }
         );
 
@@ -7951,18 +7976,56 @@ loadMe();
         // so the Home Screen app immediately gets the current interface.
         navigator.serviceWorker.addEventListener('controllerchange', function(){
           try {
-            if(sessionStorage.getItem('chad_pwa_reloaded_20260912-1') === '1') return;
-            sessionStorage.setItem('chad_pwa_reloaded_20260912-1', '1');
+            if(sessionStorage.getItem('chad_pwa_reloaded_20260912-2') === '1') return;
+            sessionStorage.setItem('chad_pwa_reloaded_20260912-2', '1');
           } catch(_) {}
           window.location.reload();
         });
 
-        // iOS PWAs can sit suspended for a long time. Re-check when the app
-        // comes back to the foreground.
-        document.addEventListener('visibilitychange', function(){
-          if(document.visibilityState === 'visible'){
-            try { registration.update(); } catch(_) {}
+        // iOS Home Screen apps can resume an old suspended copy of index.html.
+        // Check both the service worker AND the live page build when Chad comes
+        // back to the foreground. Reload only when a newer build is actually live,
+        // so switching apps does not wipe out an active conversation.
+        let chadBuildCheckBusy = false;
+        async function checkForFreshChadBuild(){
+          if(chadBuildCheckBusy) return;
+          chadBuildCheckBusy = true;
+          try {
+            try { await registration.update(); } catch(_) {}
+
+            if(!isStandalone()) return;
+            const localBuild = document.querySelector('meta[name="chad-build"]')?.content || '';
+            if(!localBuild) return;
+
+            const checkUrl = new URL(window.location.href);
+            checkUrl.searchParams.set('_chad_build_check', Date.now().toString());
+            const response = await fetch(checkUrl.toString(), {
+              method: 'GET',
+              cache: 'no-store',
+              credentials: 'same-origin',
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            if(!response.ok) return;
+
+            const html = await response.text();
+            const match = html.match(/<meta\s+name=["']chad-build["']\s+content=["']([^"']+)["']/i)
+                       || html.match(/<meta\s+content=["']([^"']+)["']\s+name=["']chad-build["']/i);
+            const liveBuild = match ? match[1] : '';
+            if(liveBuild && liveBuild !== localBuild){
+              window.location.reload();
+            }
+          } catch(_) {
+            // If the phone is offline or Safari is being Safari, leave the app alone.
+          } finally {
+            chadBuildCheckBusy = false;
           }
+        }
+
+        document.addEventListener('visibilitychange', function(){
+          if(document.visibilityState === 'visible') checkForFreshChadBuild();
+        });
+        window.addEventListener('pageshow', function(event){
+          if(event.persisted) checkForFreshChadBuild();
         });
       } catch(_) {}
     });
