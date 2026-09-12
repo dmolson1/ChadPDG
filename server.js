@@ -1887,8 +1887,8 @@ function amazonCreatorsProductFromItem(item, candidate) {
 }
 
 async function resolveAmazonCreatorsProducts(candidates) {
-    if (!amazonCreatorsConfigured() || !Array.isArray(candidates) || !candidates.length) {
-        return { products: [], status: amazonCreatorsConfigured() ? "no_candidates" : "not_configured" };
+    if (!Array.isArray(candidates) || !candidates.length) {
+        return { products: [], status: "no_candidates" };
     }
 
     const cleaned = candidates
@@ -1903,6 +1903,14 @@ async function resolveAmazonCreatorsProducts(candidates) {
         .slice(0, 4);
 
     if (!cleaned.length) return { products: [], status: "no_candidates" };
+
+    if (!amazonCreatorsConfigured()) {
+        const fallbackProducts = amazonFallbackProducts(cleaned);
+        return {
+            products: fallbackProducts,
+            status: fallbackProducts.length ? "fallback_search" : "not_configured"
+        };
+    }
 
     const settled = await Promise.allSettled(
         cleaned.map(async candidate => {
