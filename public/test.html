@@ -2123,6 +2123,33 @@ body {
     background: #fff;
 }
 
+.chad-shopping-product-main {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.chad-shopping-product-image {
+    width: 76px;
+    height: 76px;
+    flex: 0 0 76px;
+    object-fit: contain;
+    border-radius: 7px;
+    background: #fff;
+}
+
+.chad-shopping-product-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.chad-shopping-product-price {
+    margin-top: 5px;
+    font-size: 13px;
+    font-weight: 900;
+    color: #111;
+}
+
 .chad-shopping-product-label {
     font-size: 11px;
     font-weight: 900;
@@ -4935,16 +4962,44 @@ body {
             product.description ||
             '';
 
+        const imageUrl =
+            product.image_url ||
+            '';
+
+        const price =
+            product.price ||
+            '';
+
         return (
             '<div class="chad-shopping-product">' +
 
             '<div class="chad-shopping-product-label">' +
-            'CHAD’S AFFILIATE PICKS' +
+            'CHAD’S AMAZON PICK' +
             '</div>' +
+
+            '<div class="chad-shopping-product-main">' +
+
+            (
+                imageUrl
+                ? '<img class="chad-shopping-product-image" src="' +
+                  escapeHtml(imageUrl) +
+                  '" alt="" loading="lazy">'
+                : ''
+            ) +
+
+            '<div class="chad-shopping-product-copy">' +
 
             '<div class="chad-shopping-product-name">' +
             escapeHtml(name) +
             '</div>' +
+
+            (
+                price
+                ? '<div class="chad-shopping-product-price">' +
+                  escapeHtml(price) +
+                  '</div>'
+                : ''
+            ) +
 
             (
                 description
@@ -4966,9 +5021,11 @@ body {
             'data-chad-product="' +
             escapeHtml(name) +
             '">' +
-            'VIEW ON AMAZON →' +
+            'VIEW ON AMAZON.CA →' +
             '</a>' +
 
+            '</div>' +
+            '</div>' +
             '</div>'
         );
     }
@@ -5264,6 +5321,14 @@ body {
                 buildSources(
                     data.citations || []
                 );
+
+            if (data.amazon_picks_status) {
+                output +=
+                    '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbb;font-size:11px;font-weight:800;color:#666;">' +
+                    'TEST ONLY — AMAZON CREATORS API: ' +
+                    escapeHtml(String(data.amazon_picks_status).toUpperCase()) +
+                    '</div>';
+            }
 
             resultBox.innerHTML =
                 output;
