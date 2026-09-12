@@ -202,7 +202,13 @@ app.get("/reset-password", (req, res) => {
 /* ============================================================
    OWNER DASHBOARD — CUSTOMERS / REVENUE / PRO CODES
    ============================================================ */
-app.get("/admin/owner-dashboard", requireAdmin, async (req, res) => {
+app.get("/admin/owner-dashboard", async (req, res) => {
+    if (!isAdminTestRequest(req)) {
+        return res.status(401).json({
+            ok: false,
+            error: "Admin key required."
+        });
+    }
     try {
         const [summaryResult, customersResult, purchasesResult, codesResult, redemptionsResult] = await Promise.all([
             pool.query(`
