@@ -1503,6 +1503,13 @@ async function getAmazonCreatorsAccessToken(forceRefresh = false) {
         return amazonCreatorsTokenCache.accessToken;
     }
 
+    console.log("[Amazon Creators] Requesting OAuth token.", {
+        version: AMAZON_CREATORS_VERSION,
+        marketplace: AMAZON_CREATORS_MARKETPLACE,
+        credentialConfigured: Boolean(AMAZON_CREATORS_CREDENTIAL_ID),
+        secretConfigured: Boolean(AMAZON_CREATORS_SECRET)
+    });
+
     const response = await fetch(amazonCreatorsTokenEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1522,6 +1529,11 @@ async function getAmazonCreatorsAccessToken(forceRefresh = false) {
             data?.message ||
             data?.error ||
             `Amazon token request failed (${response.status}).`;
+        console.error("[Amazon Creators] OAuth token failed.", {
+            status: response.status,
+            error: data?.error || "",
+            description: data?.error_description || data?.message || ""
+        });
         const error = new Error(message);
         error.status = response.status;
         error.code = "AMAZON_CREATORS_TOKEN_FAILED";
@@ -1534,6 +1546,7 @@ async function getAmazonCreatorsAccessToken(forceRefresh = false) {
         expiresAt: Date.now() + expiresIn * 1000
     };
 
+    console.log("[Amazon Creators] OAuth token OK.", { expiresIn });
     return data.access_token;
 }
 
@@ -1572,6 +1585,11 @@ async function searchAmazonCreators(query, searchIndex = "All", retryAuth = true
     if (!keywords) return [];
 
     const accessToken = await getAmazonCreatorsAccessToken(false);
+    console.log("[Amazon Creators] SearchItems request.", {
+        query: keywords,
+        searchIndex: cleanAmazonSearchIndex(searchIndex),
+        marketplace: AMAZON_CREATORS_MARKETPLACE
+    });
     const response = await fetch(`${AMAZON_CREATORS_API_BASE}/catalog/v1/searchItems`, {
         method: "POST",
         headers: {
@@ -1609,13 +1627,24 @@ async function searchAmazonCreators(query, searchIndex = "All", retryAuth = true
             data?.message ||
             data?.error ||
             `Amazon Creators API request failed (${response.status}).`;
+        console.error("[Amazon Creators] SearchItems failed.", {
+            status: response.status,
+            code: apiError?.code || data?.code || "",
+            message
+        });
         const error = new Error(message);
         error.status = response.status;
-        error.code = apiError?.code || "AMAZON_CREATORS_SEARCH_FAILED";
+        error.code = apiError?.code || data?.code || "AMAZON_CREATORS_SEARCH_FAILED";
         throw error;
     }
 
-    return Array.isArray(data?.searchResult?.items) ? data.searchResult.items : [];
+    const items = Array.isArray(data?.searchResult?.items) ? data.searchResult.items : [];
+    console.log("[Amazon Creators] SearchItems OK.", {
+        query: keywords,
+        results: items.length,
+        totalResultCount: Number(data?.searchResult?.totalResultCount || 0)
+    });
+    return items;
 }
 
 function amazonCreatorsProductFromItem(item, candidate) {
