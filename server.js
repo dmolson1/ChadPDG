@@ -197,6 +197,97 @@ app.get("/reset-password", (req, res) => {
     res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset ChadPDChee Password</title></head><body style="font-family:Arial,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0"><main style="width:min(92vw,520px);padding:32px"><h1>Reset password</h1><form id="f"><label>New password<br><input id="p" type="password" minlength="8" maxlength="128" required style="width:100%;box-sizing:border-box;padding:12px;margin:8px 0 16px"></label><button style="padding:12px 18px">Set new password</button></form><p id="msg"></p><script>document.getElementById('f').addEventListener('submit',async(e)=>{e.preventDefault();const msg=document.getElementById('msg');msg.textContent='Resetting...';try{const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)},password:document.getElementById('p').value})});const d=await r.json();msg.textContent=d.success?'Password changed. You can return to ChadPDChee and sign in.':(d.error||'Reset failed.');if(d.success)e.target.remove();}catch(err){msg.textContent='Reset failed. Please try again.';}});</script></main></body></html>`);
 });
 
+
+/* ============================================================
+   PRIVATE ADMIN / ANALYTICS PAGES
+   ------------------------------------------------------------
+   These files still live in /public for easy deployment, but they
+   are intercepted BEFORE express.static so the public cannot open
+   them without the existing CHAD_ADMIN_TEST_KEY.
+
+   Browser login:
+     Username: admin
+     Password: CHAD_ADMIN_TEST_KEY
+
+   The browser normally remembers this for the session, so links
+   between the admin pages continue to work without repeated prompts.
+   ============================================================ */
+
+const PRIVATE_ADMIN_PAGE_PATHS = new Set([
+    "/admin",
+    "/admin/",
+    "/admin.html",
+    "/analytics",
+    "/analytics/",
+    "/analytics.html",
+    "/admin-tools",
+    "/admin-tools/",
+    "/admin-tools.html",
+    "/sponsor-admin",
+    "/sponsor-admin/",
+    "/sponsor-admin.html",
+    "/sponsor-leads",
+    "/sponsor-leads/",
+    "/sponsor-leads.html"
+]);
+
+function requirePrivateAdminPage(req, res, next) {
+    const pathname = String(req.path || "").toLowerCase();
+
+    if (!PRIVATE_ADMIN_PAGE_PATHS.has(pathname)) {
+        return next();
+    }
+
+    // Never let search engines index internal management pages.
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+    res.setHeader("Cache-Control", "no-store, private");
+
+    if (!CHAD_ADMIN_TEST_KEY) {
+        return res.status(503).type("text").send(
+            "Admin access is not configured."
+        );
+    }
+
+    const authorization = String(req.headers.authorization || "");
+    let suppliedUser = "";
+    let suppliedPassword = "";
+
+    if (authorization.startsWith("Basic ")) {
+        try {
+            const decoded = Buffer.from(
+                authorization.slice(6),
+                "base64"
+            ).toString("utf8");
+
+            const colon = decoded.indexOf(":");
+            if (colon >= 0) {
+                suppliedUser = decoded.slice(0, colon);
+                suppliedPassword = decoded.slice(colon + 1);
+            }
+        } catch {}
+    }
+
+    const validUser = safeSecretMatch(suppliedUser, "admin");
+    const validPassword = safeSecretMatch(
+        suppliedPassword,
+        CHAD_ADMIN_TEST_KEY
+    );
+
+    if (!validUser || !validPassword) {
+        res.setHeader(
+            "WWW-Authenticate",
+            'Basic realm="ChadPDChee Private Admin", charset="UTF-8"'
+        );
+        return res.status(401).type("text").send(
+            "Private ChadPDChee admin area."
+        );
+    }
+
+    next();
+}
+
+app.use(requirePrivateAdminPage);
+
 app.use(express.static("public"));
 
 const databaseUrl = process.env.DATABASE_URL
