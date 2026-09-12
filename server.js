@@ -1477,6 +1477,36 @@ function amazonCanadaUrl(asin) {
         : "";
 }
 
+function amazonCanadaSearchUrl(query) {
+    const clean = String(query || "").trim();
+    return clean
+        ? `https://www.amazon.ca/s?k=${encodeURIComponent(clean)}&tag=${encodeURIComponent(AMAZON_TAG)}`
+        : "";
+}
+
+function amazonFallbackProducts(candidates) {
+    if (!Array.isArray(candidates)) return [];
+
+    return candidates
+        .filter(candidate => candidate && candidate.item_name && candidate.search_query)
+        .slice(0, 4)
+        .map(candidate => ({
+            asin: "",
+            item_name: String(candidate.item_name || "").trim(),
+            name: String(candidate.item_name || "").trim(),
+            description:
+                String(candidate.description || "").trim() ||
+                "Search Amazon.ca for a suitable option for this job.",
+            source_url: amazonCanadaSearchUrl(candidate.search_query),
+            retailer: "Amazon.ca",
+            image_url: "",
+            price: "",
+            fallback_search: true,
+            search_query: String(candidate.search_query || "").trim()
+        }))
+        .filter(product => product.item_name && product.source_url);
+}
+
 function amazonCreatorsConfigured() {
     return Boolean(AMAZON_CREATORS_CREDENTIAL_ID && AMAZON_CREATORS_SECRET && AMAZON_TAG);
 }
@@ -1728,15 +1758,36 @@ async function resolveAmazonCreatorsProducts(candidates) {
     if (!products.length && firstError) {
         const msg = String(firstError?.message || "");
         const code = String(firstError?.code || "");
-        if (/AssociateNotEligible/i.test(msg) || /AssociateNotEligible/i.test(code)) {
-            console.warn("Amazon Creators API: Associates account is not eligible yet.");
-            return { products: [], status: "not_eligible" };
+        const fallbackProducts = amazonFallbackProducts(cleaned);
+
+        if (
+            /AssociateNotEligible/i.test(msg) ||
+            /AssociateNotEligible/i.test(code) ||
+            Number(firstError?.status || 0) === 403
+        ) {
+            console.warn("Amazon Creators API: Associates account is not eligible yet. Using tagged Amazon.ca search links.");
+            return {
+                products: fallbackProducts,
+                status: fallbackProducts.length ? "fallback_search" : "not_eligible"
+            };
         }
+
         console.warn("Amazon Creators API lookup failed:", msg || firstError);
-        return { products: [], status: "error" };
+        return {
+            products: fallbackProducts,
+            status: fallbackProducts.length ? "fallback_search" : "error"
+        };
     }
 
-    return { products: products.slice(0, 4), status: products.length ? "ok" : "no_results" };
+    if (!products.length) {
+        const fallbackProducts = amazonFallbackProducts(cleaned);
+        return {
+            products: fallbackProducts,
+            status: fallbackProducts.length ? "fallback_search" : "no_results"
+        };
+    }
+
+    return { products: products.slice(0, 4), status: "ok" };
 }
 
 
