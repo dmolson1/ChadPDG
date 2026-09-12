@@ -349,7 +349,27 @@ function requirePrivateAdminPage(req, res, next) {
 
 app.use(requirePrivateAdminPage);
 
-app.use(express.static("public"));
+app.use(express.static("public", {
+    setHeaders: (res, filePath) => {
+        const normalized = String(filePath || "").replace(/\\/g, "/").toLowerCase();
+
+        // The installed iPhone/Home Screen app must always revalidate the app shell.
+        if (
+            normalized.endsWith("/index.html") ||
+            normalized.endsWith("/test.html") ||
+            normalized.endsWith("/service-worker.js") ||
+            normalized.endsWith("/manifest.webmanifest")
+        ) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+        }
+
+        if (normalized.endsWith("/service-worker.js")) {
+            res.setHeader("Service-Worker-Allowed", "/");
+        }
+    }
+}));
 
 const databaseUrl = process.env.DATABASE_URL
     ? process.env.DATABASE_URL
