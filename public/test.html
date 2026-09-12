@@ -1116,6 +1116,22 @@ body {
                     rows="1"
                 ></textarea>
 
+                <!-- Native photo inputs used by the + menu. Keep these in the DOM;
+                     the buttons above trigger them programmatically. -->
+                <input
+                    type="file"
+                    id="chad-camera-input"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                >
+                <input
+                    type="file"
+                    id="chad-photo-input"
+                    accept="image/*"
+                    hidden
+                >
+
             </div>
         </div>
 
@@ -4969,7 +4985,6 @@ body {
 
         if (
             !product ||
-            !product.asin ||
             !product.source_url
         ) {
             return '';
@@ -4995,7 +5010,9 @@ body {
             '<div class="chad-shopping-product">' +
 
             '<div class="chad-shopping-product-label">' +
-            'CHAD’S AMAZON PICK' +
+            (product.fallback_search
+                ? 'CHAD’S AMAZON SEARCH'
+                : 'CHAD’S AMAZON PICK') +
             '</div>' +
 
             '<div class="chad-shopping-product-main">' +
@@ -5037,12 +5054,14 @@ body {
             'target="_blank" ' +
             'rel="noopener sponsored" ' +
             'data-chad-asin="' +
-            escapeHtml(product.asin) +
+            escapeHtml(product.asin || '') +
             '" ' +
             'data-chad-product="' +
             escapeHtml(name) +
             '">' +
-            'VIEW ON AMAZON.CA →' +
+            (product.fallback_search
+                ? 'SEARCH AMAZON.CA →'
+                : 'VIEW ON AMAZON.CA →') +
             '</a>' +
 
             '</div>' +
@@ -5200,7 +5219,6 @@ body {
                             productIndex
                         ) &&
                         product &&
-                        product.asin &&
                         product.source_url
                     );
                 }
@@ -5337,6 +5355,17 @@ body {
                     data.items || [],
                     data.products || []
                 );
+
+            if (
+                data.amazon_picks_status === 'fallback_search' &&
+                Array.isArray(data.products) &&
+                data.products.length
+            ) {
+                output +=
+                    '<div class="chad-shopping-fallback-note">' +
+                    'Amazon product matching is not unlocked on this Associates account yet, so these buttons open relevant Amazon.ca searches through the Hammered Handyman affiliate link.' +
+                    '</div>';
+            }
 
             output +=
                 buildSources(
@@ -6971,9 +7000,9 @@ body {
     }
 
     async function resizeChatPhoto(file) {
-        if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type || '')) throw new Error('Use a JPG, PNG, or WebP photo.');
+        if (!file || !/^image\//i.test(file.type || '')) throw new Error('Choose an image file.');
         const raw = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result||'')); r.onerror=()=>reject(new Error('Could not read that photo.')); r.readAsDataURL(file); });
-        const img = await new Promise((resolve,reject)=>{ const i=new Image(); i.onload=()=>resolve(i); i.onerror=()=>reject(new Error('Could not open that photo.')); i.src=raw; });
+        const img = await new Promise((resolve,reject)=>{ const i=new Image(); i.onload=()=>resolve(i); i.onerror=()=>reject(new Error('That image format could not be opened by this browser. Try a JPG, PNG, or a different photo.')); i.src=raw; });
         const maxSide=1280, scale=Math.min(1,maxSide/Math.max(img.naturalWidth||1,img.naturalHeight||1));
         const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(img.naturalWidth*scale)); canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
         canvas.getContext('2d',{alpha:false}).drawImage(img,0,0,canvas.width,canvas.height);
