@@ -7937,7 +7937,35 @@ loadMe();
   });
 
   if('serviceWorker' in navigator){
-    window.addEventListener('load', function(){ navigator.serviceWorker.register('/service-worker.js').catch(function(){}); });
+    window.addEventListener('load', async function(){
+      try {
+        const registration = await navigator.serviceWorker.register(
+          '/service-worker.js?v=20260912-1',
+          { scope: '/', updateViaCache: 'none' }
+        );
+
+        // Ask Safari/iOS to check now instead of waiting for its normal update cycle.
+        try { await registration.update(); } catch(_) {}
+
+        // If a new worker takes control while Chad is already open, refresh once
+        // so the Home Screen app immediately gets the current interface.
+        navigator.serviceWorker.addEventListener('controllerchange', function(){
+          try {
+            if(sessionStorage.getItem('chad_pwa_reloaded_20260912-1') === '1') return;
+            sessionStorage.setItem('chad_pwa_reloaded_20260912-1', '1');
+          } catch(_) {}
+          window.location.reload();
+        });
+
+        // iOS PWAs can sit suspended for a long time. Re-check when the app
+        // comes back to the foreground.
+        document.addEventListener('visibilitychange', function(){
+          if(document.visibilityState === 'visible'){
+            try { registration.update(); } catch(_) {}
+          }
+        });
+      } catch(_) {}
+    });
   }
 })();
 </script>
