@@ -1174,8 +1174,8 @@ body {
                         <input type="email" id="chad-signup-email" autocomplete="email" required>
                     </label>
                     <label>Password
-                        <input type="password" id="chad-signup-password" autocomplete="new-password" minlength="12" maxlength="128" required>
-                        <small>At least 12 characters.</small>
+                        <input type="password" id="chad-signup-password" autocomplete="new-password" minlength="8" maxlength="128" required>
+                        <small>At least 8 characters.</small>
                     </label>
 
                     <label class="chad-auth-check">
@@ -5608,24 +5608,51 @@ body {
             const text = (answer && answer.innerText ? answer.innerText : '').trim();
             if (!text) return;
 
+            let copied = false;
+
             try {
-                await navigator.clipboard.writeText(text);
-                showCopyToast('Chad response copied.');
-            } catch (error) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    copied = true;
+                }
+            } catch (_) {}
+
+            if (!copied) {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    ta.style.top = '0';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    copied = document.execCommand('copy');
+                    ta.remove();
+                } catch (_) {}
+            }
+
+            if (copied) {
+                const toast = document.createElement('div');
+                toast.className = 'chad-copy-toast';
+                toast.textContent = 'Chad response copied.';
+                document.body.appendChild(toast);
+                setTimeout(function () {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 1400);
+            } else {
                 window.alert('Could not copy that response.');
             }
         });
 
         shareButton && shareButton.addEventListener('click', function () {
-            if (!currentUser) {
-                showSignupForFeature('share');
+            if (typeof window.CHADPDG_SHARE_CURRENT_CONVERSATION === 'function') {
+                window.CHADPDG_SHARE_CURRENT_CONVERSATION();
                 return;
             }
 
-            shareConversation({
-                id: currentConversationId || '',
-                title: document.title || 'ChadPDChee conversation'
-            });
+            window.alert('Sharing is still loading. Give Chad half a second and try again.');
         });
     }
 
@@ -7462,6 +7489,13 @@ let activeShareConversationId=null,activeShareTitle='';
 function openShareModal(url,title,id){activeShareConversationId=id||currentConversationId||null;activeShareTitle=title||'ChadPDChee conversation';const overlay=document.getElementById('chad-share-overlay'),input=document.getElementById('chad-share-url'),status=document.getElementById('chad-share-status');if(input)input.value=url||'';if(status)status.textContent='';if(overlay)overlay.hidden=false}
 function closeShareModal(){const overlay=document.getElementById('chad-share-overlay');if(overlay)overlay.hidden=true}
 async function shareConversation(c){try{const d=await api('/account/conversations/share',jsonOptions('POST',{conversation_id:c?.id||currentConversationId||''}));openShareModal(d.share_url,d.title,c?.id||currentConversationId)}catch(e){window.alert(e.message||'Could not share that conversation.')}}
+window.CHADPDG_SHARE_CURRENT_CONVERSATION = function(){
+    if(!currentUser){
+        showSignupForFeature('share');
+        return Promise.resolve(null);
+    }
+    return shareConversation(null);
+};
 async function renameConversation(c){const title=window.prompt('Rename project',c.title||'Untitled project');if(title===null)return;const clean=title.replace(/\s+/g,' ').trim();if(!clean)return;try{await api('/account/conversations/rename',jsonOptions('POST',{conversation_id:c.id,title:clean}));await loadRecent()}catch(e){window.alert(e.message||'Could not rename that project.')}}
 async function deleteConversation(c){if(!window.confirm('Delete "'+(c.title||'this project')+'"? This cannot be undone.'))return;try{await api('/account/conversations/delete',jsonOptions('POST',{conversation_id:c.id}));if(c.id===currentConversationId){currentConversationId=null;document.getElementById('chad-reset')?.click()}await loadRecent()}catch(e){window.alert(e.message||'Could not delete that project.')}}
 async function loadRecent(){if(!currentUser||!recentList)return;recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Loading projects…</div>';try{const d=await api('/account/conversations'),list=Array.isArray(d.conversations)?d.conversations:[];if(!list.length){recentList.innerHTML='<div class="chad-sidebar-empty"><div class="chad-sidebar-empty-title">No saved projects yet.</div><div class="chad-sidebar-empty-copy">Ask Chad something, chief. He cannot save a project you have not started.</div></div>';return}recentList.innerHTML='';list.forEach(c=>{const row=document.createElement('div');row.className='chad-recent-row';const b=document.createElement('button');b.type='button';b.className='chad-recent-item'+(c.id===currentConversationId?' is-active':'');b.textContent=c.title||'Untitled project';if(c.is_saved){const badge=document.createElement('span');badge.className='chad-recent-saved';badge.textContent='● SAVED';b.appendChild(badge)}b.title=c.title||'Untitled project';b.addEventListener('click',()=>openConversation(c.id));const wrap=document.createElement('div');wrap.className='chad-recent-menu-wrap';const more=document.createElement('button');more.type='button';more.className='chad-recent-more';more.setAttribute('aria-label','Project options');more.textContent='⋯';const menu=document.createElement('div');menu.className='chad-recent-menu';menu.hidden=true;const share=document.createElement('button');share.type='button';share.textContent='Share';share.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;shareConversation(c)});const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;copyConversation(c).catch(err=>window.alert(err.message||'Could not copy that conversation.'))});const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';rename.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;renameConversation(c)});const del=document.createElement('button');del.type='button';del.className='chad-delete-project';del.textContent='Delete';del.addEventListener('click',e=>{e.stopPropagation();menu.hidden=true;deleteConversation(c)});more.addEventListener('click',e=>{e.stopPropagation();const show=menu.hidden;closeRecentMenus();menu.hidden=!show});menu.append(share,copy,rename,del);wrap.append(more,menu);row.append(b,wrap);recentList.appendChild(row)})}catch(e){recentList.innerHTML='<div class="chad-sidebar-empty-copy" style="padding:10px">Could not load saved projects.</div>'}}
