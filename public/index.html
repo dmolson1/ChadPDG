@@ -3097,21 +3097,17 @@ body {
             humanCheckChatMessage = wrapper;
         }
 
-        const host = humanCheckChatMessage.querySelector('.chad-human-check-widget');
-        if (host && turnstileContainer.parentNode !== host) {
-            host.appendChild(turnstileContainer);
-        }
+        /* Do not move the rendered Turnstile iframe. Cloudflare can lose the
+           interactive challenge when its rendered container is re-parented. */
+        setHumanCheckNotice(true);
 
-        if (!window.matchMedia('(max-width: 820px)').matches) {
-            humanCheckChatMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        window.setTimeout(function () {
+            const target = document.getElementById('chad-turnstile');
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 50);
     }
 
     function hideHumanCheckInChat(success) {
-        if (turnstileHome.parentNode && turnstileContainer.parentNode !== turnstileHome.parentNode) {
-            turnstileHome.parentNode.insertBefore(turnstileContainer, turnstileHome.nextSibling);
-        }
-
         if (humanCheckChatMessage) {
             if (success) {
                 const copy = humanCheckChatMessage.querySelector('.chad-human-check-copy');
@@ -3316,11 +3312,34 @@ body {
         return new Promise(
             function (resolve, reject) {
 
-                turnstileResolve =
-                    resolve;
+                let settled = false;
+                const timeoutId = window.setTimeout(function () {
+                    if (settled) return;
+                    settled = true;
+                    turnstileResolve = null;
+                    turnstileReject = null;
+                    hideHumanCheckInChat(false);
+                    try {
+                        if (turnstileWidgetId !== null && window.turnstile) {
+                            window.turnstile.reset(turnstileWidgetId);
+                        }
+                    } catch (_) {}
+                    reject(new Error('Security verification timed out. Please try again.'));
+                }, 30000);
 
-                turnstileReject =
-                    reject;
+                turnstileResolve = function (token) {
+                    if (settled) return;
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    resolve(token);
+                };
+
+                turnstileReject = function (error) {
+                    if (settled) return;
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    reject(error);
+                };
 
                 try {
 
@@ -3330,6 +3349,8 @@ body {
 
                 } catch (error) {
 
+                    window.clearTimeout(timeoutId);
+                    settled = true;
                     turnstileResolve =
                         null;
 
