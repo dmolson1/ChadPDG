@@ -850,6 +850,94 @@ body {
 }
 </style>
 
+<!-- =========================================================
+     CHADPDCHEE EMBED MODE
+     Used by hammeredhandyman.com
+     Example: https://chadpdchee.com/?embed=1
+     ========================================================= -->
+
+<script>
+(function () {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('embed') === '1') {
+        document.documentElement.classList.add('chad-embed-mode');
+    }
+})();
+</script>
+
+<style>
+/* =========================================================
+   CHADPDCHEE EMBED MODE
+   ========================================================= */
+
+html.chad-embed-mode,
+html.chad-embed-mode body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    min-height: 0 !important;
+}
+
+/* Remove the full Chad website shell */
+html.chad-embed-mode #chad-sidebar,
+html.chad-embed-mode #chad-sidebar-backdrop,
+html.chad-embed-mode #chad-mobile-bar,
+html.chad-embed-mode #chad-header,
+html.chad-embed-mode .chad-sponsor-nav,
+html.chad-embed-mode #chad-sponsor-slot,
+html.chad-embed-mode #chad-google-ad-region,
+html.chad-embed-mode .chad-install-overlay,
+html.chad-embed-mode footer {
+    display: none !important;
+}
+
+/* Chad becomes a self-contained widget */
+html.chad-embed-mode #chad-shell,
+html.chad-embed-mode #chad-main,
+html.chad-embed-mode #chad-app {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+}
+
+/* Keep the actual conversation comfortably inside the frame */
+html.chad-embed-mode #chad-app {
+    box-sizing: border-box !important;
+    padding: 14px !important;
+}
+
+/* The full disclaimer is too large for a homepage widget */
+html.chad-embed-mode #chad-disclaimer {
+    display: none !important;
+}
+
+/* Keep conversation/content usable */
+html.chad-embed-mode #chad-chat {
+    margin-top: 0 !important;
+}
+
+/* Slightly tighten the composer */
+html.chad-embed-mode #chad-input-area {
+    margin-top: 10px !important;
+}
+
+/* Never show the install-Chad prompt inside the embedded widget */
+html.chad-embed-mode #chad-install-app {
+    display: none !important;
+}
+
+@media (max-width: 700px) {
+    html.chad-embed-mode #chad-app {
+        padding: 8px !important;
+    }
+}
+</style>
+
 </head>
 <body>
 
