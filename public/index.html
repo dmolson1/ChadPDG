@@ -1,3 +1,61 @@
+ChadPDG-main(1).zip
+Zip Archive
+
+Yep — I found the actual embed-specific bug.
+
+The embedded Chad is cross-site inside HammeredHandyman.com, and modern browsers can block or partition Chad’s cookies there. The shopping token is tied to a specific conversation, so the first Chad answer could be created under one conversation ID and the shopping-list request would arrive under another. Result: no shopping list, even though regular Chad works.
+
+I fixed that properly:
+
+embedded Chad now creates its own fresh conversation ID
+that ID is sent with the main Chad request
+the same ID is sent with the shopping-list request
+the server now prefers that explicit conversation ID instead of relying on the cookie
+the one-time shopping-token security stays intact
+normal Chad behavior is unchanged
+
+I also ran a syntax check on server.js and verified the ZIP.
+
+Download the Chad embed shopping fix
+
+This is the version we should put into GitHub/DigitalOcean next. After deployment, test it from HammeredHandyman.com, not just directly on ChadPDChee.com, with something obvious like:
+
+“I'm replacing a bathroom faucet. What do I need?”
+
+That should answer normally and then automatically build the shopping list beneath the answer.
+
+The “avoiding the internet” part may be a second issue: Chad’s backend is currently intentionally conservative about when the main answer uses web search. Once this shopping fix is live, we’ll test that separately and loosen the search triggers if needed without making every question unnecessarily hit the web.
+
+so i'm only updating the server.js
+
+No — two files need updating for this fix:
+
+server.js — backend change so it accepts the explicit conversation ID.
+public/index.html — frontend change so the embedded Chad actually creates and sends that conversation ID with both the Chad request and shopping-list request.
+
+So don't update only server.js or we'd only have half the fix.
+
+In the ZIP I gave you, replace these two files in GitHub with the versions from:
+
+server.js
+public/index.html
+
+Everything else stays exactly as it is.
+
+If you're doing this directly through GitHub's web interface, start with server.js, and I can walk you through the two replacements one at a time.
+
+just put those files here, i don't need the whole zipped.  then I can just cut and paste
+
+Yep — but those two files are huge (about 15,700 lines combined), so pasting them into the chat would be brutal and could get truncated.
+
+I separated the two exact files for you instead. Open them, Select All → Copy, then paste directly over the corresponding GitHub file:
+
+server.js
+
+public/index.html
+
+Replace only those two files. Nothing else from the ZIP needs to change. 🔨
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -5293,7 +5351,11 @@ body {
                                 turnstile_token:
                                     turnstileToken,
                                 analytics_visitor:
-                                    analyticsVisitorId
+                                    analyticsVisitorId,
+                                conversation_id:
+                                    (typeof window.CHADPDG_GET_CURRENT_CONVERSATION_ID === 'function')
+                                        ? (window.CHADPDG_GET_CURRENT_CONVERSATION_ID() || '')
+                                        : ''
                             })
                     }
                 );
@@ -7673,6 +7735,20 @@ body {
 const overlay=document.getElementById('chad-auth-overlay'),closeButton=document.getElementById('chad-auth-close'),accountButton=document.getElementById('chad-account-button'),accountTitle=document.getElementById('chad-account-title'),accountSubtitle=document.getElementById('chad-account-subtitle'),recentList=document.getElementById('chad-recent-list'),authMessage=document.getElementById('chad-auth-message'),chat=document.getElementById('chad-chat');
 let currentUser=null,currentConversationId=null,lastAuthView='signin',pendingAuthFeature='';
 
+/*
+ * Embedded Chad runs cross-site inside HammeredHandyman.com. Modern browsers
+ * may block/partition Chad's cookies there, so give each embed load its own
+ * explicit conversation ID. That keeps chat memory and one-time shopping
+ * tokens tied to the same conversation even when third-party cookies vanish.
+ */
+try {
+    const embedParams = new URLSearchParams(window.location.search);
+    if (embedParams.get('embed') === '1' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+        currentConversationId = window.crypto.randomUUID();
+    }
+} catch (_) {}
+
+
 function api(path,options){return fetch(path,Object.assign({credentials:'same-origin'},options||{})).then(async r=>{let d={};try{d=await r.json()}catch(_){ }if(!r.ok||d.success===false){const e=new Error(d.error||'Something went sideways.');e.status=r.status;e.data=d;throw e}return d})}
 function jsonOptions(method,body){return{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}}
 function refreshQuestionLimit(){try{if(typeof window.CHADPDG_SYNC_QUESTION_LIMIT==='function'){window.CHADPDG_SYNC_QUESTION_LIMIT()}}catch(_){}}
@@ -8123,3 +8199,7 @@ loadMe();
 
 </body>
 </html>
+server.js
+Code
+index.html
+HTML
