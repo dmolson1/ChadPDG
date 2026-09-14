@@ -612,7 +612,12 @@ function getOrCreateVisitorId(req, res) {
 async function getOrCreateConversationId(req, res) {
     const cookies = parseCookies(req);
     const bodyId = req.body && req.body.conversation_id;
-    let id = cookies.chadgpt_conversation || bodyId || "";
+    /*
+     * Prefer the explicit conversation ID supplied by the frontend. This is
+     * required for the cross-site embed, where SameSite/third-party-cookie
+     * rules can make the Chad cookie unavailable or stale between requests.
+     */
+    let id = bodyId || cookies.chadgpt_conversation || "";
     const user = await getAuthenticatedUser(req);
 
     if (validUuid(id)) {
