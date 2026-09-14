@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /admin-tools.html
+Disallow: /analytics.html
+Disallow: /cost-dashboard.html
+Disallow: /customers-revenue.html
+Disallow: /sponsor-admin.html
+Disallow: /sponsor-dashboard.html
+Disallow: /sponsor-leads.html
+Disallow: /sponsor-login.html
+Disallow: /test.html
+
+Sitemap: https://chadpdchee.com/sitemap.xml
