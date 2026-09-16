@@ -96,6 +96,8 @@ let amazonCreatorsTokenCache = {
     expiresAt: 0
 };
 const ANALYTICS_SECRET = process.env.ANALYTICS_SIGNING_KEY || crypto.randomBytes(32).toString("hex");
+// Shared only between HammeredHandyman.com and ChadPDChee for newsletter signup rewards.
+const HH_REWARDS_SECRET = process.env.HH_REWARDS_SECRET || "";
 
 const ALLOWED_ORIGINS = new Set([
     "https://hammeredhandyman.com",
@@ -930,6 +932,23 @@ async function initializeDatabase() {
     `);
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_chad_pro_redemptions_user ON chad_pro_redemptions(user_id, redeemed_at DESC)`);
+
+    // One-time promotional chat-credit claims issued by HammeredHandyman.com.
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chad_promo_credit_claims (
+            id UUID PRIMARY KEY,
+            code_hash VARCHAR(64) UNIQUE NOT NULL,
+            code_prefix VARCHAR(24) NOT NULL,
+            email_hash VARCHAR(64) NOT NULL,
+            credits INTEGER NOT NULL CHECK (credits > 0),
+            campaign VARCHAR(80) NOT NULL DEFAULT 'hammered-newsletter',
+            expires_at TIMESTAMPTZ NULL,
+            redeemed_by UUID NULL REFERENCES chad_users(id) ON DELETE SET NULL,
+            redeemed_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_chad_promo_credit_claims_email ON chad_promo_credit_claims(email_hash, created_at DESC)`);
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS chad_user_sessions (
@@ -2882,7 +2901,9 @@ async function getProductPicks(question, answer) {
                 role: "user",
                 content: `USER QUESTION:\n${question}\n\nCHAD ANSWER:\n${answer}`
             }
-        ]
+        ],
+        [{ type: "web_search" }],
+        "chad_products_fallback"
     );
 
     const text = getResponseText(data);
@@ -3216,6 +3237,61 @@ function generateProCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const part = n => Array.from({length:n}, () => chars[crypto.randomInt(0, chars.length)]).join('');
     return `CHAD-${part(4)}-${part(4)}`;
+}
+
+function generatePromoCreditCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const part = n => Array.from({length:n}, () => chars[crypto.randomInt(0, chars.length)]).join('');
+    return `HH-${part(5)}-${part(5)}`;
+}
+function promoEmailHash(email) {
+    return crypto.createHash('sha256').update(normalizeEmail(email)).digest('hex');
+}
+async function handleIssueNewsletterReward(req, res) {
+    const suppliedSecret = String(req.headers['x-hh-rewards-secret'] || '');
+    const secretOk = HH_REWARDS_SECRET && suppliedSecret.length === HH_REWARDS_SECRET.length && crypto.timingSafeEqual(Buffer.from(suppliedSecret), Buffer.from(HH_REWARDS_SECRET));
+    if (!secretOk) {
+        return res.status(401).json({success:false,error:'Reward service authorization failed.'});
+    }
+    const email = normalizeEmail(req.body?.email);
+    const credits = Math.max(1, Math.min(100, Number(req.body?.credits || 25)));
+    const campaign = String(req.body?.campaign || 'hammered-newsletter').trim().slice(0,80);
+    if (!validEmail(email)) return res.status(400).json({success:false,error:'Valid email required.'});
+    const emailHash = promoEmailHash(email);
+    const existing = await pool.query(
+        `SELECT code_prefix,credits,expires_at,redeemed_at FROM chad_promo_credit_claims
+         WHERE email_hash=$1 AND campaign=$2 ORDER BY created_at DESC LIMIT 1`, [emailHash,campaign]
+    );
+    if (existing.rowCount) {
+        return res.status(409).json({success:false,error:'Newsletter reward already issued for this email.'});
+    }
+    const code = generatePromoCreditCode();
+    const expiresAt = new Date(Date.now() + 30*86400000);
+    await pool.query(
+        `INSERT INTO chad_promo_credit_claims(id,code_hash,code_prefix,email_hash,credits,campaign,expires_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [crypto.randomUUID(),hashProCode(code),code.slice(0,8),emailHash,credits,campaign,expiresAt]
+    );
+    return res.json({success:true,code,credits,expires_at:expiresAt.toISOString(),claim_url:`https://chadpdchee.com/?reward=${encodeURIComponent(code)}`});
+}
+async function handleRedeemPromoCredits(req, res) {
+    const user = await requireAuthenticatedUser(req,res); if(!user) return;
+    const raw=String(req.body?.code||'').trim();
+    if(normalizeProCode(raw).length<8) return res.status(400).json({success:false,error:'That reward code does not look right.'});
+    const client=await pool.connect();
+    try{
+        await client.query('BEGIN');
+        const found=await client.query(`SELECT * FROM chad_promo_credit_claims WHERE code_hash=$1 FOR UPDATE`,[hashProCode(raw)]);
+        const claim=found.rows[0];
+        if(!claim || claim.redeemed_at || (claim.expires_at && new Date(claim.expires_at)<=new Date())){await client.query('ROLLBACK');return res.status(400).json({success:false,error:'That reward code is invalid, expired, or already used.'});}
+        if(claim.email_hash!==promoEmailHash(user.email)){await client.query('ROLLBACK');return res.status(403).json({success:false,error:'Sign in with the same email address that joined the Hammered Handyman mailing list.'});}
+        const ref=`newsletter:${claim.id}`;
+        await client.query(`INSERT INTO chad_chat_credit_ledger(user_id,delta,entry_type,reference_key,metadata) VALUES($1,$2,'promotion',$3,$4::jsonb) ON CONFLICT(reference_key) DO NOTHING`,[user.id,claim.credits,ref,JSON.stringify({campaign:claim.campaign})]);
+        await client.query(`UPDATE chad_promo_credit_claims SET redeemed_by=$2,redeemed_at=NOW() WHERE id=$1`,[claim.id,user.id]);
+        const balance=await getChatCreditBalance(user.id,client);
+        await client.query('COMMIT');
+        return res.json({success:true,credits_added:Number(claim.credits),credit_balance:balance,message:`${claim.credits} Chad credits added. Try not to spend them all in one questionable project.`});
+    }catch(error){try{await client.query('ROLLBACK')}catch{};console.error('Promo credit redeem error:',error);return res.status(500).json({success:false,error:'Could not redeem that reward.'});}finally{client.release()}
 }
 
 async function handleRedeemProCode(req, res) {
@@ -3676,6 +3752,18 @@ async function handleAsk(req, res) {
                 productSources = enrichment.sources;
             } catch (error) {
                 console.warn("Chad enrichment failed:", error.message);
+            }
+            // If the combined enrichment returned no verified Amazon picks, make one
+            // dedicated product-research pass. This keeps Chad's Picks useful without
+            // inventing ASINs or forcing products into non-physical questions.
+            if (!products.length) {
+                try {
+                    const picks = await getProductPicks(message, answer);
+                    products = picks.products || [];
+                    productSources = [...productSources, ...(picks.sources || [])];
+                } catch (error) {
+                    console.warn("Chad product fallback failed:", error.message);
+                }
             }
         }
 
@@ -7495,6 +7583,8 @@ registerBoth("post", "/chat-packs/checkout/create", handleChatPackCheckoutCreate
 registerBoth("post", "/chat-packs/checkout/capture", handleChatPackCheckoutCapture);
 registerBoth("get", "/account/chat-credits", handleChatCreditHistory);
 registerBoth("post", "/pro/redeem", handleRedeemProCode);
+registerBoth("post", "/rewards/redeem", handleRedeemPromoCredits);
+registerBoth("post", "/integrations/hammered/newsletter-reward", handleIssueNewsletterReward);
 registerBoth("post", "/admin/pro-codes/create", handleAdminCreateProCodes);
 registerBoth("get", "/admin/pro-codes", handleAdminListProCodes);
 registerBoth("post", "/admin/analytics/reset", handleAdminResetAnalytics);
